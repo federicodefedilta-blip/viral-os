@@ -249,6 +249,21 @@
   <div class="panel" id="panel4">
     <div class="card">
       <div class="card-title">🎙️ Generazione Audio</div>
+      <div class="input-group">
+        <label class="input-label">🎵 Musica di sottofondo</label>
+        <select class="input-field" id="bgMusic">
+          <option value="none">🔇 Nessuna</option>
+          <option value="https://cdn.freesound.org/previews/476/476891_9318522-lq.mp3" selected>👻 Paranormale — drone inquietante</option>
+          <option value="https://cdn.freesound.org/previews/415/415510_5121236-lq.mp3">😱 Tensione — suspense crescente</option>
+          <option value="https://cdn.freesound.org/previews/399/399303_1676145-lq.mp3">🌑 Dark ambient — atmosfera oscura</option>
+          <option value="https://cdn.freesound.org/previews/550/550347_1676145-lq.mp3">🕯️ Horror classico — violini sinistri</option>
+        </select>
+      </div>
+      <div class="input-group" style="display:flex;align-items:center;gap:12px">
+        <label class="input-label" style="margin:0;min-width:80px">🔊 Volume musica</label>
+        <input type="range" id="bgVolume" min="0" max="100" value="20" style="flex:1;accent-color:var(--accent)">
+        <span id="bgVolumeVal" style="font-size:0.75em;font-family:var(--mono);color:var(--muted);min-width:30px">20%</span>
+      </div>
       <div class="step-card">
         <div class="step-card-title">🔊 Edge Neural TTS + Registrazione <span class="badge-pending" id="audioBadge">In attesa</span></div>
         <div class="step-card-desc">Voce neurale italiana del browser — gratuita, illimitata. In Edge usa la voce neurale Microsoft. Clicca Genera per ascoltare e scaricare.</div>
@@ -462,6 +477,11 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
   }
 
+  // Volume slider live update
+  document.getElementById('bgVolume').addEventListener('input', function() {
+    document.getElementById('bgVolumeVal').textContent = this.value + '%';
+  });
+
   // --- TTS con Web Speech API + cattura audio tab (scaricabile) ---
   async function generateAudio() {
     if (!gData) return;
@@ -479,6 +499,17 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
 
     window.speechSynthesis.cancel();
+
+    // Avvia musica di sottofondo
+    const bgSrc = document.getElementById('bgMusic').value;
+    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100;
+    let bgAudio = null;
+    if (bgSrc !== 'none') {
+      bgAudio = new Audio(bgSrc);
+      bgAudio.loop = true;
+      bgAudio.volume = bgVol;
+      bgAudio.play().catch(() => {});
+    }
 
     // Prova a catturare audio del tab per renderlo scaricabile
     let recorder = null;
@@ -557,6 +588,14 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     } else {
       document.getElementById('audioBadge').textContent = '✓ Completato';
       document.getElementById('audioBadge').className = 'badge-done';
+    }
+
+    // Ferma musica di sottofondo con fade out
+    if (bgAudio) {
+      const fade = setInterval(() => {
+        if (bgAudio.volume > 0.02) bgAudio.volume -= 0.02;
+        else { bgAudio.pause(); clearInterval(fade); }
+      }, 80);
     }
 
     btn.textContent = '🔄 Rigenera'; btn.disabled = false;
