@@ -657,10 +657,10 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
   function cp(id) { const el=document.getElementById(id); if(el) navigator.clipboard.writeText(el.textContent).catch(()=>{}); }
   function cpText(txt) { navigator.clipboard.writeText(txt).catch(()=>{}); }
 
-  // Init
+  // Init — pre-load keys if not already set
+  if (!localStorage.getItem('vos_groq')) localStorage.setItem('vos_groq', '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');
+  if (!localStorage.getItem('vos_pexels')) localStorage.setItem('vos_pexels', 'Pe5ixeg2RVzXgnk0ogWyF7YkgcaA07TvcI7ucaoZYBTRwS3MxcT7T1wD');
   updateKeyDots();
-  const k = getKeys();
-  if (!k.groq) setTimeout(openKeys, 600);
 </script>
 </body>
 </html>
