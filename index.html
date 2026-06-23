@@ -304,7 +304,7 @@
       <div class="card-title">🎬 Montaggio automatico</div>
       <div class="step-card">
         <div class="step-card-title">⚙️ Assembla il video finale <span class="badge-pending" id="assembleBadge">In attesa</span></div>
-        <div class="step-card-desc">Unisce le 4 clip video + musica horror + sottotitoli animati. <strong>Nota:</strong> la voce va aggiunta dopo in CapCut (il browser non permette di catturarla durante la registrazione).</div>
+        <div class="step-card-desc">Assembla fino a 10 clip video + musica horror + voce automatica + sottotitoli. Silenzioso durante la generazione — vedrai solo il video finale.</div>
         <div id="assembleLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:160px;overflow-y:auto"></div>
         <div id="assemblePreview" style="margin-top:12px"></div>
       </div>
@@ -941,28 +941,52 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     const bgType = document.getElementById('bgMusic').value !== 'none' ? document.getElementById('bgMusic').value : 'drone';
     const pexelsKey = (document.getElementById('pexelsKey') && document.getElementById('pexelsKey').value.trim()) || _p;
 
-    // FASE 1: Scarico clip (fino a 10 clip direttamente da Pexels)
+    // FASE 1: Scarico clip — prima quelli già trovati nello step 5, poi ne cerca altri
     addLog('Scarico clip video...');
     const tema = (gData.tema) || 'dark';
-    const pool = (themePools[tema] || themePools.dark).concat(themePools.dark);
     const blobUrls = [];
-    for (const q of pool) {
+    const fetchWithTimeout = (url, opts, ms=12000) => {
+      const ctrl = new AbortController();
+      const id = setTimeout(() => ctrl.abort(), ms);
+      return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
+    };
+
+    // Prima usa i video già trovati nello step 5
+    const existing = (generatedVideos || []).filter(Boolean);
+    for (const v of existing) {
       if (blobUrls.length >= 10) break;
       try {
-        const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3&orientation=portrait&size=medium`, { headers: { Authorization: pexelsKey } });
-        const data = await res.json();
-        for (const v of (data.videos || []).slice(0, 1)) {
-          const file = v.video_files.find(f => f.quality === 'sd' && f.height >= 480) || v.video_files[0];
-          if (!file) continue;
-          try {
-            const blob = await fetch(file.link, { mode: 'cors' }).then(r => r.blob());
-            blobUrls.push(URL.createObjectURL(blob));
-            addLog(`Clip ${blobUrls.length}/10 scaricata`);
-          } catch {}
-        }
-      } catch {}
+        const res = await fetchWithTimeout(v.url, { mode: 'cors' }, 15000);
+        if (!res.ok) throw new Error();
+        blobUrls.push(URL.createObjectURL(await res.blob()));
+        addLog(`Clip ${blobUrls.length} caricata`);
+      } catch { addLog(`Clip non scaricabile, salto`); }
     }
-    if (blobUrls.length === 0) { addLog('Nessuna clip disponibile. Controlla la chiave Pexels.'); btn.disabled = false; return; }
+
+    // Se ne servono altre, cerca su Pexels
+    if (blobUrls.length < 8) {
+      const pool = (themePools[tema] || themePools.dark).concat(themePools.dark);
+      for (const q of pool) {
+        if (blobUrls.length >= 10) break;
+        try {
+          const res = await fetchWithTimeout(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=2&orientation=portrait&size=medium`, { headers: { Authorization: pexelsKey } }, 10000);
+          const data = await res.json();
+          for (const v of (data.videos || []).slice(0, 1)) {
+            const file = v.video_files.find(f => f.quality === 'sd' && f.height >= 480) || v.video_files[0];
+            if (!file) continue;
+            try {
+              const blob = await fetchWithTimeout(file.link, { mode: 'cors' }, 15000);
+              if (!blob.ok) throw new Error();
+              blobUrls.push(URL.createObjectURL(await blob.blob()));
+              addLog(`Clip ${blobUrls.length} scaricata`);
+            } catch {}
+          }
+        } catch {}
+      }
+    }
+
+    if (blobUrls.length === 0) { addLog('❌ Nessuna clip disponibile. Verifica che lo step 5 abbia trovato video.'); btn.disabled = false; return; }
+    addLog(`✓ ${blobUrls.length} clip pronte.`);
 
     // FASE 2: TTS audio (scaricato ma NON riprodotto in cuffia)
     addLog('Genero voce...');
