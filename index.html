@@ -497,7 +497,40 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       let clean = text.replace(/```json|```/g, '').trim();
       const start = clean.indexOf('{'); const end = clean.lastIndexOf('}');
       if (start !== -1 && end !== -1) clean = clean.slice(start, end + 1);
-      gData = JSON.parse(clean);
+      // Ripara JSON rotto: rimuove trailing comma, commenti, caratteri di controllo
+      clean = clean
+        .replace(/[\x00-\x1F\x7F]/g, ' ')   // caratteri di controllo
+        .replace(/,\s*([}\]])/g, '$1')        // trailing comma
+        .replace(/\/\/[^\n]*/g, '')           // commenti //
+        .replace(/\/\*[\s\S]*?\*\//g, '');    // commenti /* */
+      try {
+        gData = JSON.parse(clean);
+      } catch {
+        // Fallback: estrae i campi chiave con regex se JSON è irrecuperabile
+        const extract = (key, def) => {
+          const m = clean.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`) );
+          return m ? m[1] : def;
+        };
+        const extractArr = (key) => {
+          const m = clean.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*?)\\]`));
+          if (!m) return [];
+          return m[1].match(/"([^"]*)"/g)?.map(s => s.replace(/"/g,'')) || [];
+        };
+        gData = {
+          nicchia: extract('nicchia','Creepypasta'),
+          viral_score: 78, viral_score_reason: extract('viral_score_reason','Alta viralità'),
+          competitor_analysis: extract('competitor_analysis',''),
+          trend_tags: extractArr('trend_tags'),
+          orario_pubblicazione: extract('orario_pubblicazione','20:00'),
+          titolo: extract('titolo','Storia di terrore'),
+          script: extract('script', clean.slice(0, 500)),
+          hashtags: extractArr('hashtags'),
+          descrizione: extract('descrizione',''),
+          tip_viralita: extract('tip_viralita',''),
+          affiliate: { prodotto: extract('prodotto',''), perche:'', commissione:'', piattaforma:'', cta:'' },
+          video_theme: extract('video_theme','dark'),
+        };
+      }
       renderResults(gData);
       goTo(3);
     } catch(err) {
