@@ -271,8 +271,11 @@
       </div>
       <div class="action-row">
         <button class="btn btn-primary" id="audioBtn" onclick="generateAudio()">🎙️ Genera Audio</button>
+        <button class="btn btn-primary" id="playBtn" style="display:none">▶ Play</button>
+        <button class="btn btn-ghost" id="stopBtn" style="display:none">⏹ Stop</button>
         <button class="btn btn-ghost" onclick="goTo(3)">← Torna allo script</button>
       </div>
+      <div id="voiceInfo" style="font-size:0.72em;color:var(--muted);margin-top:8px"></div>
     </div>
   </div>
 
@@ -598,39 +601,35 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     bgNodes = { gain, nodes, ctx };
   }
 
-  // Stato audio globale — evita problemi con escape nelle stringhe inline
-  let _audioState = { langCode: 'it-IT', bgType: 'drone', bgVol: 0.25 };
-
   // --- TTS con Web Speech API — play manuale ---
   function generateAudio() {
     if (!gData) return;
     const lang = document.getElementById('lang').value;
-    _audioState.langCode = lang === 'inglese' ? 'en-US' : lang === 'spagnolo' ? 'es-ES' : 'it-IT';
-    _audioState.bgType = document.getElementById('bgMusic').value;
-    _audioState.bgVol = parseInt(document.getElementById('bgVolume').value) / 100;
+    const langCode = lang === 'inglese' ? 'en-US' : lang === 'spagnolo' ? 'es-ES' : 'it-IT';
 
     document.getElementById('audioBadge').textContent = 'Pronto';
     document.getElementById('audioBadge').className = 'badge-done';
-    document.getElementById('audioResult').innerHTML = `
-      <div class="alert-info" style="margin-top:10px">
-        Premi <strong>▶ Play</strong> per ascoltare voce + musica insieme.
-      </div>
-      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="playBtn" onclick="playAll()">▶ Play</button>
-        <button class="btn btn-ghost" id="stopBtn" onclick="stopAll()" style="display:none">⏹ Stop</button>
-        <button class="btn-sm" id="copyScriptBtn">📋 Copia testo</button>
-      </div>
-      <div id="voiceInfo" style="font-size:0.72em;color:var(--muted);margin-top:8px"></div>
-    `;
-    document.getElementById('copyScriptBtn').addEventListener('click', () => {
-      navigator.clipboard.writeText(gData.script || '').catch(() => {});
-    });
-    document.getElementById('audioBtn').textContent = '🔄 Rigenera';
+    document.getElementById('audioResult').innerHTML = `<div class="alert-info" style="margin-top:10px">Premi <strong>▶ Play</strong> per ascoltare voce + musica insieme.</div>`;
+    document.getElementById('audioBtn').style.display = 'none';
+    document.getElementById('playBtn').style.display = '';
+    document.getElementById('stopBtn').style.display = 'none';
+
+    const playBtn = document.getElementById('playBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    // Rimuove listener precedenti clonando il nodo
+    const newPlay = playBtn.cloneNode(true);
+    const newStop = stopBtn.cloneNode(true);
+    playBtn.parentNode.replaceChild(newPlay, playBtn);
+    stopBtn.parentNode.replaceChild(newStop, stopBtn);
+
+    document.getElementById('playBtn').addEventListener('click', () => playAll(langCode));
+    document.getElementById('stopBtn').addEventListener('click', stopAll);
   }
 
-  function playAll() {
+  function playAll(langCode) {
     if (!window.speechSynthesis || !gData) return;
-    const { langCode, bgType, bgVol } = _audioState;
+    const bgType = document.getElementById('bgMusic').value;
+    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100;
     const text = (gData.script || '').trim();
     window.speechSynthesis.cancel();
     startBgMusic(bgType, bgVol);
@@ -661,6 +660,8 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         stopBgMusic();
         document.getElementById('playBtn').style.display = '';
         document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('audioBtn').style.display = '';
+        document.getElementById('audioBtn').textContent = '🔄 Rigenera';
       };
       utt.onerror = utt.onend;
       window.speechSynthesis.speak(utt);
@@ -675,8 +676,10 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     stopBgMusic();
     const pb = document.getElementById('playBtn');
     const sb = document.getElementById('stopBtn');
+    const ab = document.getElementById('audioBtn');
     if (pb) pb.style.display = '';
     if (sb) sb.style.display = 'none';
+    if (ab) { ab.style.display = ''; ab.textContent = '🔄 Rigenera'; }
   }
 
   // --- Fetch video stock via Pexels (direct browser call) ---
