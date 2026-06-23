@@ -964,19 +964,19 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       } catch { addLog(`Clip non scaricabile, salto`); }
     }
 
-    // Se ne servono altre, cerca su Pexels
-    if (blobUrls.length < 8) {
-      const pool = (themePools[tema] || themePools.dark).concat(themePools.dark);
-      for (const q of pool) {
-        if (blobUrls.length >= 10) break;
+    // Se non ci sono clip dallo step 5, tenta Pexels come fallback (con timeout breve)
+    if (blobUrls.length === 0) {
+      const pool = (themePools[tema] || themePools.dark);
+      for (const q of pool.slice(0, 4)) {
+        if (blobUrls.length >= 4) break;
         try {
-          const res = await fetchWithTimeout(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=2&orientation=portrait&size=medium`, { headers: { Authorization: pexelsKey } }, 10000);
+          const res = await fetchWithTimeout(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=2&orientation=portrait&size=medium`, { headers: { Authorization: pexelsKey } }, 6000);
           const data = await res.json();
           for (const v of (data.videos || []).slice(0, 1)) {
             const file = v.video_files.find(f => f.quality === 'sd' && f.height >= 480) || v.video_files[0];
             if (!file) continue;
             try {
-              const blob = await fetchWithTimeout(file.link, { mode: 'cors' }, 15000);
+              const blob = await fetchWithTimeout(file.link, { mode: 'cors' }, 10000);
               if (!blob.ok) throw new Error();
               blobUrls.push(URL.createObjectURL(await blob.blob()));
               addLog(`Clip ${blobUrls.length} scaricata`);
