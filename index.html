@@ -250,8 +250,8 @@
     <div class="card">
       <div class="card-title">🎙️ Generazione Audio</div>
       <div class="step-card">
-        <div class="step-card-title">🔊 Google Translate TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Converto lo script in audio con voce italiana di Google. Gratuito, nessuna chiave richiesta.</div>
+        <div class="step-card-title">🔊 StreamElements TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
+        <div class="step-card-desc">Voce italiana "Filomena" — gratuito, nessuna chiave, scaricabile in WAV.</div>
         <div id="audioResult"></div>
       </div>
       <div class="action-row">
@@ -450,7 +450,7 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
   }
 
-  // --- Generate audio via Google Translate TTS (no API key needed) ---
+  // --- Generate audio via StreamElements TTS (free, no key, downloadable MP3) ---
   async function generateAudio() {
     if (!gData) return;
     const btn = document.getElementById('audioBtn');
@@ -458,20 +458,20 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     document.getElementById('audioBadge').textContent = 'In corso...';
 
     const lang = document.getElementById('lang').value;
-    const langCode = lang === 'inglese' ? 'en' : lang === 'spagnolo' ? 'es' : 'it';
-    const fullText = gData.script || '';
+    const voice = lang === 'inglese' ? 'Brian' : lang === 'spagnolo' ? 'Mia' : 'Filomena';
+    const fullText = (gData.script || '').trim();
 
-    // Google Translate TTS has a 200-char limit per request — split into chunks
-    function splitText(text, maxLen = 190) {
+    // StreamElements has ~500 char limit — split on sentence boundaries
+    function splitText(text, maxLen = 450) {
       const chunks = [];
-      const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+      const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
       let current = '';
       for (const s of sentences) {
         if ((current + s).length > maxLen) {
           if (current) chunks.push(current.trim());
           current = s;
         } else {
-          current += s;
+          current += ' ' + s;
         }
       }
       if (current.trim()) chunks.push(current.trim());
@@ -481,61 +481,44 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     try {
       const chunks = splitText(fullText);
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const buffers = [];
+      const decoded = [];
 
       for (const chunk of chunks) {
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodeURIComponent(chunk)}`;
+        const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk)}`;
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`Google TTS error: ${res.status}`);
-        const arrayBuf = await res.arrayBuffer();
-        const decoded = await audioCtx.decodeAudioData(arrayBuf);
-        buffers.push(decoded);
+        if (!res.ok) throw new Error(`StreamElements error ${res.status}`);
+        const buf = await res.arrayBuffer();
+        decoded.push(await audioCtx.decodeAudioData(buf));
       }
 
-      // Concatenate all buffers into one
-      const totalLen = buffers.reduce((s, b) => s + b.length, 0);
-      const combined = audioCtx.createBuffer(1, totalLen, buffers[0].sampleRate);
-      const channel = combined.getChannelData(0);
+      // Merge chunks into single buffer
+      const totalLen = decoded.reduce((s, b) => s + b.length, 0);
+      const merged = audioCtx.createBuffer(1, totalLen, decoded[0].sampleRate);
+      const ch = merged.getChannelData(0);
       let offset = 0;
-      for (const buf of buffers) {
-        channel.set(buf.getChannelData(0), offset);
-        offset += buf.length;
-      }
+      for (const b of decoded) { ch.set(b.getChannelData(0), offset); offset += b.length; }
 
-      // Convert to WAV blob
-      const wavBlob = bufferToWav(combined);
-      const url = URL.createObjectURL(wavBlob);
+      const wavBlob = bufferToWav(merged);
+      const objUrl = URL.createObjectURL(wavBlob);
 
       document.getElementById('audioBadge').textContent = '✓ Completato';
       document.getElementById('audioBadge').className = 'badge-done';
       document.getElementById('audioResult').innerHTML = `
         <audio controls style="width:100%;margin-top:8px;border-radius:10px">
-          <source src="${url}" type="audio/wav">
+          <source src="${objUrl}" type="audio/wav">
         </audio>
-        <a href="${url}" download="viral-audio.wav" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica Audio</a>
+        <a href="${objUrl}" download="viral-audio.wav" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica Audio</a>
       `;
       btn.textContent = '🔄 Rigenera'; btn.disabled = false;
       setTimeout(() => goTo(5), 2000);
     } catch(err) {
       btn.disabled = false; btn.textContent = '🎙️ Riprova';
       document.getElementById('audioBadge').textContent = '❌ Errore';
-      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}<br><small style="color:var(--muted)">Nota: Google TTS potrebbe bloccare le richieste dal browser. In tal caso usa Web Speech API.</small></div>`;
-      // Fallback: Web Speech API (built-in browser TTS)
-      speakFallback(gData.script, langCode);
+      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
     }
   }
 
-  function speakFallback(text, langCode) {
-    if (!window.speechSynthesis) return;
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = langCode === 'it' ? 'it-IT' : langCode === 'es' ? 'es-ES' : 'en-US';
-    utt.rate = 1.1;
-    window.speechSynthesis.speak(utt);
-    document.getElementById('audioResult').innerHTML += `<div class="alert-info" style="margin-top:10px">🔊 Riproduzione via voce browser in corso. Non scaricabile ma puoi registrare lo schermo.</div>`;
-  }
-
   function bufferToWav(buffer) {
-    const numCh = buffer.numberOfChannels;
     const sampleRate = buffer.sampleRate;
     const samples = buffer.getChannelData(0);
     const pcm = new Int16Array(samples.length);
@@ -545,15 +528,15 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     const dataLen = pcm.byteLength;
     const ab = new ArrayBuffer(44 + dataLen);
     const view = new DataView(ab);
-    const write = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
-    write(0, 'RIFF'); view.setUint32(4, 36 + dataLen, true);
-    write(8, 'WAVE'); write(12, 'fmt ');
-    view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-    view.setUint16(22, numCh, true); view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * numCh * 2, true); view.setUint16(32, numCh * 2, true);
-    view.setUint16(34, 16, true); write(36, 'data');
-    view.setUint32(40, dataLen, true);
-    new Int16Array(ab, 44).set(pcm);
+    const w = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+    w(0,'RIFF'); view.setUint32(4, 36+dataLen, true);
+    w(8,'WAVE'); w(12,'fmt ');
+    view.setUint32(16,16,true); view.setUint16(20,1,true);
+    view.setUint16(22,1,true); view.setUint32(24,sampleRate,true);
+    view.setUint32(28,sampleRate*2,true); view.setUint16(32,2,true);
+    view.setUint16(34,16,true); w(36,'data');
+    view.setUint32(40,dataLen,true);
+    new Int16Array(ab,44).set(pcm);
     return new Blob([ab], { type: 'audio/wav' });
   }
 
