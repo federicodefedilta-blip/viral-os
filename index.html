@@ -505,6 +505,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         .replace(/\/\*[\s\S]*?\*\//g, '');    // commenti /* */
       try {
         gData = JSON.parse(clean);
+        gData = normalizeData(gData);
       } catch {
         // Fallback: estrae i campi chiave con regex se JSON è irrecuperabile
         const extract = (key, def) => {
@@ -669,6 +670,32 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     }
 
     bgNodes = { gain: master, nodes, ctx };
+  }
+
+  function normalizeData(d) {
+    const str = v => typeof v === 'object' && v !== null ? Object.values(v).join(' ') : String(v || '');
+    const arr = v => Array.isArray(v) ? v : (typeof v === 'string' ? v.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean) : []);
+    d.script = str(d.script);
+    d.titolo = str(d.titolo);
+    d.descrizione = str(d.descrizione);
+    d.tip_viralita = str(d.tip_viralita);
+    d.viral_score_reason = str(d.viral_score_reason);
+    d.competitor_analysis = str(d.competitor_analysis);
+    d.nicchia = str(d.nicchia);
+    d.orario_pubblicazione = str(d.orario_pubblicazione);
+    d.video_theme = str(d.video_theme) || 'dark';
+    d.hashtags = arr(d.hashtags);
+    d.trend_tags = arr(d.trend_tags);
+    if (d.affiliate && typeof d.affiliate === 'object') {
+      d.affiliate.prodotto = str(d.affiliate.prodotto);
+      d.affiliate.perche = str(d.affiliate.perche);
+      d.affiliate.commissione = str(d.affiliate.commissione);
+      d.affiliate.piattaforma = str(d.affiliate.piattaforma);
+      d.affiliate.cta = str(d.affiliate.cta);
+    } else {
+      d.affiliate = { prodotto:'', perche:'', commissione:'', piattaforma:'', cta:'' };
+    }
+    return d;
   }
 
   let _langCode = 'it-IT';
