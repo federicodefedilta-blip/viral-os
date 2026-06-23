@@ -19,8 +19,9 @@ exports.handler = async (event) => {
   const rawText = body.text || '';
   const text = rawText.length > 400 ? rawText.slice(0, 400) + '...' : rawText;
 
-  // Adam - free premade voice on ElevenLabs
-  const voice_id = 'pNInz6obpgDQGcFmaJgB';
+  // Giovanni - native Italian male voice on ElevenLabs
+  // eleven_multilingual_v2 gives natural Italian accent
+  const voice_id = 'zcAOhNBS3c14rBihAFp1';
 
   try {
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
@@ -31,10 +32,12 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_turbo_v2',
+        model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75
+          stability: 0.45,
+          similarity_boost: 0.8,
+          style: 0.35,
+          use_speaker_boost: true
         }
       })
     });

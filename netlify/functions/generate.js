@@ -17,35 +17,48 @@ exports.handler = async (event) => {
 
   const { platform, lang, affCat, duration } = body;
 
-  const prompt = `Sei un esperto di content marketing virale e affiliate marketing. Analizza i trend attuali del ${new Date().toLocaleDateString('it-IT', {month:'long', year:'numeric'})} e crea una strategia completa per un video short.
+  const prompt = `Sei il miglior creatore di contenuti virali su ${platform} in ${lang}. Il tuo obiettivo è creare script che esplodono in viralità nelle prime 24 ore e convertono in vendite affiliate.
 
-Parametri:
-- Piattaforma: ${platform}
-- Lingua: ${lang}
-- Categoria affiliate: ${affCat === 'auto' ? 'scegli tu la categoria con il ROI più alto in questo momento' : affCat}
-- Durata video: ${duration} secondi
+DATA ATTUALE: ${new Date().toLocaleDateString('it-IT', {month:'long', year:'numeric'})}
+PIATTAFORMA: ${platform}
+LINGUA: ${lang}
+CATEGORIA: ${affCat === 'auto' ? 'scegli la nicchia con il ROI più alto e la crescita più esplosiva in questo momento' : affCat}
+DURATA: ${duration} secondi
+
+REGOLE SCRIPT VIRALE OBBLIGATORIE:
+1. Hook nei primi 2 secondi: deve essere uno shock, una domanda impossibile o una affermazione controversa che impedisce lo scroll
+2. Loop psicologico: crea curiosità che si risolve solo alla fine (mai rivelare subito la risposta)
+3. Ritmo veloce: frasi corte, max 8 parole per frase, niente pause
+4. CTA affiliate NATURALE: integrata come consiglio personale, non come pubblicità
+5. Finale con cliffhanger o call-to-action urgente ("solo per oggi", "prima che sparisca", ecc.)
+
+ESEMPI DI HOOK FORTI:
+- "Il 99% delle persone non sa che..."
+- "Ho guadagnato X€ in 3 giorni con questo trucco"
+- "Questo [prodotto] è illegale in 3 paesi europei. Ecco perché"
+- "Ho smesso di [cosa comune] per 30 giorni. Risultato assurdo"
 
 Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza testo prima o dopo.
 
 {
-  "nicchia": "nome della nicchia scelta",
+  "nicchia": "nome nicchia specifica e di tendenza",
   "viral_score": numero da 1 a 100,
-  "viral_score_reason": "perché questa nicchia ha questo score in questo momento",
-  "competitor_analysis": "breve analisi della competizione attuale su questa nicchia",
+  "viral_score_reason": "perché questa nicchia esplode ora, dati concreti",
+  "competitor_analysis": "chi domina questa nicchia ora e il loro punto debole che possiamo sfruttare",
   "trend_tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
   "affiliate": {
-    "prodotto": "nome del prodotto specifico consigliato",
+    "prodotto": "nome prodotto specifico con brand reale",
     "piattaforma": "Amazon/Hotmart/Clickbank/Awin/etc",
     "commissione": "X%",
-    "perche": "perché questo prodotto converte bene con questa nicchia ora",
-    "cta": "frase call-to-action naturale da integrare nel video"
+    "perche": "perché converte: problema che risolve + urgenza + prova sociale",
+    "cta": "frase CTA naturalissima da integrare nel video, sembra un consiglio non una pubblicità"
   },
-  "script": "script completo del video in ${lang}, ottimizzato per ${platform}, con hook fortissimo nei primi 3 secondi e CTA affiliate integrata in modo naturale, durata ${duration} secondi",
-  "titolo": "titolo ottimizzato SEO per ${platform}, max 60 caratteri",
-  "descrizione": "descrizione ottimizzata con keyword SEO e CTA affiliate, max 200 caratteri",
+  "script": "SCRIPT COMPLETO in ${lang} per ${duration} secondi. Inizia con hook devastante. Usa frasi cortissime. Ritmo veloce. Integra CTA affiliate come consiglio personale. Chiudi con urgenza o cliffhanger. MAX ${Math.round(parseInt(duration) * 2.5)} parole totali.",
+  "titolo": "titolo clickbait SEO per ${platform}, max 60 caratteri, deve generare curiosità o shock",
+  "descrizione": "descrizione con keyword SEO + CTA affiliate + urgenza, max 200 caratteri",
   "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5", "#tag6", "#tag7", "#tag8", "#tag9", "#tag10"],
-  "orario_pubblicazione": "orario migliore per pubblicare per audience italiana (es: 18:30)",
-  "tip_viralita": "un consiglio specifico e actionable per aumentare le chance di viralità su ${platform}"
+  "orario_pubblicazione": "orario ottimale per audience italiana su ${platform} (es: 19:00)",
+  "tip_viralita": "un solo consiglio ultra-specifico e actionable per questa nicchia su ${platform} che pochi creators conoscono"
 }`;
 
   try {

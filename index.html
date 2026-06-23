@@ -211,14 +211,14 @@
   <!-- PANEL 5 -->
   <div class="panel" id="panel5">
     <div class="card">
-      <div class="card-title">🖼️ Generazione Immagini AI</div>
+      <div class="card-title">🎬 Video Stock dalla nicchia</div>
       <div class="step-card">
-        <div class="step-card-title">🎨 Stable Diffusion XL <span class="badge-pending" id="imgBadge">In attesa</span></div>
-        <div class="step-card-desc">Genero 4 immagini verticali 9:16 ottimizzate per la nicchia. Possono volerci 1-3 minuti.</div>
+        <div class="step-card-title">📹 Pexels Video Stock <span class="badge-pending" id="imgBadge">In attesa</span></div>
+        <div class="step-card-desc">Recupero 4 video verticali HD gratuiti da Pexels, perfetti per la tua nicchia. Pronti in pochi secondi.</div>
         <div id="imagesResult"></div>
       </div>
       <div class="action-row">
-        <button class="btn btn-primary" id="imgBtn" onclick="generateImages()">🎨 Genera Immagini</button>
+        <button class="btn btn-primary" id="imgBtn" onclick="generateImages()">🎬 Trova Video Stock</button>
         <button class="btn btn-ghost" onclick="goTo(4)">← Torna all'audio</button>
       </div>
     </div>
@@ -316,28 +316,30 @@
   async function generateImages() {
     if (!gData) return;
     const btn = document.getElementById('imgBtn');
-    btn.disabled = true; btn.textContent = '⏳ Generando immagini... (1-3 min)';
+    btn.disabled = true; btn.textContent = '⏳ Cercando video... (pochi secondi)';
     document.getElementById('imgBadge').textContent = 'In corso...';
-    document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${[1,2,3,4].map(i=>`<div class="img-placeholder">🎨 ${i}/4...</div>`).join('')}</div>`;
-    const nicchia = gData.nicchia || 'lifestyle virale';
-    const prompts = [
-      `${nicchia}, dramatic cinematic scene, vibrant colors, vertical portrait 9:16`,
-      `${nicchia}, close up dramatic moment, high contrast lighting, vertical format`,
-      `${nicchia}, storytelling visual, compelling atmosphere, vertical 9:16`,
-      `${nicchia}, viral social media aesthetic, eye-catching, vertical format`
-    ];
+    document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${[1,2,3,4].map(i=>`<div class="img-placeholder">🎬 ${i}/4...</div>`).join('')}</div>`;
+    const nicchia = gData.nicchia || 'lifestyle viral';
+    const prompts = [nicchia, `${nicchia} cinematic`, `${nicchia} dramatic`, `${nicchia} lifestyle`];
     try {
-      const res = await fetch('/.netlify/functions/images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompts }) });
+      const res = await fetch('/.netlify/functions/images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompts, nicchia }) });
       if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `HTTP ${res.status}`); }
       const data = await res.json();
-      generatedImages = data.images;
+      generatedImages = data.videos;
       document.getElementById('imgBadge').textContent = '✓ Completato';
       document.getElementById('imgBadge').className = 'badge-done';
-      document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${generatedImages.map((img,i)=>`<div><img src="data:image/png;base64,${img}" class="img-preview"><a href="data:image/png;base64,${img}" download="viral-img-${i+1}.png" class="btn-sm" style="display:block;text-align:center;margin-top:6px;text-decoration:none">⬇️ Scarica</a></div>`).join('')}</div>`;
+      document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${generatedImages.map((v,i) => v ? `<div>
+        <video src="${v.url}" class="img-preview" muted loop playsinline autoplay style="object-fit:cover"></video>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <a href="${v.url}" download="viral-video-${i+1}.mp4" class="btn-sm" style="flex:1;text-align:center;text-decoration:none">⬇️ Scarica</a>
+          <a href="${v.pexels_url}" target="_blank" class="btn-sm" style="text-decoration:none">🔗</a>
+        </div>
+        <div style="font-size:0.6em;color:var(--muted);margin-top:3px;text-align:center">📷 ${v.photographer} / Pexels</div>
+      </div>` : `<div class="img-placeholder">❌ Non trovato</div>`).join('')}</div>`;
       btn.textContent = '🔄 Rigenera'; btn.disabled = false;
       setTimeout(() => goTo(6), 1500);
     } catch(err) {
-      btn.disabled = false; btn.textContent = '🎨 Riprova';
+      btn.disabled = false; btn.textContent = '🎬 Riprova';
       document.getElementById('imgBadge').textContent = '❌ Errore';
       document.getElementById('imagesResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
     }
@@ -394,7 +396,7 @@
       <div class="section-label">📱 Come assemblare in CapCut</div>
       <div class="capcut-steps">
         1️⃣ Apri CapCut → Nuovo progetto → <strong>9:16 verticale</strong><br>
-        2️⃣ Importa le <strong>4 immagini</strong> scaricate in sequenza<br>
+        2️⃣ Importa i <strong>4 video stock</strong> scaricati in sequenza<br>
         3️⃣ Importa l'<strong>audio MP3</strong> scaricato<br>
         4️⃣ Clicca <strong>"Sottotitoli automatici"</strong><br>
         5️⃣ Esporta HD → pubblica su ${platform}

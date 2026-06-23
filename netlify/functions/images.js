@@ -3,6 +3,11 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
+  const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
+  if (!PEXELS_API_KEY) {
+    return { statusCode: 500, body: JSON.stringify({ error: 'Pexels API key non configurata' }) };
+  }
+
   let body;
   try {
     body = JSON.parse(event.body);
@@ -10,33 +15,55 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Body non valido' }) };
   }
 
-  const { prompts } = body;
+  const { prompts, nicchia } = body;
+
+  // Extract search keywords from the nicchia or first prompt
+  const keywords = (nicchia || prompts?.[0] || 'lifestyle viral').split(',')[0].trim();
+
+  const queries = [
+    keywords,
+    `${keywords} cinematic`,
+    `${keywords} dramatic`,
+    `${keywords} lifestyle`
+  ];
 
   try {
-    const imagePromises = prompts.map(async (prompt, i) => {
-      const encoded = encodeURIComponent(`${prompt}, vertical 9:16, cinematic, vibrant, sharp`);
-      const url = `https://image.pollinations.ai/prompt/${encoded}?width=576&height=1024&nologo=true&seed=${Date.now() + i}`;
-      
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'Viral-OS/1.0' }
-      });
+    const videoResults = [];
 
-      if (!response.ok) throw new Error(`Immagine ${i+1} fallita: ${response.status}`);
+    for (const query of queries) {
+      const res = await fetch(
+        `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=5`,
+        { headers: { Authorization: PEXELS_API_KEY } }
+      );
 
-      const buffer = await response.arrayBuffer();
-      return Buffer.from(buffer).toString('base64');
-    });
+      if (!res.ok) throw new Error(`Pexels error: ${res.status}`);
 
-    // Generate sequentially to avoid timeout
-    const images = [];
-    for (const promise of imagePromises) {
-      images.push(await promise);
+      const data = await res.json();
+      const video = data.videos?.[0];
+
+      if (video) {
+        // Pick smallest HD file to keep response fast
+        const file = video.video_files
+          .filter(f => f.quality === 'hd' || f.quality === 'sd')
+          .sort((a, b) => a.width - b.width)[0];
+
+        videoResults.push({
+          url: file?.link || video.video_files[0].link,
+          thumbnail: video.image,
+          id: video.id,
+          photographer: video.user.name,
+          pexels_url: video.url
+        });
+      } else {
+        // fallback: search generic if no result
+        videoResults.push(null);
+      }
     }
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images })
+      body: JSON.stringify({ videos: videoResults, type: 'pexels' })
     };
 
   } catch (err) {
