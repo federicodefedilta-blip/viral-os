@@ -169,7 +169,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.5</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.6</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -985,18 +985,23 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     if (blobUrls.length === 0) { addLog('❌ Nessuna clip disponibile. Verifica che lo step 5 abbia trovato video.'); btn.disabled = false; return; }
     addLog(`✓ ${blobUrls.length} clip pronte.`);
 
-    // FASE 2: TTS audio — scaricato come ArrayBuffer per decodeAudioData (affidabile)
-    addLog('Genero voce...');
-    const ttsVoices = { 'it-IT': 'Carla', 'en-US': 'Brian', 'es-ES': 'Conchita' };
-    const ttsVoice = ttsVoices[_langCode] || 'Carla';
+    // FASE 2: TTS via Groq API (stessa chiave già configurata, supporta italiano)
+    addLog('Genero voce con Groq TTS...');
+    const groqKey = getKeys().groq || _k;
+    const ttsVoiceMap = { 'it-IT': 'Fritz-PlayAI', 'en-US': 'Chip-PlayAI', 'es-ES': 'Celeste-PlayAI' };
+    const ttsVoice = ttsVoiceMap[_langCode] || 'Fritz-PlayAI';
     let ttsArrayBuffer = null;
     try {
-      const ttsText = (gData.script || '').trim().slice(0, 900);
-      const ttsRes = await fetch(`https://api.streamelements.com/kappa/v2/speech?voice=${ttsVoice}&text=${encodeURIComponent(ttsText)}`, { mode: 'cors' });
-      if (!ttsRes.ok) throw new Error();
+      const ttsText = (gData.script || '').trim().slice(0, 4000);
+      const ttsRes = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'playai-tts', input: ttsText, voice: ttsVoice, response_format: 'mp3' })
+      });
+      if (!ttsRes.ok) { const err = await ttsRes.text(); throw new Error(err); }
       ttsArrayBuffer = await ttsRes.arrayBuffer();
-      addLog('Voce pronta.');
-    } catch { addLog('Voce non disponibile: solo musica nel video.'); }
+      addLog('Voce pronta (Groq TTS).');
+    } catch(e) { addLog('Voce non disponibile: ' + (e.message||e)); }
 
     // FASE 3: Precarica video elements
     addLog(`Precarico ${blobUrls.length} clip...`);
