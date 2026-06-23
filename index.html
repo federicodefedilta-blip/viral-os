@@ -250,8 +250,8 @@
     <div class="card">
       <div class="card-title">🎙️ Generazione Audio</div>
       <div class="step-card">
-        <div class="step-card-title">🔊 Hugging Face TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Voce italiana AI (facebook/mms-tts-ita) — gratuito, nessuna chiave, scaricabile. Prima generazione ~20s per caricamento modello.</div>
+        <div class="step-card-title">🔊 Voce Browser TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
+        <div class="step-card-desc">Voce italiana integrata nel browser — gratuita, zero dipendenze. Usa un screen recorder per catturare l'audio mentre parla.</div>
         <div id="audioResult"></div>
       </div>
       <div class="action-row">
@@ -450,119 +450,69 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
   }
 
-  // --- Generate audio via Hugging Face TTS (free, no key needed for public models) ---
-  async function generateAudio() {
+  // --- Generate audio via Web Speech API (built-in browser, no dependencies) ---
+  function generateAudio() {
     if (!gData) return;
+    if (!window.speechSynthesis) {
+      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ Il tuo browser non supporta la sintesi vocale. Usa Chrome o Edge.</div>`;
+      return;
+    }
+
+    window.speechSynthesis.cancel();
     const btn = document.getElementById('audioBtn');
-    btn.disabled = true; btn.textContent = '⏳ Generando audio...';
+    btn.disabled = true; btn.textContent = '⏳ Carico voci...';
     document.getElementById('audioBadge').textContent = 'In corso...';
 
     const lang = document.getElementById('lang').value;
-    const model = lang === 'inglese' ? 'facebook/mms-tts-eng'
-                : lang === 'spagnolo' ? 'facebook/mms-tts-spa'
-                : 'facebook/mms-tts-ita';
+    const langCode = lang === 'inglese' ? 'en' : lang === 'spagnolo' ? 'es' : 'it';
 
-    const fullText = (gData.script || '').trim();
+    function speak() {
+      const voices = window.speechSynthesis.getVoices();
+      const voice = voices.find(v => v.lang.startsWith(langCode)) || voices[0];
 
-    // HF model has input limits — split into chunks
-    function splitText(text, maxLen = 300) {
-      const chunks = [];
-      const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
-      let current = '';
-      for (const s of sentences) {
-        if ((current + s).length > maxLen) {
-          if (current) chunks.push(current.trim());
-          current = s;
-        } else {
-          current += ' ' + s;
-        }
-      }
-      if (current.trim()) chunks.push(current.trim());
-      return chunks;
+      const utt = new SpeechSynthesisUtterance(gData.script || '');
+      utt.voice = voice;
+      utt.lang = langCode === 'it' ? 'it-IT' : langCode === 'es' ? 'es-ES' : 'en-US';
+      utt.rate = 1.05;
+      utt.pitch = 1;
+
+      utt.onstart = () => {
+        document.getElementById('audioBadge').textContent = '🔊 In riproduzione...';
+        document.getElementById('audioBadge').className = 'badge-done';
+        document.getElementById('audioResult').innerHTML = `
+          <div class="alert-info" style="margin-top:10px">
+            🔊 <strong>Sta parlando...</strong> Premi Stop per fermare.<br>
+            <small>Per scaricare l'audio: apri <strong>OBS</strong> o usa <strong>Estrai audio tab</strong> su Chrome.</small>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost" onclick="window.speechSynthesis.cancel();document.getElementById('audioBtn').disabled=false;document.getElementById('audioBtn').textContent='🔄 Rileggi'">⏹ Stop</button>
+            <button class="btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(gData.script||'')})">📋 Copia testo</button>
+          </div>
+        `;
+        btn.textContent = '🔄 Rileggi'; btn.disabled = false;
+      };
+
+      utt.onend = () => {
+        document.getElementById('audioBadge').textContent = '✓ Completato';
+        setTimeout(() => goTo(5), 1500);
+      };
+
+      utt.onerror = (e) => {
+        document.getElementById('audioBadge').textContent = '❌ Errore';
+        document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${e.error}</div>`;
+        btn.disabled = false; btn.textContent = '🎙️ Riprova';
+      };
+
+      window.speechSynthesis.speak(utt);
     }
 
-    try {
-      const chunks = splitText(fullText);
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const decoded = [];
-
-      for (let i = 0; i < chunks.length; i++) {
-        btn.textContent = `⏳ Chunk ${i+1}/${chunks.length}...`;
-        const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ inputs: chunks[i] })
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          // Model loading — wait and retry once
-          if (res.status === 503) {
-            btn.textContent = '⏳ Modello in caricamento (~20s)...';
-            await new Promise(r => setTimeout(r, 22000));
-            const retry = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ inputs: chunks[i] })
-            });
-            if (!retry.ok) throw new Error(`HF error ${retry.status}`);
-            const buf = await retry.arrayBuffer();
-            decoded.push(await audioCtx.decodeAudioData(buf));
-          } else {
-            throw new Error(err.error || `HF error ${res.status}`);
-          }
-        } else {
-          const buf = await res.arrayBuffer();
-          decoded.push(await audioCtx.decodeAudioData(buf));
-        }
-      }
-
-      // Merge all chunks into one buffer
-      const totalLen = decoded.reduce((s, b) => s + b.length, 0);
-      const merged = audioCtx.createBuffer(1, totalLen, decoded[0].sampleRate);
-      const ch = merged.getChannelData(0);
-      let offset = 0;
-      for (const b of decoded) { ch.set(b.getChannelData(0), offset); offset += b.length; }
-
-      const wavBlob = bufferToWav(merged);
-      const objUrl = URL.createObjectURL(wavBlob);
-
-      document.getElementById('audioBadge').textContent = '✓ Completato';
-      document.getElementById('audioBadge').className = 'badge-done';
-      document.getElementById('audioResult').innerHTML = `
-        <audio controls style="width:100%;margin-top:8px;border-radius:10px">
-          <source src="${objUrl}" type="audio/wav">
-        </audio>
-        <a href="${objUrl}" download="viral-audio.wav" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica Audio</a>
-      `;
-      btn.textContent = '🔄 Rigenera'; btn.disabled = false;
-      setTimeout(() => goTo(5), 2000);
-    } catch(err) {
-      btn.disabled = false; btn.textContent = '🎙️ Riprova';
-      document.getElementById('audioBadge').textContent = '❌ Errore';
-      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
+    // Voices may not be loaded yet on first call
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length) {
+      speak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => { speak(); };
     }
-  }
-
-  function bufferToWav(buffer) {
-    const sampleRate = buffer.sampleRate;
-    const samples = buffer.getChannelData(0);
-    const pcm = new Int16Array(samples.length);
-    for (let i = 0; i < samples.length; i++) {
-      pcm[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
-    }
-    const dataLen = pcm.byteLength;
-    const ab = new ArrayBuffer(44 + dataLen);
-    const view = new DataView(ab);
-    const w = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
-    w(0,'RIFF'); view.setUint32(4, 36+dataLen, true);
-    w(8,'WAVE'); w(12,'fmt ');
-    view.setUint32(16,16,true); view.setUint16(20,1,true);
-    view.setUint16(22,1,true); view.setUint32(24,sampleRate,true);
-    view.setUint32(28,sampleRate*2,true); view.setUint16(32,2,true);
-    view.setUint16(34,16,true); w(36,'data');
-    view.setUint32(40,dataLen,true);
-    new Int16Array(ab,44).set(pcm);
-    return new Blob([ab], { type: 'audio/wav' });
   }
 
   // --- Fetch video stock via Pexels (direct browser call) ---
