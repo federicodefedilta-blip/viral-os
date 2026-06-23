@@ -250,8 +250,8 @@
     <div class="card">
       <div class="card-title">🎙️ Generazione Audio</div>
       <div class="step-card">
-        <div class="step-card-title">🔊 Microsoft Edge Neural TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Voce italiana neurale (ElsaNeural) — gratuita, illimitata, scaricabile in MP3.</div>
+        <div class="step-card-title">🔊 Edge Neural TTS + Registrazione <span class="badge-pending" id="audioBadge">In attesa</span></div>
+        <div class="step-card-desc">Voce neurale italiana del browser — gratuita, illimitata. In Edge usa la voce neurale Microsoft. Clicca Genera per ascoltare e scaricare.</div>
         <div id="audioResult"></div>
       </div>
       <div class="action-row">
@@ -450,85 +450,80 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
   }
 
-  // --- Edge TTS via WebSocket (Microsoft Neural voices, free, unlimited) ---
+  // --- TTS con Web Speech API + cattura audio tab (scaricabile) ---
   async function generateAudio() {
     if (!gData) return;
     const btn = document.getElementById('audioBtn');
-    btn.disabled = true; btn.textContent = '⏳ Connessione Edge TTS...';
+    btn.disabled = true;
     document.getElementById('audioBadge').textContent = 'In corso...';
 
     const lang = document.getElementById('lang').value;
-    const voiceName = lang === 'inglese' ? 'en-US-AriaNeural'
-                    : lang === 'spagnolo' ? 'es-ES-ElviraNeural'
-                    : 'it-IT-ElsaNeural';
-
+    const langCode = lang === 'inglese' ? 'en-US' : lang === 'spagnolo' ? 'es-ES' : 'it-IT';
     const text = (gData.script || '').trim();
 
-    const uuid = () => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16));
-    const reqId = uuid();
-    const now = new Date().toISOString().replace(/[-:]/g,'').replace('.',':').slice(0,23) + 'Z';
+    if (!window.speechSynthesis) {
+      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ Browser non supportato. Usa Edge o Chrome.</div>`;
+      btn.disabled = false; return;
+    }
 
-    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${voiceName.slice(0,5)}'><voice name='${voiceName}'><prosody rate='+5%'>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</prosody></voice></speak>`;
+    window.speechSynthesis.cancel();
 
-    const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/realtimeaudio/cognitiveservices/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=${reqId}`;
-
+    // Prova a catturare audio del tab per renderlo scaricabile
+    let recorder = null;
+    let chunks = [];
     try {
-      const audioChunks = [];
-      await new Promise((resolve, reject) => {
-        const ws = new WebSocket(wsUrl);
-        ws.binaryType = 'arraybuffer';
+      const stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: false, preferCurrentTab: true });
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.start();
+      btn.textContent = '⏳ Registrazione in corso...';
+      document.getElementById('audioResult').innerHTML = `<div class="alert-info" style="margin-top:10px">🔴 Registrazione attiva — lo script sta per essere letto...</div>`;
+    } catch {
+      // Utente ha rifiutato o browser non supporta — solo riproduzione
+      btn.textContent = '🔊 In riproduzione...';
+      document.getElementById('audioResult').innerHTML = `<div class="alert-info" style="margin-top:10px">🔊 Riproduzione in corso... (senza download)<br><small>Per scaricare: clicca <strong>Rigenera</strong> e condividi l'audio del tab quando richiesto.</small></div>`;
+    }
 
-        ws.onopen = () => {
-          // 1. Send speech config
-          ws.send(`X-Timestamp:${now}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":false,"wordBoundaryEnabled":false},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
-          // 2. Send SSML
-          ws.send(`X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${now}\r\nPath:ssml\r\n\r\n${ssml}`);
-          btn.textContent = '⏳ Generando audio...';
-        };
+    await new Promise((resolve) => {
+      function speak() {
+        const voices = window.speechSynthesis.getVoices();
+        const voice = voices.find(v => v.lang === langCode)
+                   || voices.find(v => v.lang.startsWith(langCode.slice(0,2)))
+                   || null;
+        const utt = new SpeechSynthesisUtterance(text);
+        if (voice) utt.voice = voice;
+        utt.lang = langCode;
+        utt.rate = 1.05;
+        utt.onend = resolve;
+        utt.onerror = resolve;
+        window.speechSynthesis.speak(utt);
+      }
+      const v = window.speechSynthesis.getVoices();
+      if (v.length) speak(); else { window.speechSynthesis.onvoiceschanged = speak; }
+    });
 
-        ws.onmessage = (e) => {
-          if (e.data instanceof ArrayBuffer) {
-            // Audio data — skip the header (find 'Path:audio\r\n\r\n')
-            const view = new Uint8Array(e.data);
-            const header = new TextDecoder().decode(view.slice(0, 512));
-            const bodyStart = header.indexOf('Path:audio\r\n\r\n');
-            if (bodyStart !== -1) {
-              const headerBytes = new TextDecoder().encode(header.slice(0, bodyStart + 14)).length;
-              audioChunks.push(e.data.slice(headerBytes));
-            }
-          } else if (typeof e.data === 'string' && e.data.includes('Path:turn.end')) {
-            ws.close();
-            resolve();
-          }
-        };
-
-        ws.onerror = (e) => reject(new Error('WebSocket error — Edge TTS non raggiungibile'));
-        ws.onclose = () => resolve();
-        setTimeout(() => { ws.close(); reject(new Error('Timeout — riprova')); }, 30000);
-      });
-
-      if (!audioChunks.length) throw new Error('Nessun audio ricevuto');
-
-      // Merge chunks into single Blob
-      const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
-      const objUrl = URL.createObjectURL(blob);
-
+    // Stop recording e offri download
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+      recorder.stream.getTracks().forEach(t => t.stop());
+      await new Promise(r => recorder.onstop = r);
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(blob);
       document.getElementById('audioBadge').textContent = '✓ Completato';
       document.getElementById('audioBadge').className = 'badge-done';
       document.getElementById('audioResult').innerHTML = `
         <audio controls style="width:100%;margin-top:8px;border-radius:10px">
-          <source src="${objUrl}" type="audio/mpeg">
+          <source src="${url}" type="audio/webm">
         </audio>
-        <a href="${objUrl}" download="viral-audio.mp3" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica MP3</a>
+        <a href="${url}" download="viral-audio.webm" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica Audio</a>
       `;
-      btn.textContent = '🔄 Rigenera'; btn.disabled = false;
-      setTimeout(() => goTo(5), 2000);
-
-    } catch(err) {
-      btn.disabled = false; btn.textContent = '🎙️ Riprova';
-      document.getElementById('audioBadge').textContent = '❌ Errore';
-      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
+    } else {
+      document.getElementById('audioBadge').textContent = '✓ Completato';
+      document.getElementById('audioBadge').className = 'badge-done';
     }
+
+    btn.textContent = '🔄 Rigenera'; btn.disabled = false;
+    setTimeout(() => goTo(5), 2000);
   }
 
   // --- Fetch video stock via Pexels (direct browser call) ---
