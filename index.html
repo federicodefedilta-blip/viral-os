@@ -1097,16 +1097,8 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     badge.textContent = 'Registrazione...';
 
     recorder.start(100);
-    // Avvia voce subito dopo start (audioCtx.currentTime ora è aggiornato)
-    if (ttsBufferNode) { ttsBufferNode.start(audioCtx.currentTime); addLog('Voce avviata (audio buffer).'); }
-    else if (useWebSpeech) {
-      const utt = new SpeechSynthesisUtterance(ttsText);
-      utt.lang = _langCode;
-      utt.rate = 0.9;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utt);
-      addLog('Voce avviata (Web Speech API).');
-    }
+    // Avvia voce solo se BufferSourceNode è disponibile (HuggingFace ha funzionato)
+    if (ttsBufferNode) { ttsBufferNode.start(audioCtx.currentTime); addLog('Voce avviata.'); }
 
     const startTime = Date.now();
     let currentClipIdx = 0;
