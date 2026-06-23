@@ -19,7 +19,8 @@
   .logo-icon { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 17px; }
   .logo-text { font-size: 1.05em; font-weight: 700; }
   .logo-text span { color: var(--accent); }
-  .status-pill { font-size: 0.7em; font-family: var(--mono); background: #0f2a1a; color: var(--green); border: 1px solid #1a4a2e; border-radius: 20px; padding: 4px 12px; display: flex; align-items: center; gap: 6px; }
+  .status-pill { font-size: 0.7em; font-family: var(--mono); background: #0f2a1a; color: var(--green); border: 1px solid #1a4a2e; border-radius: 20px; padding: 4px 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s; }
+  .status-pill:hover { background: #163a26; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .main { padding: 28px 24px; max-width: 820px; margin: 0 auto; }
@@ -97,9 +98,10 @@
   .time-big { font-size: 1.4em; font-weight: 700; color: var(--accent); font-family: var(--mono); }
   .action-row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
   .alert-info { background: #0a1628; border: 1px solid #1e3a5f; color: #93c5fd; padding: 12px 15px; border-radius: 10px; font-size: 0.8em; margin-bottom: 16px; line-height: 1.5; }
+  .alert-warn { background: #1a1200; border: 1px solid #4a3000; color: #fcd34d; padding: 12px 15px; border-radius: 10px; font-size: 0.8em; margin-bottom: 16px; line-height: 1.5; }
   .error-box { background: #1a0808; border: 1px solid #4a1010; border-radius: 10px; padding: 16px; color: #fca5a5; font-size: 0.82em; line-height: 1.5; }
-  .images-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
-  .img-preview { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+  .videos-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+  .vid-preview { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
   .img-placeholder { width: 100%; aspect-ratio: 9/16; border-radius: 10px; border: 1px dashed var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.75em; }
   .step-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 12px; }
   .step-card-title { font-size: 0.85em; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
@@ -108,28 +110,90 @@
   .badge-pending { font-size: 0.65em; background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px; }
   .hashtag-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 0.82em; font-family: var(--mono); line-height: 1.9; }
   .capcut-steps { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.8em; line-height: 1.9; color: var(--muted); }
+  /* Keys modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px); }
+  .modal-overlay.hidden { display: none; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 28px; width: 100%; max-width: 480px; }
+  .modal-title { font-size: 1.05em; font-weight: 700; margin-bottom: 6px; }
+  .modal-sub { font-size: 0.8em; color: var(--muted); margin-bottom: 22px; line-height: 1.5; }
+  .key-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .key-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .key-ok { background: var(--green); }
+  .key-missing { background: var(--red); }
+  .key-optional { background: var(--orange); }
+  .key-input-wrap { position: relative; flex: 1; }
+  .key-input { width: 100%; padding: 10px 38px 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-family: var(--mono); font-size: 0.75em; outline: none; transition: border-color 0.2s; }
+  .key-input:focus { border-color: var(--accent); }
+  .key-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9em; }
+  .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 </head>
 <body>
+
+<!-- API Keys Modal -->
+<div class="modal-overlay hidden" id="keysModal">
+  <div class="modal">
+    <div class="modal-title">🔑 Chiavi API</div>
+    <div class="modal-sub">Le chiavi vengono salvate solo nel tuo browser (localStorage). Non passano per nessun server.</div>
+
+    <div class="input-group">
+      <label class="input-label" style="display:flex;align-items:center;gap:6px">
+        <span class="key-status" id="dotGroq"></span> Groq API Key <span style="color:var(--red);font-size:0.8em">*richiesta</span>
+      </label>
+      <div class="key-input-wrap">
+        <input class="key-input" type="password" id="keyGroq" placeholder="gsk_..." oninput="saveKeys()">
+        <button class="key-toggle" onclick="toggleVis('keyGroq')">👁</button>
+      </div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>console.groq.com</strong> — nessuna carta di credito</div>
+    </div>
+
+    <div class="input-group">
+      <label class="input-label" style="display:flex;align-items:center;gap:6px">
+        <span class="key-status" id="dotEleven"></span> ElevenLabs API Key <span style="color:var(--orange);font-size:0.8em">opzionale</span>
+      </label>
+      <div class="key-input-wrap">
+        <input class="key-input" type="password" id="keyEleven" placeholder="sk_..." oninput="saveKeys()">
+        <button class="key-toggle" onclick="toggleVis('keyEleven')">👁</button>
+      </div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>elevenlabs.io</strong> — 10.000 caratteri/mese</div>
+    </div>
+
+    <div class="input-group">
+      <label class="input-label" style="display:flex;align-items:center;gap:6px">
+        <span class="key-status" id="dotPexels"></span> Pexels API Key <span style="color:var(--orange);font-size:0.8em">opzionale</span>
+      </label>
+      <div class="key-input-wrap">
+        <input class="key-input" type="password" id="keyPexels" placeholder="..." oninput="saveKeys()">
+        <button class="key-toggle" onclick="toggleVis('keyPexels')">👁</button>
+      </div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>pexels.com/api</strong> — illimitato</div>
+    </div>
+
+    <button class="btn btn-primary" onclick="closeKeys()" style="width:100%;justify-content:center;margin-top:8px">✅ Salva e chiudi</button>
+  </div>
+</div>
+
 <div class="header">
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
   </div>
-  <div class="status-pill"><div class="dot"></div>AI Online</div>
+  <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
+
 <div class="main">
   <div class="steps">
     <div class="step-item active" id="s1"><div class="step-line"></div><div class="step-circle">1</div><div class="step-label">Config</div></div>
     <div class="step-item" id="s2"><div class="step-line"></div><div class="step-circle">2</div><div class="step-label">Trend AI</div></div>
     <div class="step-item" id="s3"><div class="step-line"></div><div class="step-circle">3</div><div class="step-label">Contenuto</div></div>
     <div class="step-item" id="s4"><div class="step-line"></div><div class="step-circle">4</div><div class="step-label">Audio</div></div>
-    <div class="step-item" id="s5"><div class="step-line"></div><div class="step-circle">5</div><div class="step-label">Immagini</div></div>
+    <div class="step-item" id="s5"><div class="step-line"></div><div class="step-circle">5</div><div class="step-label">Video</div></div>
     <div class="step-item" id="s6"><div class="step-line"></div><div class="step-circle">6</div><div class="step-label">Pubblica</div></div>
   </div>
 
   <!-- PANEL 1 -->
   <div class="panel active" id="panel1">
+    <div id="missingKeysBanner"></div>
     <div class="card">
       <div class="card-title">⚙️ Configurazione canale</div>
       <div class="channel-grid">
@@ -198,7 +262,7 @@
       <div class="card-title">🎙️ Generazione Audio</div>
       <div class="step-card">
         <div class="step-card-title">🔊 ElevenLabs TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Converto lo script in audio con voce naturalistica multilingua. Potrebbero volerci 10-20 secondi.</div>
+        <div class="step-card-desc">Converto lo script in audio con voce italiana naturalistica. Potrebbero volerci 10-20 secondi.</div>
         <div id="audioResult"></div>
       </div>
       <div class="action-row">
@@ -214,7 +278,7 @@
       <div class="card-title">🎬 Video Stock dalla nicchia</div>
       <div class="step-card">
         <div class="step-card-title">📹 Pexels Video Stock <span class="badge-pending" id="imgBadge">In attesa</span></div>
-        <div class="step-card-desc">Recupero 4 video verticali HD gratuiti da Pexels, perfetti per la tua nicchia. Pronti in pochi secondi.</div>
+        <div class="step-card-desc">Recupero 4 video verticali HD gratuiti da Pexels, perfetti per la tua nicchia.</div>
         <div id="imagesResult"></div>
       </div>
       <div class="action-row">
@@ -232,7 +296,7 @@
       <div id="publishContent"></div>
       <div class="action-row" style="margin-top:24px">
         <button class="btn btn-primary" onclick="goTo(1)">🚀 Genera nuovo video</button>
-        <button class="btn btn-ghost" onclick="goTo(5)">← Torna alle immagini</button>
+        <button class="btn btn-ghost" onclick="goTo(5)">← Torna ai video</button>
       </div>
     </div>
   </div>
@@ -242,10 +306,75 @@
   let platform = 'YouTube Shorts';
   let gData = null;
   let audioBase64 = null;
-  let generatedImages = [];
+  let generatedVideos = [];
 
   const loaderMsgs = ['Analizzando i trend del momento...','Scansiono YouTube, TikTok e Reddit...','Calcolo il Viral Score...','Trovo il prodotto affiliate più redditizio...','Scrivo lo script virale ottimizzato...','Genero titoli e hashtag SEO...','Quasi pronto...'];
 
+  // --- Key management ---
+  function getKeys() {
+    return {
+      groq: localStorage.getItem('vos_groq') || '',
+      eleven: localStorage.getItem('vos_eleven') || '',
+      pexels: localStorage.getItem('vos_pexels') || ''
+    };
+  }
+
+  function saveKeys() {
+    const g = document.getElementById('keyGroq').value.trim();
+    const e = document.getElementById('keyEleven').value.trim();
+    const p = document.getElementById('keyPexels').value.trim();
+    if (g) localStorage.setItem('vos_groq', g); else localStorage.removeItem('vos_groq');
+    if (e) localStorage.setItem('vos_eleven', e); else localStorage.removeItem('vos_eleven');
+    if (p) localStorage.setItem('vos_pexels', p); else localStorage.removeItem('vos_pexels');
+    updateKeyDots();
+  }
+
+  function updateKeyDots() {
+    const k = getKeys();
+    const dot = (id, ok, optional) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = 'key-status ' + (ok ? 'key-ok' : optional ? 'key-optional' : 'key-missing');
+    };
+    dot('dotGroq', !!k.groq, false);
+    dot('dotEleven', !!k.eleven, true);
+    dot('dotPexels', !!k.pexels, true);
+    document.getElementById('headerStatus').textContent = k.groq ? 'AI Online' : 'Configura chiavi';
+    // banner on panel 1
+    const banner = document.getElementById('missingKeysBanner');
+    if (!k.groq) {
+      banner.innerHTML = `<div class="alert-warn">⚠️ Aggiungi la chiave Groq per iniziare. <button class="btn-sm" onclick="openKeys()" style="margin-left:8px">🔑 Configura</button></div>`;
+    } else {
+      banner.innerHTML = '';
+    }
+  }
+
+  function openKeys() {
+    const k = getKeys();
+    document.getElementById('keyGroq').value = k.groq;
+    document.getElementById('keyEleven').value = k.eleven;
+    document.getElementById('keyPexels').value = k.pexels;
+    updateKeyDots();
+    document.getElementById('keysModal').classList.remove('hidden');
+  }
+
+  function closeKeys() {
+    saveKeys();
+    document.getElementById('keysModal').classList.add('hidden');
+    updateKeyDots();
+  }
+
+  function toggleVis(id) {
+    const el = document.getElementById(id);
+    el.type = el.type === 'password' ? 'text' : 'password';
+  }
+
+  // Close modal on overlay click
+  document.getElementById('keysModal').addEventListener('click', function(e) {
+    if (e.target === this) closeKeys();
+  });
+
+  // --- Nav ---
   function selCh(el, p) {
     document.querySelectorAll('.ch-card').forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
@@ -266,18 +395,70 @@
     if (n === 6 && gData) renderPublish();
   }
 
+  // --- Generate script via Groq (direct browser call) ---
   async function startGen() {
+    const k = getKeys();
+    if (!k.groq) { openKeys(); return; }
+
     const lang = document.getElementById('lang').value;
     const affCat = document.getElementById('affCat').value;
     const dur = document.getElementById('dur').value;
     goTo(2);
     let mi = 0;
     const iv = setInterval(() => { document.getElementById('loaderMsg').textContent = loaderMsgs[mi % loaderMsgs.length]; mi++; }, 1600);
+
+    const prompt = `Sei il miglior creatore di contenuti virali su ${platform} in ${lang}. Il tuo obiettivo è creare script che esplodono in viralità nelle prime 24 ore e convertono in vendite affiliate.
+
+DATA ATTUALE: ${new Date().toLocaleDateString('it-IT', {month:'long', year:'numeric'})}
+PIATTAFORMA: ${platform}
+LINGUA: ${lang}
+CATEGORIA: ${affCat === 'auto' ? 'scegli la nicchia con il ROI più alto e la crescita più esplosiva in questo momento' : affCat}
+DURATA: ${dur} secondi
+
+REGOLE SCRIPT VIRALE OBBLIGATORIE:
+1. Hook nei primi 2 secondi: deve essere uno shock, una domanda impossibile o una affermazione controversa che impedisce lo scroll
+2. Loop psicologico: crea curiosità che si risolve solo alla fine
+3. Ritmo veloce: frasi corte, max 8 parole per frase
+4. CTA affiliate NATURALE: integrata come consiglio personale, non come pubblicità
+5. Finale con urgenza ("solo per oggi", "prima che sparisca", ecc.)
+
+Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza testo prima o dopo.
+
+{
+  "nicchia": "nome nicchia specifica e di tendenza",
+  "viral_score": numero da 1 a 100,
+  "viral_score_reason": "perché questa nicchia esplode ora",
+  "competitor_analysis": "chi domina questa nicchia e il loro punto debole",
+  "trend_tags": ["tag1","tag2","tag3","tag4","tag5"],
+  "affiliate": {
+    "prodotto": "nome prodotto specifico con brand reale",
+    "piattaforma": "Amazon/Hotmart/Clickbank/Awin/etc",
+    "commissione": "X%",
+    "perche": "perché converte: problema che risolve + urgenza + prova sociale",
+    "cta": "frase CTA naturalissima, sembra un consiglio non una pubblicità"
+  },
+  "script": "SCRIPT COMPLETO in ${lang} per ${dur} secondi. Hook devastante. Frasi cortissime. Ritmo veloce. CTA affiliate come consiglio personale. Chiudi con urgenza.",
+  "titolo": "titolo clickbait SEO per ${platform}, max 60 caratteri",
+  "descrizione": "descrizione SEO + CTA affiliate + urgenza, max 200 caratteri",
+  "hashtags": ["#tag1","#tag2","#tag3","#tag4","#tag5","#tag6","#tag7","#tag8","#tag9","#tag10"],
+  "orario_pubblicazione": "orario ottimale per audience italiana su ${platform}",
+  "tip_viralita": "un solo consiglio ultra-specifico per questa nicchia su ${platform}"
+}`;
+
     try {
-      const res = await fetch('/.netlify/functions/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ platform, lang, affCat, duration: dur }) });
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k.groq}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.8, max_tokens: 2000 })
+      });
       clearInterval(iv);
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `HTTP ${res.status}`); }
-      gData = await res.json();
+      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
+      const data = await res.json();
+      let text = data.choices?.[0]?.message?.content || '';
+      let clean = text.replace(/```json|```/g, '').trim();
+      const start = clean.indexOf('{'); const end = clean.lastIndexOf('}');
+      if (start !== -1 && end !== -1) clean = clean.slice(start, end + 1);
+      gData = JSON.parse(clean);
       renderResults(gData);
       goTo(3);
     } catch(err) {
@@ -286,23 +467,44 @@
     }
   }
 
+  // --- Generate audio via ElevenLabs (direct browser call) ---
   async function generateAudio() {
     if (!gData) return;
+    const k = getKeys();
+    if (!k.eleven) {
+      document.getElementById('audioResult').innerHTML = `<div class="alert-warn" style="margin-top:10px">⚠️ Chiave ElevenLabs non configurata. <button class="btn-sm" onclick="openKeys()">🔑 Aggiungi</button></div>`;
+      return;
+    }
     const btn = document.getElementById('audioBtn');
     btn.disabled = true; btn.textContent = '⏳ Generando audio...';
     document.getElementById('audioBadge').textContent = 'In corso...';
+
+    const rawText = gData.script || '';
+    const text = rawText.length > 400 ? rawText.slice(0, 400) + '...' : rawText;
+    // Giovanni - native Italian male voice
+    const voice_id = 'zcAOhNBS3c14rBihAFp1';
+
     try {
-      const res = await fetch('/.netlify/functions/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: gData.script }) });
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `HTTP ${res.status}`); }
-      const data = await res.json();
-      audioBase64 = data.audio_base64;
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'xi-api-key': k.eleven },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true }
+        })
+      });
+      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail?.message || e.detail || `HTTP ${res.status}`); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      audioBase64 = url;
       document.getElementById('audioBadge').textContent = '✓ Completato';
       document.getElementById('audioBadge').className = 'badge-done';
       document.getElementById('audioResult').innerHTML = `
         <audio controls style="width:100%;margin-top:8px;border-radius:10px">
-          <source src="data:audio/mp3;base64,${audioBase64}" type="audio/mp3">
+          <source src="${url}" type="audio/mpeg">
         </audio>
-        <a href="data:audio/mp3;base64,${audioBase64}" download="viral-audio.mp3" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica MP3</a>
+        <a href="${url}" download="viral-audio.mp3" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica MP3</a>
       `;
       btn.textContent = '🔄 Rigenera'; btn.disabled = false;
       setTimeout(() => goTo(5), 2000);
@@ -313,29 +515,55 @@
     }
   }
 
+  // --- Fetch video stock via Pexels (direct browser call) ---
   async function generateImages() {
     if (!gData) return;
+    const k = getKeys();
+    if (!k.pexels) {
+      document.getElementById('imagesResult').innerHTML = `<div class="alert-warn" style="margin-top:10px">⚠️ Chiave Pexels non configurata. <button class="btn-sm" onclick="openKeys()">🔑 Aggiungi</button></div>`;
+      return;
+    }
     const btn = document.getElementById('imgBtn');
-    btn.disabled = true; btn.textContent = '⏳ Cercando video... (pochi secondi)';
+    btn.disabled = true; btn.textContent = '⏳ Cercando video...';
     document.getElementById('imgBadge').textContent = 'In corso...';
-    document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${[1,2,3,4].map(i=>`<div class="img-placeholder">🎬 ${i}/4...</div>`).join('')}</div>`;
+    document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${[1,2,3,4].map(i=>`<div class="img-placeholder">🎬 ${i}/4...</div>`).join('')}</div>`;
+
     const nicchia = gData.nicchia || 'lifestyle viral';
-    const prompts = [nicchia, `${nicchia} cinematic`, `${nicchia} dramatic`, `${nicchia} lifestyle`];
+    const queries = [nicchia, `${nicchia} cinematic`, `${nicchia} dramatic`, `${nicchia} lifestyle`];
+
     try {
-      const res = await fetch('/.netlify/functions/images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompts, nicchia }) });
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `HTTP ${res.status}`); }
-      const data = await res.json();
-      generatedImages = data.videos;
+      const results = [];
+      for (const query of queries) {
+        const res = await fetch(
+          `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=5`,
+          { headers: { Authorization: k.pexels } }
+        );
+        if (!res.ok) throw new Error(`Pexels error: ${res.status}`);
+        const data = await res.json();
+        const video = data.videos?.[0];
+        if (video) {
+          const file = video.video_files
+            .filter(f => f.quality === 'hd' || f.quality === 'sd')
+            .sort((a, b) => a.width - b.width)[0];
+          results.push({ url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url });
+        } else {
+          results.push(null);
+        }
+      }
+      generatedVideos = results;
       document.getElementById('imgBadge').textContent = '✓ Completato';
       document.getElementById('imgBadge').className = 'badge-done';
-      document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${generatedImages.map((v,i) => v ? `<div>
-        <video src="${v.url}" class="img-preview" muted loop playsinline autoplay style="object-fit:cover"></video>
-        <div style="display:flex;gap:6px;margin-top:6px">
-          <a href="${v.url}" download="viral-video-${i+1}.mp4" class="btn-sm" style="flex:1;text-align:center;text-decoration:none">⬇️ Scarica</a>
-          <a href="${v.pexels_url}" target="_blank" class="btn-sm" style="text-decoration:none">🔗</a>
-        </div>
-        <div style="font-size:0.6em;color:var(--muted);margin-top:3px;text-align:center">📷 ${v.photographer} / Pexels</div>
-      </div>` : `<div class="img-placeholder">❌ Non trovato</div>`).join('')}</div>`;
+      document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${results.map((v,i) => v
+        ? `<div>
+            <video src="${v.url}" class="vid-preview" muted loop playsinline autoplay style="object-fit:cover"></video>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <a href="${v.url}" download="viral-video-${i+1}.mp4" class="btn-sm" style="flex:1;text-align:center;text-decoration:none">⬇️ Scarica</a>
+              <a href="${v.pexels_url}" target="_blank" class="btn-sm" style="text-decoration:none">🔗</a>
+            </div>
+            <div style="font-size:0.6em;color:var(--muted);margin-top:3px;text-align:center">📷 ${v.photographer} / Pexels</div>
+          </div>`
+        : `<div class="img-placeholder">❌ Non trovato</div>`
+      ).join('')}</div>`;
       btn.textContent = '🔄 Rigenera'; btn.disabled = false;
       setTimeout(() => goTo(6), 1500);
     } catch(err) {
@@ -412,6 +640,11 @@
 
   function cp(id) { const el=document.getElementById(id); if(el) navigator.clipboard.writeText(el.textContent).catch(()=>{}); }
   function cpText(txt) { navigator.clipboard.writeText(txt).catch(()=>{}); }
+
+  // Init
+  updateKeyDots();
+  const k = getKeys();
+  if (!k.groq) setTimeout(openKeys, 600);
 </script>
 </body>
 </html>
