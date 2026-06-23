@@ -149,17 +149,6 @@
 
     <div class="input-group">
       <label class="input-label" style="display:flex;align-items:center;gap:6px">
-        <span class="key-status" id="dotEleven"></span> ElevenLabs API Key <span style="color:var(--orange);font-size:0.8em">opzionale</span>
-      </label>
-      <div class="key-input-wrap">
-        <input class="key-input" type="password" id="keyEleven" placeholder="sk_..." oninput="saveKeys()">
-        <button class="key-toggle" onclick="toggleVis('keyEleven')">👁</button>
-      </div>
-      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>elevenlabs.io</strong> — 10.000 caratteri/mese</div>
-    </div>
-
-    <div class="input-group">
-      <label class="input-label" style="display:flex;align-items:center;gap:6px">
         <span class="key-status" id="dotPexels"></span> Pexels API Key <span style="color:var(--orange);font-size:0.8em">opzionale</span>
       </label>
       <div class="key-input-wrap">
@@ -261,8 +250,8 @@
     <div class="card">
       <div class="card-title">🎙️ Generazione Audio</div>
       <div class="step-card">
-        <div class="step-card-title">🔊 ElevenLabs TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Converto lo script in audio con voce italiana naturalistica. Potrebbero volerci 10-20 secondi.</div>
+        <div class="step-card-title">🔊 Google Translate TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
+        <div class="step-card-desc">Converto lo script in audio con voce italiana di Google. Gratuito, nessuna chiave richiesta.</div>
         <div id="audioResult"></div>
       </div>
       <div class="action-row">
@@ -314,17 +303,14 @@
   function getKeys() {
     return {
       groq: localStorage.getItem('vos_groq') || '',
-      eleven: localStorage.getItem('vos_eleven') || '',
       pexels: localStorage.getItem('vos_pexels') || ''
     };
   }
 
   function saveKeys() {
     const g = document.getElementById('keyGroq').value.trim();
-    const e = document.getElementById('keyEleven').value.trim();
     const p = document.getElementById('keyPexels').value.trim();
     if (g) localStorage.setItem('vos_groq', g); else localStorage.removeItem('vos_groq');
-    if (e) localStorage.setItem('vos_eleven', e); else localStorage.removeItem('vos_eleven');
     if (p) localStorage.setItem('vos_pexels', p); else localStorage.removeItem('vos_pexels');
     updateKeyDots();
   }
@@ -337,10 +323,8 @@
       el.className = 'key-status ' + (ok ? 'key-ok' : optional ? 'key-optional' : 'key-missing');
     };
     dot('dotGroq', !!k.groq, false);
-    dot('dotEleven', !!k.eleven, true);
     dot('dotPexels', !!k.pexels, true);
     document.getElementById('headerStatus').textContent = k.groq ? 'AI Online' : 'Configura chiavi';
-    // banner on panel 1
     const banner = document.getElementById('missingKeysBanner');
     if (!k.groq) {
       banner.innerHTML = `<div class="alert-warn">⚠️ Aggiungi la chiave Groq per iniziare. <button class="btn-sm" onclick="openKeys()" style="margin-left:8px">🔑 Configura</button></div>`;
@@ -352,7 +336,6 @@
   function openKeys() {
     const k = getKeys();
     document.getElementById('keyGroq').value = k.groq;
-    document.getElementById('keyEleven').value = k.eleven;
     document.getElementById('keyPexels').value = k.pexels;
     updateKeyDots();
     document.getElementById('keysModal').classList.remove('hidden');
@@ -467,52 +450,111 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
   }
 
-  // --- Generate audio via ElevenLabs (direct browser call) ---
+  // --- Generate audio via Google Translate TTS (no API key needed) ---
   async function generateAudio() {
     if (!gData) return;
-    const k = getKeys();
-    if (!k.eleven) {
-      document.getElementById('audioResult').innerHTML = `<div class="alert-warn" style="margin-top:10px">⚠️ Chiave ElevenLabs non configurata. <button class="btn-sm" onclick="openKeys()">🔑 Aggiungi</button></div>`;
-      return;
-    }
     const btn = document.getElementById('audioBtn');
     btn.disabled = true; btn.textContent = '⏳ Generando audio...';
     document.getElementById('audioBadge').textContent = 'In corso...';
 
-    const rawText = gData.script || '';
-    const text = rawText.length > 400 ? rawText.slice(0, 400) + '...' : rawText;
-    // Giovanni - native Italian male voice
-    const voice_id = 'zcAOhNBS3c14rBihAFp1';
+    const lang = document.getElementById('lang').value;
+    const langCode = lang === 'inglese' ? 'en' : lang === 'spagnolo' ? 'es' : 'it';
+    const fullText = gData.script || '';
+
+    // Google Translate TTS has a 200-char limit per request — split into chunks
+    function splitText(text, maxLen = 190) {
+      const chunks = [];
+      const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+      let current = '';
+      for (const s of sentences) {
+        if ((current + s).length > maxLen) {
+          if (current) chunks.push(current.trim());
+          current = s;
+        } else {
+          current += s;
+        }
+      }
+      if (current.trim()) chunks.push(current.trim());
+      return chunks;
+    }
 
     try {
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'xi-api-key': k.eleven },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_multilingual_v2',
-          voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true }
-        })
-      });
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail?.message || e.detail || `HTTP ${res.status}`); }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      audioBase64 = url;
+      const chunks = splitText(fullText);
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const buffers = [];
+
+      for (const chunk of chunks) {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodeURIComponent(chunk)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Google TTS error: ${res.status}`);
+        const arrayBuf = await res.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(arrayBuf);
+        buffers.push(decoded);
+      }
+
+      // Concatenate all buffers into one
+      const totalLen = buffers.reduce((s, b) => s + b.length, 0);
+      const combined = audioCtx.createBuffer(1, totalLen, buffers[0].sampleRate);
+      const channel = combined.getChannelData(0);
+      let offset = 0;
+      for (const buf of buffers) {
+        channel.set(buf.getChannelData(0), offset);
+        offset += buf.length;
+      }
+
+      // Convert to WAV blob
+      const wavBlob = bufferToWav(combined);
+      const url = URL.createObjectURL(wavBlob);
+
       document.getElementById('audioBadge').textContent = '✓ Completato';
       document.getElementById('audioBadge').className = 'badge-done';
       document.getElementById('audioResult').innerHTML = `
         <audio controls style="width:100%;margin-top:8px;border-radius:10px">
-          <source src="${url}" type="audio/mpeg">
+          <source src="${url}" type="audio/wav">
         </audio>
-        <a href="${url}" download="viral-audio.mp3" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica MP3</a>
+        <a href="${url}" download="viral-audio.wav" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica Audio</a>
       `;
       btn.textContent = '🔄 Rigenera'; btn.disabled = false;
       setTimeout(() => goTo(5), 2000);
     } catch(err) {
       btn.disabled = false; btn.textContent = '🎙️ Riprova';
       document.getElementById('audioBadge').textContent = '❌ Errore';
-      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
+      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}<br><small style="color:var(--muted)">Nota: Google TTS potrebbe bloccare le richieste dal browser. In tal caso usa Web Speech API.</small></div>`;
+      // Fallback: Web Speech API (built-in browser TTS)
+      speakFallback(gData.script, langCode);
     }
+  }
+
+  function speakFallback(text, langCode) {
+    if (!window.speechSynthesis) return;
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = langCode === 'it' ? 'it-IT' : langCode === 'es' ? 'es-ES' : 'en-US';
+    utt.rate = 1.1;
+    window.speechSynthesis.speak(utt);
+    document.getElementById('audioResult').innerHTML += `<div class="alert-info" style="margin-top:10px">🔊 Riproduzione via voce browser in corso. Non scaricabile ma puoi registrare lo schermo.</div>`;
+  }
+
+  function bufferToWav(buffer) {
+    const numCh = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const samples = buffer.getChannelData(0);
+    const pcm = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      pcm[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+    }
+    const dataLen = pcm.byteLength;
+    const ab = new ArrayBuffer(44 + dataLen);
+    const view = new DataView(ab);
+    const write = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+    write(0, 'RIFF'); view.setUint32(4, 36 + dataLen, true);
+    write(8, 'WAVE'); write(12, 'fmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, numCh, true); view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numCh * 2, true); view.setUint16(32, numCh * 2, true);
+    view.setUint16(34, 16, true); write(36, 'data');
+    view.setUint32(40, dataLen, true);
+    new Int16Array(ab, 44).set(pcm);
+    return new Blob([ab], { type: 'audio/wav' });
   }
 
   // --- Fetch video stock via Pexels (direct browser call) ---
