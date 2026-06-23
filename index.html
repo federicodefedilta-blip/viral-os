@@ -199,14 +199,14 @@
         </select>
       </div>
       <div class="input-group">
-        <label class="input-label">Categoria affiliate</label>
+        <label class="input-label">Prodotto affiliate</label>
         <select class="input-field" id="affCat">
-          <option value="auto">🤖 Lascia decidere all'AI</option>
-          <option value="tech">📱 Tech & Gadget</option>
-          <option value="corsi online">🎓 Corsi online</option>
-          <option value="finanza e investimenti">💰 Finanza & Investimenti</option>
-          <option value="salute e fitness">💪 Salute & Fitness</option>
-          <option value="libri e ebook">📚 Libri & Ebook</option>
+          <option value="auto">🤖 Scegli l'AI in base alla storia</option>
+          <option value="torcia tattica LED">🔦 Torcia tattica</option>
+          <option value="telecamera di sicurezza">📷 Telecamera di sicurezza</option>
+          <option value="libro horror bestseller">📚 Libro horror</option>
+          <option value="lucchetto smart">🔐 Lucchetto smart</option>
+          <option value="rilevatore EMF paranormale">👻 Rilevatore EMF</option>
         </select>
       </div>
       <div class="input-group">
@@ -622,7 +622,6 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       <div id="voiceInfo" style="font-size:0.72em;color:var(--muted);margin-top:8px"></div>
     `;
     document.getElementById('audioBtn').textContent = '🔄 Rigenera';
-    setTimeout(() => goTo(5), 100);
   }
 
   function playAll(langCode, text, bgType, bgVol) {
