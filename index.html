@@ -707,6 +707,9 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
   // --- TTS con Web Speech API — play manuale ---
   function generateAudio() {
     if (!gData) return;
+    try { window.speechSynthesis.cancel(); } catch {}
+    try { stopBgMusic(); } catch {}
+
     const lang = document.getElementById('lang').value;
     _langCode = lang === 'inglese' ? 'en-US' : lang === 'spagnolo' ? 'es-ES' : 'it-IT';
 
@@ -714,6 +717,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     document.getElementById('audioBadge').className = 'badge-done';
     document.getElementById('audioResult').innerHTML = `<div class="alert-info" style="margin-top:10px">Premi <strong>▶ Play</strong> per ascoltare voce + musica insieme.</div>`;
     document.getElementById('audioBtn').textContent = '🔄 Rigenera';
+    document.getElementById('audioBtn').style.display = '';
     document.getElementById('playBtn').style.display = '';
     document.getElementById('stopBtn').style.display = 'none';
   }
