@@ -253,16 +253,16 @@
         <label class="input-label">🎵 Musica di sottofondo</label>
         <select class="input-field" id="bgMusic">
           <option value="none">🔇 Nessuna</option>
-          <option value="https://cdn.freesound.org/previews/476/476891_9318522-lq.mp3" selected>👻 Paranormale — drone inquietante</option>
-          <option value="https://cdn.freesound.org/previews/415/415510_5121236-lq.mp3">😱 Tensione — suspense crescente</option>
-          <option value="https://cdn.freesound.org/previews/399/399303_1676145-lq.mp3">🌑 Dark ambient — atmosfera oscura</option>
-          <option value="https://cdn.freesound.org/previews/550/550347_1676145-lq.mp3">🕯️ Horror classico — violini sinistri</option>
+          <option value="drone" selected>👻 Drone paranormale</option>
+          <option value="tension">😱 Tensione crescente</option>
+          <option value="dark">🌑 Dark ambient</option>
+          <option value="heartbeat">💀 Heartbeat sinistro</option>
         </select>
       </div>
       <div class="input-group" style="display:flex;align-items:center;gap:12px">
         <label class="input-label" style="margin:0;min-width:80px">🔊 Volume musica</label>
-        <input type="range" id="bgVolume" min="0" max="100" value="20" style="flex:1;accent-color:var(--accent)">
-        <span id="bgVolumeVal" style="font-size:0.75em;font-family:var(--mono);color:var(--muted);min-width:30px">20%</span>
+        <input type="range" id="bgVolume" min="0" max="100" value="25" style="flex:1;accent-color:var(--accent)">
+        <span id="bgVolumeVal" style="font-size:0.75em;font-family:var(--mono);color:var(--muted);min-width:30px">25%</span>
       </div>
       <div class="step-card">
         <div class="step-card-title">🔊 Edge Neural TTS + Registrazione <span class="badge-pending" id="audioBadge">In attesa</span></div>
@@ -482,124 +482,179 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     document.getElementById('bgVolumeVal').textContent = this.value + '%';
   });
 
-  // --- TTS con Web Speech API + cattura audio tab (scaricabile) ---
-  async function generateAudio() {
-    if (!gData) return;
-    const btn = document.getElementById('audioBtn');
-    btn.disabled = true;
-    document.getElementById('audioBadge').textContent = 'In corso...';
+  let bgNodes = null; // tiene riferimento ai nodi Web Audio attivi
 
+  function stopBgMusic() {
+    if (bgNodes) {
+      try {
+        const fade = setInterval(() => {
+          if (bgNodes.gain.gain.value > 0.02) bgNodes.gain.gain.value -= 0.02;
+          else { bgNodes.nodes.forEach(n => { try { n.stop(); } catch{} }); clearInterval(fade); }
+        }, 80);
+      } catch {}
+      bgNodes = null;
+    }
+  }
+
+  function startBgMusic(type, volume) {
+    stopBgMusic();
+    if (type === 'none') return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const gain = ctx.createGain();
+    gain.gain.value = volume;
+    gain.connect(ctx.destination);
+    const nodes = [];
+
+    if (type === 'drone') {
+      // Drone basso + armoniche inquietanti
+      [40, 60, 80, 120].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = i % 2 === 0 ? 'sine' : 'sawtooth';
+        osc.frequency.value = freq;
+        g.gain.value = i === 0 ? 0.5 : 0.15;
+        osc.connect(g); g.connect(gain);
+        osc.start(); nodes.push(osc);
+        // LFO tremolo lento
+        const lfo = ctx.createOscillator();
+        const lfoG = ctx.createGain();
+        lfo.frequency.value = 0.1 + i * 0.05;
+        lfoG.gain.value = 0.08;
+        lfo.connect(lfoG); lfoG.connect(g.gain);
+        lfo.start(); nodes.push(lfo);
+      });
+    } else if (type === 'tension') {
+      // Nota che sale lentamente + dissonanze
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(80, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(200, ctx.currentTime + 30);
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = 400;
+      const g = ctx.createGain(); g.gain.value = 0.3;
+      osc.connect(f); f.connect(g); g.connect(gain);
+      osc.start(); nodes.push(osc);
+      // Rumore bianco filtrato
+      const bufSize = ctx.sampleRate * 2;
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      noise.buffer = buf; noise.loop = true;
+      const nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 150;
+      const ng = ctx.createGain(); ng.gain.value = 0.05;
+      noise.connect(nf); nf.connect(ng); ng.connect(gain);
+      noise.start(); nodes.push(noise);
+    } else if (type === 'dark') {
+      // Pad ambientale scuro con chorus
+      [55, 82, 110].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq + (i * 0.3);
+        const g = ctx.createGain(); g.gain.value = 0.25;
+        const lfo = ctx.createOscillator();
+        const lfoG = ctx.createGain();
+        lfo.frequency.value = 0.07 + i * 0.03;
+        lfoG.gain.value = freq * 0.004;
+        lfo.connect(lfoG); lfoG.connect(osc.frequency);
+        osc.connect(g); g.connect(gain);
+        osc.start(); lfo.start();
+        nodes.push(osc, lfo);
+      });
+    } else if (type === 'heartbeat') {
+      // Battito cardiaco lento + drone
+      const osc = ctx.createOscillator();
+      osc.type = 'sine'; osc.frequency.value = 50;
+      const g = ctx.createGain(); g.gain.value = 0;
+      osc.connect(g); g.connect(gain); osc.start(); nodes.push(osc);
+      // Schedula battiti ogni 1.2s
+      let t = ctx.currentTime + 0.2;
+      for (let i = 0; i < 60; i++) {
+        g.gain.setValueAtTime(0.6, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        g.gain.setValueAtTime(0.35, t + 0.2);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        t += 1.2;
+      }
+    }
+
+    bgNodes = { gain, nodes, ctx };
+  }
+
+  // --- TTS con Web Speech API — play manuale ---
+  function generateAudio() {
+    if (!gData) return;
     const lang = document.getElementById('lang').value;
     const langCode = lang === 'inglese' ? 'en-US' : lang === 'spagnolo' ? 'es-ES' : 'it-IT';
     const text = (gData.script || '').trim();
-
-    if (!window.speechSynthesis) {
-      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ Browser non supportato. Usa Edge o Chrome.</div>`;
-      btn.disabled = false; return;
-    }
-
-    window.speechSynthesis.cancel();
-
-    // Avvia musica di sottofondo
-    const bgSrc = document.getElementById('bgMusic').value;
+    const bgType = document.getElementById('bgMusic').value;
     const bgVol = parseInt(document.getElementById('bgVolume').value) / 100;
-    let bgAudio = null;
-    if (bgSrc !== 'none') {
-      bgAudio = new Audio(bgSrc);
-      bgAudio.loop = true;
-      bgAudio.volume = bgVol;
-      bgAudio.play().catch(() => {});
-    }
 
-    // Prova a catturare audio del tab per renderlo scaricabile
-    let recorder = null;
-    let chunks = [];
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: false, preferCurrentTab: true });
-      recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-      recorder.start();
-      btn.textContent = '⏳ Registrazione in corso...';
-      document.getElementById('audioResult').innerHTML = `<div class="alert-info" style="margin-top:10px">🔴 Registrazione attiva — lo script sta per essere letto...</div>`;
-    } catch {
-      // Utente ha rifiutato o browser non supporta — solo riproduzione
-      btn.textContent = '🔊 In riproduzione...';
-      document.getElementById('audioResult').innerHTML = `<div class="alert-info" style="margin-top:10px">🔊 Riproduzione in corso... (senza download)<br><small>Per scaricare: clicca <strong>Rigenera</strong> e condividi l'audio del tab quando richiesto.</small></div>`;
-    }
+    document.getElementById('audioBadge').textContent = 'Pronto';
+    document.getElementById('audioBadge').className = 'badge-done';
+    document.getElementById('audioResult').innerHTML = `
+      <div class="alert-info" style="margin-top:10px">
+        Premi <strong>▶ Play</strong> per ascoltare voce + musica insieme.<br>
+        <small style="color:var(--muted)">Per registrare: usa OBS oppure il tasto Registra qui sotto.</small>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="playBtn" onclick="playAll('${langCode}', ${JSON.stringify(text)}, '${bgType}', ${bgVol})">▶ Play</button>
+        <button class="btn btn-ghost" id="stopBtn" onclick="stopAll()" style="display:none">⏹ Stop</button>
+        <button class="btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(text)})">📋 Copia testo</button>
+      </div>
+      <div id="voiceInfo" style="font-size:0.72em;color:var(--muted);margin-top:8px"></div>
+    `;
+    document.getElementById('audioBtn').textContent = '🔄 Rigenera';
+    setTimeout(() => goTo(5), 100);
+  }
 
-    await new Promise((resolve) => {
-      function speak() {
-        const voices = window.speechSynthesis.getVoices();
-        // Priorità: voci neurali Microsoft (Edge) > voci Google > qualsiasi voce della lingua
-        const langPrefix = langCode.slice(0, 2);
-        const preferred = [
-          'Microsoft Elsa',       // it-IT neurale Edge
-          'Microsoft Diego',      // it-IT neurale Edge
-          'Microsoft Isabella',   // it-IT
-          'Google italiano',
-          'Microsoft Aria',       // en-US neurale
-          'Microsoft Guy',        // en-US
-          'Microsoft Elvira',     // es-ES neurale
-        ];
-        let voice = null;
-        for (const name of preferred) {
-          voice = voices.find(v => v.name.includes(name) && v.lang.startsWith(langPrefix));
-          if (voice) break;
-        }
-        // Fallback: prima voce online della lingua giusta
-        if (!voice) voice = voices.find(v => v.lang.startsWith(langPrefix) && !v.localService);
-        // Ultimo fallback: qualsiasi voce della lingua
-        if (!voice) voice = voices.find(v => v.lang.startsWith(langPrefix));
+  function playAll(langCode, text, bgType, bgVol) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    startBgMusic(bgType, bgVol);
 
-        const utt = new SpeechSynthesisUtterance(text);
-        if (voice) utt.voice = voice;
-        utt.lang = langCode;
-        utt.rate = 1.1;
-        utt.pitch = 1;
-        utt.volume = 1;
-        utt.onend = resolve;
-        utt.onerror = resolve;
-        window.speechSynthesis.speak(utt);
+    document.getElementById('playBtn').style.display = 'none';
+    document.getElementById('stopBtn').style.display = '';
 
-        // Mostra nome voce selezionata
-        const voiceInfo = voice ? `🎙️ Voce: <strong>${voice.name}</strong>` : '🎙️ Voce di sistema';
-        const el = document.getElementById('audioResult');
-        if (el) el.innerHTML = (el.innerHTML || '') + `<div style="font-size:0.72em;color:var(--muted);margin-top:6px">${voiceInfo}</div>`;
+    function speak() {
+      const voices = window.speechSynthesis.getVoices();
+      const langPrefix = langCode.slice(0, 2);
+      const preferred = ['Microsoft Elsa','Microsoft Diego','Microsoft Isabella','Google italiano','Microsoft Aria','Microsoft Guy','Microsoft Elvira'];
+      let voice = null;
+      for (const name of preferred) {
+        voice = voices.find(v => v.name.includes(name) && v.lang.startsWith(langPrefix));
+        if (voice) break;
       }
-      const v = window.speechSynthesis.getVoices();
-      if (v.length) speak(); else { window.speechSynthesis.onvoiceschanged = speak; }
-    });
+      if (!voice) voice = voices.find(v => v.lang.startsWith(langPrefix) && !v.localService);
+      if (!voice) voice = voices.find(v => v.lang.startsWith(langPrefix));
 
-    // Stop recording e offri download
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.stop();
-      recorder.stream.getTracks().forEach(t => t.stop());
-      await new Promise(r => recorder.onstop = r);
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      const url = URL.createObjectURL(blob);
-      document.getElementById('audioBadge').textContent = '✓ Completato';
-      document.getElementById('audioBadge').className = 'badge-done';
-      document.getElementById('audioResult').innerHTML = `
-        <audio controls style="width:100%;margin-top:8px;border-radius:10px">
-          <source src="${url}" type="audio/webm">
-        </audio>
-        <a href="${url}" download="viral-audio.webm" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica Audio</a>
-      `;
-    } else {
-      document.getElementById('audioBadge').textContent = '✓ Completato';
-      document.getElementById('audioBadge').className = 'badge-done';
+      const utt = new SpeechSynthesisUtterance(text);
+      if (voice) utt.voice = voice;
+      utt.lang = langCode; utt.rate = 1.05; utt.pitch = 1; utt.volume = 1;
+
+      const vi = document.getElementById('voiceInfo');
+      if (vi) vi.innerHTML = voice ? `🎙️ Voce: <strong>${voice.name}</strong>` : '🎙️ Voce di sistema';
+
+      utt.onend = () => {
+        stopBgMusic();
+        document.getElementById('playBtn').style.display = '';
+        document.getElementById('stopBtn').style.display = 'none';
+      };
+      utt.onerror = utt.onend;
+      window.speechSynthesis.speak(utt);
     }
 
-    // Ferma musica di sottofondo con fade out
-    if (bgAudio) {
-      const fade = setInterval(() => {
-        if (bgAudio.volume > 0.02) bgAudio.volume -= 0.02;
-        else { bgAudio.pause(); clearInterval(fade); }
-      }, 80);
-    }
+    const v = window.speechSynthesis.getVoices();
+    if (v.length) speak(); else window.speechSynthesis.onvoiceschanged = speak;
+  }
 
-    btn.textContent = '🔄 Rigenera'; btn.disabled = false;
-    setTimeout(() => goTo(5), 2000);
+  function stopAll() {
+    window.speechSynthesis.cancel();
+    stopBgMusic();
+    const pb = document.getElementById('playBtn');
+    const sb = document.getElementById('stopBtn');
+    if (pb) pb.style.display = '';
+    if (sb) sb.style.display = 'none';
   }
 
   // --- Fetch video stock via Pexels (direct browser call) ---
