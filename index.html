@@ -177,7 +177,7 @@
     <div class="step-item" id="s3"><div class="step-line"></div><div class="step-circle">3</div><div class="step-label">Contenuto</div></div>
     <div class="step-item" id="s4"><div class="step-line"></div><div class="step-circle">4</div><div class="step-label">Audio</div></div>
     <div class="step-item" id="s5"><div class="step-line"></div><div class="step-circle">5</div><div class="step-label">Video</div></div>
-    <div class="step-item" id="s6"><div class="step-line"></div><div class="step-circle">6</div><div class="step-label">Pubblica</div></div>
+    <div class="step-item" id="s6"><div class="step-line"></div><div class="step-circle">6</div><div class="step-label">Monta</div></div>
   </div>
 
   <!-- PANEL 1 -->
@@ -298,13 +298,21 @@
   <!-- PANEL 6 -->
   <div class="panel" id="panel6">
     <div class="card">
-      <div class="card-title">📤 Pronto per la pubblicazione</div>
-      <div class="alert-info">💡 Hai tutto il necessario. Assembla in CapCut in 3 minuti e pubblica!</div>
-      <div id="publishContent"></div>
-      <div class="action-row" style="margin-top:24px">
-        <button class="btn btn-primary" onclick="goTo(1)">🚀 Genera nuovo video</button>
+      <div class="card-title">🎬 Montaggio automatico</div>
+      <div class="step-card">
+        <div class="step-card-title">⚙️ Assembla il video finale <span class="badge-pending" id="assembleBadge">In attesa</span></div>
+        <div class="step-card-desc">Unisce le 4 clip video + musica horror + sottotitoli animati in un unico file pronto per YouTube Shorts.</div>
+        <div id="assembleLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:160px;overflow-y:auto"></div>
+        <div id="assemblePreview" style="margin-top:12px"></div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-primary" id="assembleBtn" onclick="assembleVideo()">🎬 Assembla Video</button>
         <button class="btn btn-ghost" onclick="goTo(5)">← Torna ai video</button>
       </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">📤 Pubblica</div>
+      <div id="publishContent"></div>
     </div>
   </div>
 </div>
@@ -516,89 +524,117 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     }
   }
 
+  function scheduleMelody(ctx, notes, dry, wet, nodes, interval) {
+    let t = ctx.currentTime + 0.8;
+    for (let i = 0; i < 80; i++) {
+      const freq = notes[Math.floor(Math.random() * notes.length)];
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.15, t + 0.08);
+      env.gain.exponentialRampToValueAtTime(0.001, t + interval * 0.85);
+      osc.connect(env); env.connect(dry); env.connect(wet);
+      osc.start(t); osc.stop(t + interval);
+      nodes.push(osc);
+      t += interval + (Math.random() - 0.3) * interval * 0.6;
+    }
+  }
+
+  function buildReverb(ctx) {
+    const conv = ctx.createConvolver();
+    const len = ctx.sampleRate * 2.8;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.8);
+    }
+    conv.buffer = buf;
+    return conv;
+  }
+
   function startBgMusic(type, volume) {
     stopBgMusic();
     if (type === 'none') return;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const gain = ctx.createGain();
-    gain.gain.value = volume;
-    gain.connect(ctx.destination);
-    const nodes = [];
+    const master = ctx.createGain(); master.gain.value = volume; master.connect(ctx.destination);
+    const rev = buildReverb(ctx);
+    const dry = ctx.createGain(); dry.gain.value = 0.65; dry.connect(master);
+    const wet = ctx.createGain(); wet.gain.value = 0.35; rev.connect(wet); wet.connect(master);
+    const nodes = [rev];
+
+    const laMin = [110, 123.5, 130.8, 146.8, 164.8, 174.6, 207.7, 220];
+    const tens  = [110, 116.5, 130.8, 155.6, 164.8, 174.6, 185,   220];
+    const darkN = [55,  58.3,  65.4,  73.4,  82.4,  87.3,  98,    110];
+    const ghost = [220, 233.1, 261.6, 293.7, 329.6, 349.2, 415.3, 440];
 
     if (type === 'drone') {
-      // Drone basso + armoniche inquietanti
-      [40, 60, 80, 120].forEach((freq, i) => {
+      [55, 110, 164.8].forEach((f, i) => {
         const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = i % 2 === 0 ? 'sine' : 'sawtooth';
-        osc.frequency.value = freq;
-        g.gain.value = i === 0 ? 0.5 : 0.15;
-        osc.connect(g); g.connect(gain);
-        osc.start(); nodes.push(osc);
-        // LFO tremolo lento
-        const lfo = ctx.createOscillator();
-        const lfoG = ctx.createGain();
-        lfo.frequency.value = 0.1 + i * 0.05;
-        lfoG.gain.value = 0.08;
-        lfo.connect(lfoG); lfoG.connect(g.gain);
-        lfo.start(); nodes.push(lfo);
+        osc.type = i === 0 ? 'sine' : 'triangle';
+        osc.frequency.value = f;
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 0.08 + i * 0.04;
+        const lfoG = ctx.createGain(); lfoG.gain.value = 0.06;
+        lfo.connect(lfoG); lfoG.connect(osc.frequency);
+        const g = ctx.createGain(); g.gain.value = i === 0 ? 0.3 : 0.1;
+        osc.connect(g); g.connect(dry); g.connect(rev);
+        osc.start(); lfo.start(); nodes.push(osc, lfo);
       });
+      scheduleMelody(ctx, laMin, dry, rev, nodes, 3.2);
+      scheduleMelody(ctx, ghost, dry, rev, nodes, 6.0);
+
     } else if (type === 'tension') {
-      // Nota che sale lentamente + dissonanze
       const osc = ctx.createOscillator();
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(80, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(200, ctx.currentTime + 30);
-      const f = ctx.createBiquadFilter();
-      f.type = 'lowpass'; f.frequency.value = 400;
-      const g = ctx.createGain(); g.gain.value = 0.3;
-      osc.connect(f); f.connect(g); g.connect(gain);
+      osc.frequency.setValueAtTime(55, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(130, ctx.currentTime + 40);
+      const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 350;
+      const g = ctx.createGain(); g.gain.value = 0.22;
+      osc.connect(filt); filt.connect(g); g.connect(dry); g.connect(rev);
       osc.start(); nodes.push(osc);
-      // Rumore bianco filtrato
-      const bufSize = ctx.sampleRate * 2;
-      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-      const noise = ctx.createBufferSource();
-      noise.buffer = buf; noise.loop = true;
-      const nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 150;
-      const ng = ctx.createGain(); ng.gain.value = 0.05;
-      noise.connect(nf); nf.connect(ng); ng.connect(gain);
-      noise.start(); nodes.push(noise);
+      const bsz = ctx.sampleRate * 3;
+      const nbuf = ctx.createBuffer(1, bsz, ctx.sampleRate);
+      const nd = nbuf.getChannelData(0);
+      for (let i = 0; i < bsz; i++) nd[i] = Math.random() * 2 - 1;
+      const ns = ctx.createBufferSource(); ns.buffer = nbuf; ns.loop = true;
+      const nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 180;
+      const ng = ctx.createGain(); ng.gain.value = 0.04;
+      ns.connect(nf); nf.connect(ng); ng.connect(dry);
+      ns.start(); nodes.push(ns);
+      scheduleMelody(ctx, tens, dry, rev, nodes, 1.6);
+
     } else if (type === 'dark') {
-      // Pad ambientale scuro con chorus
-      [55, 82, 110].forEach((freq, i) => {
+      [55, 82.4, 110].forEach((f, i) => {
         const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = freq + (i * 0.3);
-        const g = ctx.createGain(); g.gain.value = 0.25;
-        const lfo = ctx.createOscillator();
-        const lfoG = ctx.createGain();
-        lfo.frequency.value = 0.07 + i * 0.03;
-        lfoG.gain.value = freq * 0.004;
+        osc.type = 'sine'; osc.frequency.value = f + i * 0.15;
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + i * 0.02;
+        const lfoG = ctx.createGain(); lfoG.gain.value = f * 0.003;
         lfo.connect(lfoG); lfoG.connect(osc.frequency);
-        osc.connect(g); g.connect(gain);
-        osc.start(); lfo.start();
-        nodes.push(osc, lfo);
+        const g = ctx.createGain(); g.gain.value = 0.2;
+        osc.connect(g); g.connect(dry); g.connect(rev);
+        osc.start(); lfo.start(); nodes.push(osc, lfo);
       });
+      scheduleMelody(ctx, darkN, dry, rev, nodes, 4.8);
+
     } else if (type === 'heartbeat') {
-      // Battito cardiaco lento + drone
-      const osc = ctx.createOscillator();
-      osc.type = 'sine'; osc.frequency.value = 50;
-      const g = ctx.createGain(); g.gain.value = 0;
-      osc.connect(g); g.connect(gain); osc.start(); nodes.push(osc);
-      // Schedula battiti ogni 1.2s
-      let t = ctx.currentTime + 0.2;
+      const beatOsc = ctx.createOscillator();
+      beatOsc.type = 'sine'; beatOsc.frequency.value = 55;
+      const beatG = ctx.createGain(); beatG.gain.value = 0;
+      beatOsc.connect(beatG); beatG.connect(dry); beatG.connect(rev);
+      beatOsc.start(); nodes.push(beatOsc);
+      let t = ctx.currentTime + 0.3;
       for (let i = 0; i < 60; i++) {
-        g.gain.setValueAtTime(0.6, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-        g.gain.setValueAtTime(0.35, t + 0.2);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-        t += 1.2;
+        beatG.gain.setValueAtTime(0.65, t);
+        beatG.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+        beatG.gain.setValueAtTime(0.4, t + 0.19);
+        beatG.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        t += 1.25;
       }
+      scheduleMelody(ctx, ghost, dry, rev, nodes, 4.2);
     }
 
-    bgNodes = { gain, nodes, ctx };
+    bgNodes = { gain: master, nodes, ctx };
   }
 
   // --- TTS con Web Speech API — play manuale ---
@@ -821,6 +857,142 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       <div class="section-label" style="margin-top:14px">🛒 Link Affiliate</div>
       <div class="aff-link-box">Cerca <strong>"${af.prodotto}"</strong> su <strong>${af.piattaforma}</strong> → crea link affiliato → metti in bio<br><br><em style="color:#a7f3d0">"${af.cta}"</em></div>
     `;
+  }
+
+  // --- Montaggio automatico canvas + MediaRecorder ---
+  async function assembleVideo() {
+    const btn = document.getElementById('assembleBtn');
+    const log = document.getElementById('assembleLog');
+    const badge = document.getElementById('assembleBadge');
+    btn.disabled = true;
+    log.innerHTML = '';
+    badge.textContent = 'In corso...'; badge.className = 'badge-pending';
+    const addLog = msg => { log.innerHTML += `<div>${msg}</div>`; log.scrollTop = log.scrollHeight; };
+    if (!generatedVideos || generatedVideos.filter(Boolean).length === 0) {
+      addLog('❌ Genera prima i video allo step 5.'); btn.disabled = false; return;
+    }
+    addLog('⚙️ Preparo canvas 1080×1920...');
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080; canvas.height = 1920;
+    const ctx2d = canvas.getContext('2d');
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = audioCtx.createMediaStreamDestination();
+    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 0.25;
+    const master = audioCtx.createGain(); master.gain.value = bgVol;
+    master.connect(dest);
+    const rev2 = buildReverb(audioCtx);
+    const dry2 = audioCtx.createGain(); dry2.gain.value = 0.65; dry2.connect(master);
+    const wet2 = audioCtx.createGain(); wet2.gain.value = 0.35; rev2.connect(wet2); wet2.connect(master);
+    const mnodes = [rev2];
+    const laMin = [110,123.5,130.8,146.8,164.8,174.6,207.7,220];
+    const ghost = [220,233.1,261.6,293.7,329.6,349.2,415.3,440];
+    [55,110,164.8].forEach((f,i)=>{ const o=audioCtx.createOscillator(); o.type=i===0?'sine':'triangle'; o.frequency.value=f; const g=audioCtx.createGain(); g.gain.value=i===0?0.3:0.1; o.connect(g); g.connect(dry2); g.connect(rev2); o.start(); mnodes.push(o); });
+    scheduleMelody(audioCtx, laMin, dry2, rev2, mnodes, 3.2);
+    scheduleMelody(audioCtx, ghost, dry2, rev2, mnodes, 6.0);
+    const videoStream = canvas.captureStream(30);
+    const audioTrack = dest.stream.getAudioTracks()[0];
+    if (audioTrack) videoStream.addTrack(audioTrack);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    const recorder = new MediaRecorder(videoStream, { mimeType, videoBitsPerSecond: 4000000 });
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    addLog('⬇️ Scarico clip video...');
+    const clipDuration = 7000;
+    const blobUrls = [];
+    for (const v of generatedVideos.filter(Boolean)) {
+      try {
+        const res = await fetch(v.url, { mode: 'cors' });
+        if (!res.ok) throw new Error('CORS');
+        const blob = await res.blob();
+        blobUrls.push(URL.createObjectURL(blob));
+        addLog('✓ Clip scaricata');
+      } catch { blobUrls.push(null); addLog('⚠️ CORS bloccato — uso placeholder scuro'); }
+    }
+    const scriptLines = (gData && gData.script ? gData.script : '').split(/[.!?]+/).filter(s=>s.trim()).slice(0,40);
+    addLog(`▶️ Registrazione (${blobUrls.length} clip × ${clipDuration/1000}s)...`);
+    recorder.start(200);
+    let lineIdx = 0;
+    for (let ci = 0; ci < blobUrls.length; ci++) {
+      const blobUrl = blobUrls[ci];
+      const startMs = Date.now();
+      if (blobUrl) {
+        const vid = document.createElement('video');
+        vid.src = blobUrl; vid.muted = true; vid.loop = true; vid.crossOrigin = 'anonymous';
+        await new Promise(r => { vid.onloadeddata = r; vid.onerror = r; vid.load(); });
+        vid.play().catch(()=>{});
+        await new Promise(resolve => {
+          const draw = () => {
+            if (Date.now() - startMs >= clipDuration) { vid.pause(); resolve(); return; }
+            const cw=canvas.width, ch=canvas.height, vr=(vid.videoWidth/vid.videoHeight)||9/16, cr=cw/ch;
+            let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
+            if (vr>cr){sw=sh*cr;sx=(vid.videoWidth-sw)/2;}else{sh=sw/cr;sy=(vid.videoHeight-sh)/2;}
+            ctx2d.drawImage(vid,sx,sy,sw,sh,0,0,cw,ch);
+            lineIdx=Math.floor((Date.now()-startMs)/(clipDuration/Math.max(1,Math.ceil(scriptLines.length/blobUrls.length))));
+            drawSubtitle(ctx2d,canvas,scriptLines,lineIdx+(ci*Math.ceil(scriptLines.length/blobUrls.length)),startMs);
+            requestAnimationFrame(draw);
+          };
+          requestAnimationFrame(draw);
+        });
+      } else {
+        await new Promise(resolve => {
+          const draw = () => {
+            if (Date.now() - startMs >= clipDuration) { resolve(); return; }
+            ctx2d.fillStyle='#050508'; ctx2d.fillRect(0,0,canvas.width,canvas.height);
+            drawSubtitle(ctx2d,canvas,scriptLines,Math.floor((Date.now()-startMs)/800)+(ci*5),startMs);
+            requestAnimationFrame(draw);
+          };
+          requestAnimationFrame(draw);
+        });
+      }
+      addLog(`✓ Clip ${ci+1}/${blobUrls.length} ok`);
+    }
+    recorder.stop();
+    mnodes.forEach(n=>{try{n.stop&&n.stop();}catch{}});
+    await new Promise(resolve=>{ recorder.onstop=resolve; });
+    const finalBlob = new Blob(chunks,{type:mimeType});
+    const url = URL.createObjectURL(finalBlob);
+    const sizeMB = (finalBlob.size/1024/1024).toFixed(1);
+    document.getElementById('assemblePreview').innerHTML = `
+      <video src="${url}" controls style="width:100%;border-radius:8px;margin-top:8px;max-height:300px"></video>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <a href="${url}" download="viral-os-${Date.now()}.webm" class="btn btn-primary" style="text-decoration:none;flex:1;text-align:center">⬇️ Scarica WebM (${sizeMB} MB)</a>
+      </div>`,
+    badge.textContent='✓ Completato'; badge.className='badge-done';
+    addLog(`✅ Video pronto! ${sizeMB} MB`);
+    btn.textContent='🔄 Rigenera'; btn.disabled=false;
+    blobUrls.forEach(u=>u&&URL.revokeObjectURL(u));
+  }
+
+  function drawSubtitle(ctx2d, canvas, lines, idx, startMs) {
+    if (!lines.length) return;
+    const line = lines[idx % lines.length]?.trim();
+    if (!line) return;
+    const alpha = Math.min(1, (Date.now() - startMs) / 300);
+    ctx2d.save();
+    ctx2d.globalAlpha = alpha;
+    const fontSize = Math.round(canvas.width * 0.058);
+    ctx2d.font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx2d.textAlign = 'center'; ctx2d.textBaseline = 'bottom';
+    const maxW = canvas.width * 0.85;
+    const words = line.split(' ');
+    const lineH = fontSize * 1.35;
+    const wrapped = [];
+    let cur = '';
+    for (const w of words) {
+      const test = cur ? cur+' '+w : w;
+      if (ctx2d.measureText(test).width > maxW) { wrapped.push(cur); cur = w; }
+      else cur = test;
+    }
+    if (cur) wrapped.push(cur);
+    const y0 = canvas.height * 0.80;
+    ctx2d.shadowColor='#000'; ctx2d.shadowBlur=20;
+    wrapped.forEach((l,i) => {
+      const tw = ctx2d.measureText(l).width;
+      ctx2d.fillStyle='rgba(0,0,0,0.6)';
+      ctx2d.fillRect(canvas.width/2-tw/2-14, y0+i*lineH-fontSize-2, tw+28, fontSize+10);
+      ctx2d.fillStyle='#fff'; ctx2d.fillText(l, canvas.width/2, y0+(i+1)*lineH);
+    });
+    ctx2d.restore();
   }
 
   function cp(id) { const el=document.getElementById(id); if(el) navigator.clipboard.writeText(el.textContent).catch(()=>{}); }
