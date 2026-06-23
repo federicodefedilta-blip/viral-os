@@ -131,18 +131,14 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.0.1';
+  const CURRENT_VERSION = 'v1.1.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
     if (stored) location.reload(true);
   }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/mespeak@0.4.0/meSpeak.js"></script>
-<script>
-  // meSpeak.loadConfig() richiede il file config, ma funziona anche senza per versioni semplici
-  if (window.meSpeak) meSpeak.loadConfig('https://cdn.jsdelivr.net/npm/mespeak@0.4.0/voices.json');
-</script>
+<script src="https://js.puter.com/v2/"></script>
 </head>
 <body>
 
@@ -182,7 +178,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.0.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.1.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -997,27 +993,17 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     if (blobUrls.length === 0) { addLog('❌ Nessuna clip disponibile. Verifica che lo step 5 abbia trovato video.'); btn.disabled = false; return; }
     addLog(`✓ ${blobUrls.length} clip pronte.`);
 
-    // FASE 2: TTS — prima tenta HuggingFace, fallback a Web Speech API nativa
-    addLog('Genero voce...');
-    const ttsText = (gData.script || '').trim().slice(0, 800);
-    const ttsModelMap = { 'it-IT': 'facebook/mms-tts-ita', 'en-US': 'facebook/mms-tts-eng', 'es-ES': 'facebook/mms-tts-spa' };
-    const ttsModel = ttsModelMap[_langCode] || 'facebook/mms-tts-ita';
-    let ttsArrayBuffer = null;
-    let useWebSpeech = false;
+    // FASE 2: TTS via Puter.js (gratuito, illimitato, no API key)
+    addLog('Genero voce con Puter.js...');
+    const ttsText = (gData.script || '').trim().slice(0, 1000);
+    let ttsAudioEl = null;
 
     try {
-      const ttsRes = await fetch(`https://api-inference.huggingface.co/models/${ttsModel}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputs: ttsText })
-      });
-      if (!ttsRes.ok) throw new Error(`HF error`);
-      ttsArrayBuffer = await ttsRes.arrayBuffer();
-      addLog('Voce pronta (HuggingFace).');
+      if (!window.puter) throw new Error('Puter.js non caricato');
+      ttsAudioEl = await window.puter.ai.txt2speech(ttsText, _langCode);
+      addLog('Voce pronta (Puter TTS).');
     } catch(e) {
-      // Fallback: Web Speech API (nativa browser, sempre funziona)
-      useWebSpeech = true;
-      addLog('Voce nativa browser (Web Speech API).');
+      addLog('TTS non disponibile: ' + (e.message || e));
     }
 
     // FASE 3: Precarica video elements
@@ -1062,32 +1048,15 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
     }
 
-    // TTS — usa BufferSourceNode se HuggingFace ha funzionato, altrimenti Web Speech API nativa
-    let ttsBufferNode = null;
-    if (ttsArrayBuffer && !useWebSpeech) {
+    // TTS — connette Puter.js audio element al grafo audio
+    if (ttsAudioEl) {
       try {
-        const ttsDecoded = await audioCtx.decodeAudioData(ttsArrayBuffer);
-        ttsBufferNode = audioCtx.createBufferSource();
-        ttsBufferNode.buffer = ttsDecoded;
-        const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.2;
-        ttsBufferNode.connect(ttsG); ttsG.connect(master);
-        addLog('Voce collegata al grafo audio.');
-      } catch(e) { addLog('Errore decodifica voce: ' + e.message); }
-    } else if (useWebSpeech && window.meSpeak) {
-      try {
-        // Genera WAV con meSpeak e lo connette al grafo audio
-        const voiceLang = _langCode === 'it-IT' ? 'it' : _langCode === 'es-ES' ? 'es' : 'en';
-        const waveArray = window.meSpeak.speak(ttsText, { rawdata: 'array', rate: 130, pitch: 50, voice: voiceLang });
-        if (!waveArray || waveArray.length === 0) throw new Error('meSpeak produsse output vuoto');
-        const wavBuffer = new ArrayBuffer(waveArray.length);
-        new Uint8Array(wavBuffer).set(waveArray);
-        const ttsDecoded = await audioCtx.decodeAudioData(wavBuffer);
-        ttsBufferNode = audioCtx.createBufferSource();
-        ttsBufferNode.buffer = ttsDecoded;
-        const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.2;
-        ttsBufferNode.connect(ttsG); ttsG.connect(master);
-        addLog('Voce generata (meSpeak eSpeak).');
-      } catch(e) { addLog('Errore meSpeak: ' + (e.message||e)); }
+        const ttsSource = audioCtx.createMediaElementSource(ttsAudioEl);
+        const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.0;
+        ttsSource.connect(ttsG);
+        ttsG.connect(master); // → audioDest → video
+        addLog('Voce Puter collegata al grafo audio.');
+      } catch(e) { addLog('Errore connessione audio: ' + (e.message||e)); }
     }
 
     // FASE 5: Canvas + MediaRecorder
@@ -1115,17 +1084,11 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     badge.textContent = 'Registrazione...';
 
     recorder.start(100);
-    // Avvia voce: BufferSourceNode se disponibile, altrimenti Web Speech API
-    if (ttsBufferNode) {
-      ttsBufferNode.start(audioCtx.currentTime);
-      addLog('Voce avviata (audio buffer).');
-    } else if (useWebSpeech && window.speechSynthesis) {
-      const utt = new SpeechSynthesisUtterance(ttsText);
-      utt.lang = _langCode;
-      utt.rate = 0.95;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utt);
-      addLog('Voce avviata (Web Speech API - catturata dal mediaRecorder).');
+    // Avvia voce Puter.js
+    if (ttsAudioEl) {
+      ttsAudioEl.currentTime = 0;
+      ttsAudioEl.play().catch(e => addLog('Errore play voce: ' + e.message));
+      addLog('Voce avviata.');
     }
 
     const startTime = Date.now();
