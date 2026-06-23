@@ -3,11 +3,6 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const HF_API_KEY = process.env.HUGGINGFACE_API_KEY;
-  if (!HF_API_KEY) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Hugging Face API key non configurata' }) };
-  }
-
   let body;
   try {
     body = JSON.parse(event.body);
@@ -15,39 +10,28 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Body non valido' }) };
   }
 
-  const { prompts } = body; // array of 4 prompts
+  const { prompts } = body;
 
   try {
-    const imagePromises = prompts.map(async (prompt) => {
-      const response = await fetch(
-        'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${HF_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            inputs: `${prompt}, vertical 9:16, cinematic, highly detailed, vibrant colors, sharp focus`,
-            parameters: {
-              width: 576,
-              height: 1024,
-              num_inference_steps: 20,
-              guidance_scale: 7.5
-            }
-          })
-        }
-      );
+    const imagePromises = prompts.map(async (prompt, i) => {
+      const encoded = encodeURIComponent(`${prompt}, vertical 9:16, cinematic, vibrant, sharp`);
+      const url = `https://image.pollinations.ai/prompt/${encoded}?width=576&height=1024&nologo=true&seed=${Date.now() + i}`;
+      
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'Viral-OS/1.0' }
+      });
 
-      if (!response.ok) {
-        throw new Error(`Errore immagine: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Immagine ${i+1} fallita: ${response.status}`);
 
-      const imageBuffer = await response.arrayBuffer();
-      return Buffer.from(imageBuffer).toString('base64');
+      const buffer = await response.arrayBuffer();
+      return Buffer.from(buffer).toString('base64');
     });
 
-    const images = await Promise.all(imagePromises);
+    // Generate sequentially to avoid timeout
+    const images = [];
+    for (const promise of imagePromises) {
+      images.push(await promise);
+    }
 
     return {
       statusCode: 200,
