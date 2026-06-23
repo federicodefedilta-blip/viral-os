@@ -978,41 +978,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
     }
 
-    // Voce TTS via StreamElements -> Web Audio -> registrata nel video
-    addLog('Genero voce automatica...');
-    const ttsVoices = { 'it-IT': 'Carla', 'en-US': 'Brian', 'es-ES': 'Conchita' };
-    const ttsVoice = ttsVoices[_langCode] || 'Carla';
-    let ttsAudioEl = null;
-    try {
-      const ttsText = (gData && gData.script || '').trim().slice(0, 900);
-      const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${ttsVoice}&text=${encodeURIComponent(ttsText)}`;
-      const ttsRes = await fetch(ttsUrl, { mode: 'cors' });
-      if (!ttsRes.ok) throw new Error('TTS error');
-      const ttsBlob = await ttsRes.blob();
-      const ttsBlobUrl = URL.createObjectURL(ttsBlob);
-      ttsAudioEl = new Audio(ttsBlobUrl);
-      ttsAudioEl.crossOrigin = 'anonymous';
-      const ttsSource = audioCtx.createMediaElementSource(ttsAudioEl);
-      const ttsGain = audioCtx.createGain(); ttsGain.gain.value = 1.0;
-      ttsSource.connect(ttsGain);
-      ttsGain.connect(master);           // -> audioDest -> video
-      ttsGain.connect(audioCtx.destination); // -> speaker per monitoraggio
-      addLog('Voce generata: inclusa nel video!');
-    } catch(e) {
-      addLog('Voce non disponibile (CORS): video con sola musica. Aggiungi voce in CapCut.');
-    }
-
-    // Stream = canvas video + musica da Web Audio
-    const canvasStream = canvas.captureStream(30);
-    const audioTrack = audioDest.stream.getAudioTracks()[0];
-    if (audioTrack) canvasStream.addTrack(audioTrack);
-
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-      ? 'video/webm;codecs=vp9,opus' : 'video/webm';
-    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
-    const chunks = [];
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-
+    // FASE 1: scarico tutto prima di avviare la registrazione
     addLog('Scarico clip video...');
     const blobUrls = [];
     for (const v of generatedVideos.filter(Boolean)) {
@@ -1024,6 +990,36 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       } catch { blobUrls.push(null); addLog('Clip non disponibile (CORS): uso sfondo scuro'); }
     }
 
+    addLog('Genero voce automatica...');
+    const ttsVoices = { 'it-IT': 'Carla', 'en-US': 'Brian', 'es-ES': 'Conchita' };
+    const ttsVoice = ttsVoices[_langCode] || 'Carla';
+    let ttsAudioEl = null;
+    try {
+      const ttsText = (gData && gData.script || '').trim().slice(0, 900);
+      const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${ttsVoice}&text=${encodeURIComponent(ttsText)}`;
+      const ttsRes = await fetch(ttsUrl, { mode: 'cors' });
+      if (!ttsRes.ok) throw new Error();
+      const ttsBlobUrl = URL.createObjectURL(await ttsRes.blob());
+      ttsAudioEl = new Audio(ttsBlobUrl);
+      const ttsSource = audioCtx.createMediaElementSource(ttsAudioEl);
+      const ttsGain = audioCtx.createGain(); ttsGain.gain.value = 1.0;
+      ttsSource.connect(ttsGain);
+      ttsGain.connect(master);
+      ttsGain.connect(audioCtx.destination);
+      addLog('Voce generata: inclusa nel video!');
+    } catch { addLog('Voce non disponibile: video con sola musica.'); }
+
+    // FASE 2: tutto pronto — avvio registrazione
+    const canvasStream = canvas.captureStream(30);
+    const audioTrack = audioDest.stream.getAudioTracks()[0];
+    if (audioTrack) canvasStream.addTrack(audioTrack);
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
     const text = (gData && gData.script || '').trim();
     const scriptLines = text.split(/[.!?]+/).filter(s => s.trim()).slice(0, 60);
     const targetSec = parseInt(document.getElementById('dur').value) || 61;
@@ -1031,10 +1027,9 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     const numClips = Math.max(blobUrls.length, 1);
     const clipMs = Math.min(Math.max(targetMs / numClips, 5000), 20000);
 
-    addLog(`Registrazione: ${targetSec}s, ${numClips} clip x ${Math.round(clipMs/1000)}s — musica inclusa nel video`);
-    addLog('Nota: aggiungi la tua voce in CapCut dopo il download.');
+    addLog(`Avvio registrazione: ${targetSec}s in tempo reale — attendi...`);
     recorder.start(200);
-    if (ttsAudioEl) setTimeout(() => ttsAudioEl.play().catch(() => {}), 400);
+    if (ttsAudioEl) ttsAudioEl.play().catch(() => {});
 
     const deadline = Date.now() + targetMs;
     let ci = 0;
