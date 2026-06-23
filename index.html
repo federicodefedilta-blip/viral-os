@@ -166,7 +166,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.4</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.5</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -816,7 +816,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         if (results.filter(Boolean).length >= 10) break;
         const page = Math.floor(Math.random() * 3) + 1;
         const res = await fetch(
-          `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=10&page=${page}`,
+          `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=15&page=${page}`,
           { headers: { Authorization: k.pexels } }
         );
         if (!res.ok) throw new Error(`Pexels error: ${res.status}`);
@@ -1000,7 +1000,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     const videoEls = [];
     for (const url of blobUrls) {
       const v = document.createElement('video');
-      v.src = url; v.muted = true; v.playsInline = true; v.crossOrigin = 'anonymous';
+      v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.crossOrigin = 'anonymous';
       await new Promise(r => { v.onloadeddata = r; v.onerror = r; setTimeout(r, 3000); v.load(); });
       if (v.readyState >= 1) videoEls.push(v);
     }
