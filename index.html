@@ -979,17 +979,20 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     }
 
     const text = (gData && gData.script || '').trim();
-    const scriptLines = text.split(/[.!?]+/).filter(s => s.trim()).slice(0, 40);
-    const words = text.split(' ').filter(Boolean).length;
-    const ttsDurationMs = Math.max(words / 2.3 * 1000, 10000);
-    const clipMs = Math.max(ttsDurationMs / Math.max(blobUrls.length, 1), 5000);
+    const scriptLines = text.split(/[.!?]+/).filter(s => s.trim()).slice(0, 60);
+    // Durata target = quella selezionata dall'utente (mai meno di 61s se YouTube)
+    const targetSec = parseInt(document.getElementById('dur').value) || 61;
+    const targetMs = targetSec * 1000;
+    // Ogni clip dura targetMs / numero clip, min 5s max 20s
+    const numClips = Math.max(blobUrls.length, 1);
+    const clipMs = Math.min(Math.max(targetMs / numClips, 5000), 20000);
 
-    addLog(`Inizio registrazione (~${Math.round(ttsDurationMs/1000)}s)...`);
+    addLog(`Inizio registrazione (durata target: ${targetSec}s, ${numClips} clip × ${Math.round(clipMs/1000)}s)...`);
     recorder.start(200);
 
-    let ttsFinished = false;
+    // TTS: parte e finisce quando vuole, il video dura sempre targetMs
     const ttsPromise = new Promise(resolve => {
-      if (!text || !window.speechSynthesis || !displayAudioTrack) { ttsFinished = true; resolve(); return; }
+      if (!text || !window.speechSynthesis || !displayAudioTrack) { resolve(); return; }
       setTimeout(() => {
         window.speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance(text);
@@ -997,33 +1000,36 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         const voices = window.speechSynthesis.getVoices();
         const v2 = voices.find(v => v.lang.startsWith(_langCode.slice(0,2)));
         if (v2) utt.voice = v2;
-        utt.onend = () => { ttsFinished = true; resolve(); };
-        utt.onerror = () => { ttsFinished = true; resolve(); };
+        utt.onend = resolve; utt.onerror = resolve;
         window.speechSynthesis.speak(utt);
       }, 600);
     });
 
+    // Video: gira per esattamente targetMs, ciclando le clip
     const drawPromise = (async () => {
-      const deadline = Date.now() + ttsDurationMs + 2000;
+      const deadline = Date.now() + targetMs;
       let ci = 0;
-      const total = Math.max(blobUrls.length, 1);
-      while (Date.now() < deadline || !ttsFinished) {
-        const blobUrl = blobUrls[ci % total];
+      while (Date.now() < deadline) {
+        const blobUrl = blobUrls[ci % numClips];
         const clipStart = Date.now();
+        const thisClipMs = Math.min(clipMs, deadline - Date.now());
+        if (thisClipMs <= 0) break;
+
         if (blobUrl) {
           const vid = document.createElement('video');
-          vid.src = blobUrl; vid.muted = true; vid.loop = false; vid.crossOrigin = 'anonymous';
+          vid.src = blobUrl; vid.muted = true; vid.loop = true; vid.crossOrigin = 'anonymous';
           await new Promise(r => { vid.onloadeddata = r; vid.onerror = r; vid.load(); });
           vid.play().catch(() => {});
           await new Promise(resolve => {
             const draw = () => {
-              if (Date.now()-clipStart >= clipMs || (Date.now() >= deadline && ttsFinished)) { vid.pause(); resolve(); return; }
+              if (Date.now() - clipStart >= thisClipMs) { vid.pause(); resolve(); return; }
               const cw=canvas.width, ch=canvas.height, vr=(vid.videoWidth/vid.videoHeight)||9/16, cr=cw/ch;
               let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
               if(vr>cr){sw=sh*cr;sx=(vid.videoWidth-sw)/2;}else{sh=sw/cr;sy=(vid.videoHeight-sh)/2;}
               ctx2d.drawImage(vid,sx,sy,sw,sh,0,0,cw,ch);
-              const perClip = Math.ceil(scriptLines.length/total);
-              drawSubtitle(ctx2d,canvas,scriptLines,Math.floor((Date.now()-clipStart)/(clipMs/Math.max(perClip,1)))+(ci*perClip),clipStart);
+              const linePerSec = scriptLines.length / (targetMs / 1000);
+              const elapsed = (Date.now() - deadline + targetMs) / 1000;
+              drawSubtitle(ctx2d, canvas, scriptLines, Math.floor(elapsed * linePerSec), clipStart);
               requestAnimationFrame(draw);
             };
             requestAnimationFrame(draw);
@@ -1031,17 +1037,18 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         } else {
           await new Promise(resolve => {
             const draw = () => {
-              if (Date.now()-clipStart>=clipMs||(Date.now()>=deadline&&ttsFinished)){resolve();return;}
+              if (Date.now()-clipStart >= thisClipMs) { resolve(); return; }
               ctx2d.fillStyle='#050508'; ctx2d.fillRect(0,0,canvas.width,canvas.height);
-              drawSubtitle(ctx2d,canvas,scriptLines,Math.floor((Date.now()-clipStart)/1000)+(ci*5),clipStart);
+              const linePerSec = scriptLines.length / (targetMs / 1000);
+              const elapsed = (Date.now() - deadline + targetMs) / 1000;
+              drawSubtitle(ctx2d, canvas, scriptLines, Math.floor(elapsed * linePerSec), clipStart);
               requestAnimationFrame(draw);
             };
             requestAnimationFrame(draw);
           });
         }
-        addLog(`Clip ${(ci%total)+1} completata`);
+        addLog(`Clip ${(ci % numClips) + 1} — ${Math.round((deadline - Date.now())/1000)}s rimanenti`);
         ci++;
-        if (ttsFinished && Date.now() >= deadline) break;
       }
     })();
 
