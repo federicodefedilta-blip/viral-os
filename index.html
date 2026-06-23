@@ -930,103 +930,141 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     const btn = document.getElementById('assembleBtn');
     const log = document.getElementById('assembleLog');
     const badge = document.getElementById('assembleBadge');
-    btn.disabled = true;
-    log.innerHTML = '';
+    btn.disabled = true; log.innerHTML = '';
     badge.textContent = 'In corso...'; badge.className = 'badge-pending';
     const addLog = msg => { log.innerHTML += `<div>${msg}</div>`; log.scrollTop = log.scrollHeight; };
+
     if (!generatedVideos || generatedVideos.filter(Boolean).length === 0) {
-      addLog('❌ Genera prima i video allo step 5.'); btn.disabled = false; return;
+      addLog('Genera prima i video allo step 5.'); btn.disabled = false; return;
     }
-    addLog('⚙️ Preparo canvas 1080×1920...');
+
+    // Cattura audio scheda per includere voce TTS
+    addLog('Per includere la voce: nella finestra che appare, seleziona <strong>questa scheda</strong> e spunta Condividi audio.');
+    let displayAudioTrack = null;
+    try {
+      const ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      displayAudioTrack = ds.getAudioTracks()[0] || null;
+      ds.getVideoTracks().forEach(t => t.stop());
+      if (displayAudioTrack) addLog('Audio scheda catturato: voce inclusa nel video!');
+      else addLog('Audio non selezionato: video senza voce.');
+    } catch { addLog('Condivisione annullata: video senza voce.'); }
+
+    addLog('Preparo canvas 1080x1920...');
     const canvas = document.createElement('canvas');
     canvas.width = 1080; canvas.height = 1920;
     const ctx2d = canvas.getContext('2d');
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const dest = audioCtx.createMediaStreamDestination();
+
+    // Musica verso altoparlanti (catturata dall audio scheda)
     const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 0.25;
-    const master = audioCtx.createGain(); master.gain.value = bgVol;
-    master.connect(dest);
-    const rev2 = buildReverb(audioCtx);
-    const dry2 = audioCtx.createGain(); dry2.gain.value = 0.65; dry2.connect(master);
-    const wet2 = audioCtx.createGain(); wet2.gain.value = 0.35; rev2.connect(wet2); wet2.connect(master);
-    const mnodes = [rev2];
-    const laMin = [110,123.5,130.8,146.8,164.8,174.6,207.7,220];
-    const ghost = [220,233.1,261.6,293.7,329.6,349.2,415.3,440];
-    [55,110,164.8].forEach((f,i)=>{ const o=audioCtx.createOscillator(); o.type=i===0?'sine':'triangle'; o.frequency.value=f; const g=audioCtx.createGain(); g.gain.value=i===0?0.3:0.1; o.connect(g); g.connect(dry2); g.connect(rev2); o.start(); mnodes.push(o); });
-    scheduleMelody(audioCtx, laMin, dry2, rev2, mnodes, 3.2);
-    scheduleMelody(audioCtx, ghost, dry2, rev2, mnodes, 6.0);
-    const videoStream = canvas.captureStream(30);
-    const audioTrack = dest.stream.getAudioTracks()[0];
-    if (audioTrack) videoStream.addTrack(audioTrack);
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
-    const recorder = new MediaRecorder(videoStream, { mimeType, videoBitsPerSecond: 4000000 });
+    const bgType = document.getElementById('bgMusic').value;
+    try { startBgMusic(bgType !== 'none' ? bgType : 'drone', bgVol); } catch {}
+
+    const canvasStream = canvas.captureStream(30);
+    if (displayAudioTrack) canvasStream.addTrack(displayAudioTrack);
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
     const chunks = [];
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-    addLog('⬇️ Scarico clip video...');
-    const clipDuration = 7000;
+
+    addLog('Scarico clip video...');
     const blobUrls = [];
     for (const v of generatedVideos.filter(Boolean)) {
       try {
         const res = await fetch(v.url, { mode: 'cors' });
-        if (!res.ok) throw new Error('CORS');
-        const blob = await res.blob();
-        blobUrls.push(URL.createObjectURL(blob));
-        addLog('✓ Clip scaricata');
-      } catch { blobUrls.push(null); addLog('⚠️ CORS bloccato — uso placeholder scuro'); }
+        if (!res.ok) throw new Error();
+        blobUrls.push(URL.createObjectURL(await res.blob()));
+        addLog('Clip scaricata');
+      } catch { blobUrls.push(null); addLog('Clip non disponibile (CORS): uso sfondo scuro'); }
     }
-    const scriptLines = (gData && gData.script ? gData.script : '').split(/[.!?]+/).filter(s=>s.trim()).slice(0,40);
-    addLog(`▶️ Registrazione (${blobUrls.length} clip × ${clipDuration/1000}s)...`);
+
+    const text = (gData && gData.script || '').trim();
+    const scriptLines = text.split(/[.!?]+/).filter(s => s.trim()).slice(0, 40);
+    const words = text.split(' ').filter(Boolean).length;
+    const ttsDurationMs = Math.max(words / 2.3 * 1000, 10000);
+    const clipMs = Math.max(ttsDurationMs / Math.max(blobUrls.length, 1), 5000);
+
+    addLog(`Inizio registrazione (~${Math.round(ttsDurationMs/1000)}s)...`);
     recorder.start(200);
-    let lineIdx = 0;
-    for (let ci = 0; ci < blobUrls.length; ci++) {
-      const blobUrl = blobUrls[ci];
-      const startMs = Date.now();
-      if (blobUrl) {
-        const vid = document.createElement('video');
-        vid.src = blobUrl; vid.muted = true; vid.loop = true; vid.crossOrigin = 'anonymous';
-        await new Promise(r => { vid.onloadeddata = r; vid.onerror = r; vid.load(); });
-        vid.play().catch(()=>{});
-        await new Promise(resolve => {
-          const draw = () => {
-            if (Date.now() - startMs >= clipDuration) { vid.pause(); resolve(); return; }
-            const cw=canvas.width, ch=canvas.height, vr=(vid.videoWidth/vid.videoHeight)||9/16, cr=cw/ch;
-            let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
-            if (vr>cr){sw=sh*cr;sx=(vid.videoWidth-sw)/2;}else{sh=sw/cr;sy=(vid.videoHeight-sh)/2;}
-            ctx2d.drawImage(vid,sx,sy,sw,sh,0,0,cw,ch);
-            lineIdx=Math.floor((Date.now()-startMs)/(clipDuration/Math.max(1,Math.ceil(scriptLines.length/blobUrls.length))));
-            drawSubtitle(ctx2d,canvas,scriptLines,lineIdx+(ci*Math.ceil(scriptLines.length/blobUrls.length)),startMs);
+
+    let ttsFinished = false;
+    const ttsPromise = new Promise(resolve => {
+      if (!text || !window.speechSynthesis || !displayAudioTrack) { ttsFinished = true; resolve(); return; }
+      setTimeout(() => {
+        window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = _langCode; utt.rate = 1.0; utt.volume = 1;
+        const voices = window.speechSynthesis.getVoices();
+        const v2 = voices.find(v => v.lang.startsWith(_langCode.slice(0,2)));
+        if (v2) utt.voice = v2;
+        utt.onend = () => { ttsFinished = true; resolve(); };
+        utt.onerror = () => { ttsFinished = true; resolve(); };
+        window.speechSynthesis.speak(utt);
+      }, 600);
+    });
+
+    const drawPromise = (async () => {
+      const deadline = Date.now() + ttsDurationMs + 2000;
+      let ci = 0;
+      const total = Math.max(blobUrls.length, 1);
+      while (Date.now() < deadline || !ttsFinished) {
+        const blobUrl = blobUrls[ci % total];
+        const clipStart = Date.now();
+        if (blobUrl) {
+          const vid = document.createElement('video');
+          vid.src = blobUrl; vid.muted = true; vid.loop = false; vid.crossOrigin = 'anonymous';
+          await new Promise(r => { vid.onloadeddata = r; vid.onerror = r; vid.load(); });
+          vid.play().catch(() => {});
+          await new Promise(resolve => {
+            const draw = () => {
+              if (Date.now()-clipStart >= clipMs || (Date.now() >= deadline && ttsFinished)) { vid.pause(); resolve(); return; }
+              const cw=canvas.width, ch=canvas.height, vr=(vid.videoWidth/vid.videoHeight)||9/16, cr=cw/ch;
+              let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
+              if(vr>cr){sw=sh*cr;sx=(vid.videoWidth-sw)/2;}else{sh=sw/cr;sy=(vid.videoHeight-sh)/2;}
+              ctx2d.drawImage(vid,sx,sy,sw,sh,0,0,cw,ch);
+              const perClip = Math.ceil(scriptLines.length/total);
+              drawSubtitle(ctx2d,canvas,scriptLines,Math.floor((Date.now()-clipStart)/(clipMs/Math.max(perClip,1)))+(ci*perClip),clipStart);
+              requestAnimationFrame(draw);
+            };
             requestAnimationFrame(draw);
-          };
-          requestAnimationFrame(draw);
-        });
-      } else {
-        await new Promise(resolve => {
-          const draw = () => {
-            if (Date.now() - startMs >= clipDuration) { resolve(); return; }
-            ctx2d.fillStyle='#050508'; ctx2d.fillRect(0,0,canvas.width,canvas.height);
-            drawSubtitle(ctx2d,canvas,scriptLines,Math.floor((Date.now()-startMs)/800)+(ci*5),startMs);
+          });
+        } else {
+          await new Promise(resolve => {
+            const draw = () => {
+              if (Date.now()-clipStart>=clipMs||(Date.now()>=deadline&&ttsFinished)){resolve();return;}
+              ctx2d.fillStyle='#050508'; ctx2d.fillRect(0,0,canvas.width,canvas.height);
+              drawSubtitle(ctx2d,canvas,scriptLines,Math.floor((Date.now()-clipStart)/1000)+(ci*5),clipStart);
+              requestAnimationFrame(draw);
+            };
             requestAnimationFrame(draw);
-          };
-          requestAnimationFrame(draw);
-        });
+          });
+        }
+        addLog(`Clip ${(ci%total)+1} completata`);
+        ci++;
+        if (ttsFinished && Date.now() >= deadline) break;
       }
-      addLog(`✓ Clip ${ci+1}/${blobUrls.length} ok`);
-    }
+    })();
+
+    await Promise.all([ttsPromise, drawPromise]);
+
+    try { stopBgMusic(); } catch {}
     recorder.stop();
-    mnodes.forEach(n=>{try{n.stop&&n.stop();}catch{}});
-    await new Promise(resolve=>{ recorder.onstop=resolve; });
-    const finalBlob = new Blob(chunks,{type:mimeType});
+    await new Promise(resolve => { recorder.onstop = resolve; });
+
+    const finalBlob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(finalBlob);
     const sizeMB = (finalBlob.size/1024/1024).toFixed(1);
     document.getElementById('assemblePreview').innerHTML = `
       <video src="${url}" controls style="width:100%;border-radius:8px;margin-top:8px;max-height:300px"></video>
-      <div style="display:flex;gap:10px;margin-top:10px">
-        <a href="${url}" download="viral-os-${Date.now()}.webm" class="btn btn-primary" style="text-decoration:none;flex:1;text-align:center">⬇️ Scarica WebM (${sizeMB} MB)</a>
-      </div>`,
-    badge.textContent='✓ Completato'; badge.className='badge-done';
-    addLog(`✅ Video pronto! ${sizeMB} MB`);
-    btn.textContent='🔄 Rigenera'; btn.disabled=false;
-    blobUrls.forEach(u=>u&&URL.revokeObjectURL(u));
+      <div style="margin-top:10px">
+        <a href="${url}" download="viral-os-${Date.now()}.webm" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">Scarica WebM (${sizeMB} MB)</a>
+      </div>`;
+    badge.textContent = 'Completato'; badge.className = 'badge-done';
+    addLog(`Video pronto! ${sizeMB} MB`);
+    btn.textContent = 'Rigenera'; btn.disabled = false;
+    blobUrls.forEach(u => u && URL.revokeObjectURL(u));
+    if (displayAudioTrack) displayAudioTrack.stop();
   }
 
   function drawSubtitle(ctx2d, canvas, lines, idx, startMs) {
