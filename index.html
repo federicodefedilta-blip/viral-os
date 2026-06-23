@@ -926,33 +926,74 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
   // --- Montaggio automatico canvas + MediaRecorder ---
   async function assembleVideo() {
-  async function assembleVideo() {
     const btn = document.getElementById('assembleBtn');
     const log = document.getElementById('assembleLog');
     const badge = document.getElementById('assembleBadge');
     btn.disabled = true; log.innerHTML = '';
-    badge.textContent = 'In corso...'; badge.className = 'badge-pending';
+    badge.textContent = 'Preparazione...'; badge.className = 'badge-pending';
     const addLog = msg => { log.innerHTML += `<div>${msg}</div>`; log.scrollTop = log.scrollHeight; };
 
-    if (!generatedVideos || generatedVideos.filter(Boolean).length === 0) {
-      addLog('Genera prima i video allo step 5.'); btn.disabled = false; return;
+    if (!gData) { addLog('Genera prima lo script.'); btn.disabled = false; return; }
+
+    const targetSec = parseInt(document.getElementById('dur').value) || 61;
+    const targetMs = targetSec * 1000;
+    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 0.25;
+    const bgType = document.getElementById('bgMusic').value !== 'none' ? document.getElementById('bgMusic').value : 'drone';
+    const pexelsKey = (document.getElementById('pexelsKey') && document.getElementById('pexelsKey').value.trim()) || _p;
+
+    // FASE 1: Scarico clip (fino a 10 clip direttamente da Pexels)
+    addLog('Scarico clip video...');
+    const tema = (gData.tema) || 'dark';
+    const pool = (themePools[tema] || themePools.dark).concat(themePools.dark);
+    const blobUrls = [];
+    for (const q of pool) {
+      if (blobUrls.length >= 10) break;
+      try {
+        const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3&orientation=portrait&size=medium`, { headers: { Authorization: pexelsKey } });
+        const data = await res.json();
+        for (const v of (data.videos || []).slice(0, 1)) {
+          const file = v.video_files.find(f => f.quality === 'sd' && f.height >= 480) || v.video_files[0];
+          if (!file) continue;
+          try {
+            const blob = await fetch(file.link, { mode: 'cors' }).then(r => r.blob());
+            blobUrls.push(URL.createObjectURL(blob));
+            addLog(`Clip ${blobUrls.length}/10 scaricata`);
+          } catch {}
+        }
+      } catch {}
     }
+    if (blobUrls.length === 0) { addLog('Nessuna clip disponibile. Controlla la chiave Pexels.'); btn.disabled = false; return; }
 
-    addLog('Preparo canvas 1080x1920...');
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080; canvas.height = 1920;
-    const ctx2d = canvas.getContext('2d');
+    // FASE 2: TTS audio (scaricato ma NON riprodotto in cuffia)
+    addLog('Genero voce...');
+    const ttsVoices = { 'it-IT': 'Carla', 'en-US': 'Brian', 'es-ES': 'Conchita' };
+    const ttsVoice = ttsVoices[_langCode] || 'Carla';
+    let ttsBlobUrl = null;
+    try {
+      const ttsText = (gData.script || '').trim().slice(0, 900);
+      const ttsRes = await fetch(`https://api.streamelements.com/kappa/v2/speech?voice=${ttsVoice}&text=${encodeURIComponent(ttsText)}`, { mode: 'cors' });
+      if (!ttsRes.ok) throw new Error();
+      ttsBlobUrl = URL.createObjectURL(await ttsRes.blob());
+      addLog('Voce pronta.');
+    } catch { addLog('Voce non disponibile: solo musica nel video.'); }
 
-    // Audio context con musica horror -> MediaStreamDestination (registrata nel video)
+    // FASE 3: Precarica video elements
+    addLog(`Precarico ${blobUrls.length} clip...`);
+    const videoEls = [];
+    for (const url of blobUrls) {
+      const v = document.createElement('video');
+      v.src = url; v.muted = true; v.playsInline = true; v.crossOrigin = 'anonymous';
+      await new Promise(r => { v.onloadeddata = r; v.onerror = r; setTimeout(r, 3000); v.load(); });
+      if (v.readyState >= 1) videoEls.push(v);
+    }
+    if (videoEls.length === 0) { addLog('Errore: clip non caricabili.'); btn.disabled = false; return; }
+
+    // FASE 4: Audio context — SOLO verso audioDest (silenzioso durante la registrazione)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const audioDest = audioCtx.createMediaStreamDestination();
-    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 0.25;
-    const bgType = document.getElementById('bgMusic').value !== 'none'
-      ? document.getElementById('bgMusic').value : 'drone';
-
-    // Costruisce musica verso audioDest (non verso gli speaker)
     const master = audioCtx.createGain(); master.gain.value = bgVol;
-    master.connect(audioDest);
+    master.connect(audioDest); // NON master.connect(audioCtx.destination) → nessun suono in cuffia
+
     const rev = buildReverb(audioCtx);
     const dry = audioCtx.createGain(); dry.gain.value = 0.65; dry.connect(master);
     const wet = audioCtx.createGain(); wet.gain.value = 0.35; rev.connect(wet); wet.connect(master);
@@ -974,122 +1015,153 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       scheduleMelody(audioCtx, darkN, dry, rev, mnodes, 4.8);
     } else {
       const bo=audioCtx.createOscillator(); bo.type='sine'; bo.frequency.value=55; const bg=audioCtx.createGain(); bg.gain.value=0; bo.connect(bg); bg.connect(dry); bg.connect(rev); bo.start(); mnodes.push(bo);
-      let t=audioCtx.currentTime+0.3; for(let i=0;i<60;i++){bg.gain.setValueAtTime(0.65,t);bg.gain.exponentialRampToValueAtTime(0.001,t+0.13);bg.gain.setValueAtTime(0.4,t+0.19);bg.gain.exponentialRampToValueAtTime(0.001,t+0.3);t+=1.25;}
+      let t=audioCtx.currentTime+0.3; for(let i=0;i<200;i++){bg.gain.setValueAtTime(0.65,t);bg.gain.exponentialRampToValueAtTime(0.001,t+0.13);bg.gain.setValueAtTime(0.4,t+0.19);bg.gain.exponentialRampToValueAtTime(0.001,t+0.3);t+=1.25;}
       scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
     }
 
-    // FASE 1: scarico tutto prima di avviare la registrazione
-    addLog('Scarico clip video...');
-    const blobUrls = [];
-    for (const v of generatedVideos.filter(Boolean)) {
+    // TTS audio element collegato al grafo audio (silenzioso verso speaker)
+    let ttsAudioEl = null;
+    if (ttsBlobUrl) {
+      ttsAudioEl = new Audio(ttsBlobUrl);
+      ttsAudioEl.crossOrigin = 'anonymous';
       try {
-        const res = await fetch(v.url, { mode: 'cors' });
-        if (!res.ok) throw new Error();
-        blobUrls.push(URL.createObjectURL(await res.blob()));
-        addLog('Clip scaricata');
-      } catch { blobUrls.push(null); addLog('Clip non disponibile (CORS): uso sfondo scuro'); }
+        const ttsSrc = audioCtx.createMediaElementSource(ttsAudioEl);
+        const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.2;
+        ttsSrc.connect(ttsG); ttsG.connect(master); // solo a audioDest
+      } catch {}
     }
 
-    addLog('Genero voce automatica...');
-    const ttsVoices = { 'it-IT': 'Carla', 'en-US': 'Brian', 'es-ES': 'Conchita' };
-    const ttsVoice = ttsVoices[_langCode] || 'Carla';
-    let ttsAudioEl = null;
-    try {
-      const ttsText = (gData && gData.script || '').trim().slice(0, 900);
-      const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${ttsVoice}&text=${encodeURIComponent(ttsText)}`;
-      const ttsRes = await fetch(ttsUrl, { mode: 'cors' });
-      if (!ttsRes.ok) throw new Error();
-      const ttsBlobUrl = URL.createObjectURL(await ttsRes.blob());
-      ttsAudioEl = new Audio(ttsBlobUrl);
-      const ttsSource = audioCtx.createMediaElementSource(ttsAudioEl);
-      const ttsGain = audioCtx.createGain(); ttsGain.gain.value = 1.0;
-      ttsSource.connect(ttsGain);
-      ttsGain.connect(master);
-      ttsGain.connect(audioCtx.destination);
-      addLog('Voce generata: inclusa nel video!');
-    } catch { addLog('Voce non disponibile: video con sola musica.'); }
-
-    // FASE 2: tutto pronto — avvio registrazione
+    // FASE 5: Canvas + MediaRecorder
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080; canvas.height = 1920;
+    const ctx2d = canvas.getContext('2d');
     const canvasStream = canvas.captureStream(30);
     const audioTrack = audioDest.stream.getAudioTracks()[0];
     if (audioTrack) canvasStream.addTrack(audioTrack);
 
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-      ? 'video/webm;codecs=vp9,opus' : 'video/webm';
-    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 5000000 });
     const chunks = [];
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-    const text = (gData && gData.script || '').trim();
-    const scriptLines = text.split(/[.!?]+/).filter(s => s.trim()).slice(0, 60);
-    const targetSec = parseInt(document.getElementById('dur').value) || 61;
-    const targetMs = targetSec * 1000;
-    const numClips = Math.max(blobUrls.length, 1);
-    const clipMs = Math.min(Math.max(targetMs / numClips, 5000), 20000);
+    const sentences = (gData.script || '').trim().split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 2);
+    const numClips = videoEls.length;
+    const clipDurMs = targetMs / numClips;
 
-    addLog(`Avvio registrazione: ${targetSec}s in tempo reale — attendi...`);
-    recorder.start(200);
+    addLog(`Registrazione in corso: ${targetSec}s — nessun audio dal browser, attendi...`);
+    badge.textContent = 'Registrazione...';
+
+    recorder.start(100);
     if (ttsAudioEl) ttsAudioEl.play().catch(() => {});
 
-    const deadline = Date.now() + targetMs;
-    let ci = 0;
-    while (Date.now() < deadline) {
-      const blobUrl = blobUrls[ci % numClips];
-      const clipStart = Date.now();
-      const thisClipMs = Math.min(clipMs, deadline - Date.now());
-      if (thisClipMs <= 0) break;
+    const startTime = Date.now();
+    let currentClipIdx = 0;
+    let fadeAlpha = 0;
+    videoEls[0] && videoEls[0].play().catch(() => {});
 
-      if (blobUrl) {
-        const vid = document.createElement('video');
-        vid.src = blobUrl; vid.muted = true; vid.loop = true; vid.crossOrigin = 'anonymous';
-        await new Promise(r => { vid.onloadeddata = r; vid.onerror = r; vid.load(); });
-        vid.play().catch(() => {});
-        await new Promise(resolve => {
-          const draw = () => {
-            if (Date.now() - clipStart >= thisClipMs) { vid.pause(); resolve(); return; }
-            const cw=canvas.width, ch=canvas.height, vr=(vid.videoWidth/vid.videoHeight)||9/16, cr=cw/ch;
-            let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
-            if(vr>cr){sw=sh*cr;sx=(vid.videoWidth-sw)/2;}else{sh=sw/cr;sy=(vid.videoHeight-sh)/2;}
-            ctx2d.drawImage(vid,sx,sy,sw,sh,0,0,cw,ch);
-            const elapsed = (Date.now() - deadline + targetMs) / 1000;
-            drawSubtitle(ctx2d,canvas,scriptLines,Math.floor(elapsed*(scriptLines.length/targetSec)),clipStart);
-            requestAnimationFrame(draw);
-          };
-          requestAnimationFrame(draw);
-        });
-      } else {
-        await new Promise(resolve => {
-          const draw = () => {
-            if (Date.now()-clipStart >= thisClipMs) { resolve(); return; }
-            ctx2d.fillStyle='#050508'; ctx2d.fillRect(0,0,canvas.width,canvas.height);
-            const elapsed = (Date.now() - deadline + targetMs) / 1000;
-            drawSubtitle(ctx2d,canvas,scriptLines,Math.floor(elapsed*(scriptLines.length/targetSec)),clipStart);
-            requestAnimationFrame(draw);
-          };
-          requestAnimationFrame(draw);
-        });
-      }
-      addLog(`Clip ${(ci%numClips)+1} ok — ${Math.round((deadline-Date.now())/1000)}s rimanenti`);
-      ci++;
-    }
+    await new Promise(resolve => {
+      const intervalId = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+
+        // Aggiorna log ogni 5 secondi
+        if (elapsed % 5000 < 50) addLog(`⏱ ${Math.round(elapsed/1000)}s / ${targetSec}s`);
+
+        if (elapsed >= targetMs) {
+          clearInterval(intervalId);
+          videoEls.forEach(v => { try { v.pause(); } catch {} });
+          resolve();
+          return;
+        }
+
+        // Cambio clip con fade
+        const expectedIdx = Math.min(Math.floor(elapsed / clipDurMs), numClips - 1);
+        if (expectedIdx !== currentClipIdx) {
+          try { videoEls[currentClipIdx].pause(); } catch {}
+          currentClipIdx = expectedIdx;
+          try { videoEls[currentClipIdx].currentTime = 0; videoEls[currentClipIdx].play().catch(() => {}); } catch {}
+          fadeAlpha = 1.0;
+        }
+        if (fadeAlpha > 0) fadeAlpha = Math.max(0, fadeAlpha - 0.07);
+
+        // Disegno frame video
+        const cw = canvas.width, ch = canvas.height;
+        const vid = videoEls[currentClipIdx];
+        if (vid && vid.readyState >= 2) {
+          const vr = (vid.videoWidth / vid.videoHeight) || (9/16);
+          const cr = cw / ch;
+          let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
+          if (vr > cr) { sw = sh * cr; sx = (vid.videoWidth - sw) / 2; }
+          else { sh = sw / cr; sy = (vid.videoHeight - sh) / 2; }
+          ctx2d.drawImage(vid, sx, sy, sw, sh, 0, 0, cw, ch);
+        } else {
+          ctx2d.fillStyle = '#050508'; ctx2d.fillRect(0, 0, cw, ch);
+        }
+
+        // Overlay scuro + vignette
+        const grad = ctx2d.createLinearGradient(0, 0, 0, ch);
+        grad.addColorStop(0, 'rgba(0,0,0,0.45)');
+        grad.addColorStop(0.5, 'rgba(0,0,0,0.1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.75)');
+        ctx2d.fillStyle = grad; ctx2d.fillRect(0, 0, cw, ch);
+
+        // Fade transizione clip
+        if (fadeAlpha > 0) {
+          ctx2d.fillStyle = `rgba(0,0,0,${fadeAlpha})`; ctx2d.fillRect(0, 0, cw, ch);
+        }
+
+        // Sottotitoli sincronizzati
+        const sentIdx = Math.min(Math.floor((elapsed / targetMs) * sentences.length), sentences.length - 1);
+        const sent = (sentences[sentIdx] || '').trim();
+        if (sent) {
+          const fontSize = Math.min(52, Math.max(36, Math.floor(cw * 0.048)));
+          ctx2d.font = `bold ${fontSize}px Arial, sans-serif`;
+          ctx2d.textAlign = 'center';
+          const words = sent.split(' ');
+          const lines = [];
+          let line = '';
+          for (const w of words) {
+            const test = line ? line + ' ' + w : w;
+            if (ctx2d.measureText(test).width > cw * 0.82) { lines.push(line); line = w; }
+            else { line = test; }
+          }
+          if (line) lines.push(line);
+          const lineH = fontSize * 1.35;
+          const totalH = lines.length * lineH;
+          const baseY = ch * 0.82 - totalH / 2;
+          lines.forEach((l, i) => {
+            const y = baseY + i * lineH;
+            ctx2d.shadowColor = 'black'; ctx2d.shadowBlur = 12;
+            ctx2d.fillStyle = 'white';
+            ctx2d.fillText(l, cw / 2, y);
+            ctx2d.shadowBlur = 0;
+          });
+        }
+
+        // Progress bar
+        ctx2d.fillStyle = 'rgba(255,255,255,0.15)'; ctx2d.fillRect(0, ch - 6, cw, 6);
+        ctx2d.fillStyle = 'rgba(255,80,80,0.85)'; ctx2d.fillRect(0, ch - 6, cw * (elapsed / targetMs), 6);
+
+      }, Math.floor(1000 / 30));
+    });
 
     mnodes.forEach(n => { try { n.stop && n.stop(); } catch {} });
     recorder.stop();
-    await new Promise(resolve => { recorder.onstop = resolve; });
+    await new Promise(r => { recorder.onstop = r; });
     try { audioCtx.close(); } catch {}
 
     const finalBlob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(finalBlob);
-    const sizeMB = (finalBlob.size/1024/1024).toFixed(1);
+    const sizeMB = (finalBlob.size / 1024 / 1024).toFixed(1);
     document.getElementById('assemblePreview').innerHTML = `
-      <video src="${url}" controls style="width:100%;border-radius:8px;margin-top:8px;max-height:300px"></video>
+      <video src="${url}" controls style="width:100%;border-radius:8px;margin-top:12px;max-height:320px"></video>
       <div style="margin-top:10px">
-        <a href="${url}" download="viral-os-${Date.now()}.webm" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">Scarica WebM (${sizeMB} MB)</a>
+        <a href="${url}" download="viral-os-${Date.now()}.webm" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica WebM (${sizeMB} MB)</a>
       </div>`;
     badge.textContent = 'Completato'; badge.className = 'badge-done';
-    addLog(`Video pronto! ${sizeMB} MB — musica inclusa. Aggiungi voce in CapCut.`);
-    btn.textContent = 'Rigenera'; btn.disabled = false;
-    blobUrls.forEach(u => u && URL.revokeObjectURL(u));
+    addLog(`✓ Video pronto (${sizeMB} MB) — voce + musica inclusi.`);
+    btn.textContent = '🔄 Rigenera'; btn.disabled = false;
+    blobUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch {} });
+    if (ttsBlobUrl) try { URL.revokeObjectURL(ttsBlobUrl); } catch {}
   }
   function drawSubtitle(ctx2d, canvas, lines, idx, startMs) {
     if (!lines.length) return;
