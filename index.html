@@ -926,6 +926,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
   // --- Montaggio automatico canvas + MediaRecorder ---
   async function assembleVideo() {
+  async function assembleVideo() {
     const btn = document.getElementById('assembleBtn');
     const log = document.getElementById('assembleLog');
     const badge = document.getElementById('assembleBadge');
@@ -937,29 +938,50 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       addLog('Genera prima i video allo step 5.'); btn.disabled = false; return;
     }
 
-    // Cattura audio scheda per includere voce TTS
-    addLog('Per includere la voce: nella finestra che appare, seleziona <strong>questa scheda</strong> e spunta Condividi audio.');
-    let displayAudioTrack = null;
-    try {
-      const ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      displayAudioTrack = ds.getAudioTracks()[0] || null;
-      ds.getVideoTracks().forEach(t => t.stop());
-      if (displayAudioTrack) addLog('Audio scheda catturato: voce inclusa nel video!');
-      else addLog('Audio non selezionato: video senza voce.');
-    } catch { addLog('Condivisione annullata: video senza voce.'); }
-
     addLog('Preparo canvas 1080x1920...');
     const canvas = document.createElement('canvas');
     canvas.width = 1080; canvas.height = 1920;
     const ctx2d = canvas.getContext('2d');
 
-    // Musica verso altoparlanti (catturata dall audio scheda)
+    // Audio context con musica horror -> MediaStreamDestination (registrata nel video)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioDest = audioCtx.createMediaStreamDestination();
     const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 0.25;
-    const bgType = document.getElementById('bgMusic').value;
-    try { startBgMusic(bgType !== 'none' ? bgType : 'drone', bgVol); } catch {}
+    const bgType = document.getElementById('bgMusic').value !== 'none'
+      ? document.getElementById('bgMusic').value : 'drone';
 
+    // Costruisce musica verso audioDest (non verso gli speaker)
+    const master = audioCtx.createGain(); master.gain.value = bgVol;
+    master.connect(audioDest);
+    const rev = buildReverb(audioCtx);
+    const dry = audioCtx.createGain(); dry.gain.value = 0.65; dry.connect(master);
+    const wet = audioCtx.createGain(); wet.gain.value = 0.35; rev.connect(wet); wet.connect(master);
+    const mnodes = [rev];
+    const laMin = [110,123.5,130.8,146.8,164.8,174.6,207.7,220];
+    const ghost = [220,233.1,261.6,293.7,329.6,349.2,415.3,440];
+    const tens  = [110,116.5,130.8,155.6,164.8,174.6,185,220];
+    const darkN = [55,58.3,65.4,73.4,82.4,87.3,98,110];
+
+    if (bgType === 'drone') {
+      [55,110,164.8].forEach((f,i)=>{ const o=audioCtx.createOscillator(); o.type=i===0?'sine':'triangle'; o.frequency.value=f; const g=audioCtx.createGain(); g.gain.value=i===0?0.3:0.1; o.connect(g); g.connect(dry); g.connect(rev); o.start(); mnodes.push(o); });
+      scheduleMelody(audioCtx, laMin, dry, rev, mnodes, 3.2);
+      scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 6.0);
+    } else if (bgType === 'tension') {
+      const o=audioCtx.createOscillator(); o.type='sawtooth'; o.frequency.setValueAtTime(55,audioCtx.currentTime); o.frequency.linearRampToValueAtTime(130,audioCtx.currentTime+40); const f=audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=350; const g=audioCtx.createGain(); g.gain.value=0.22; o.connect(f); f.connect(g); g.connect(dry); g.connect(rev); o.start(); mnodes.push(o);
+      scheduleMelody(audioCtx, tens, dry, rev, mnodes, 1.6);
+    } else if (bgType === 'dark') {
+      [55,82.4,110].forEach((f,i)=>{ const o=audioCtx.createOscillator(); o.type='sine'; o.frequency.value=f+i*0.15; const lfo=audioCtx.createOscillator(); lfo.frequency.value=0.05+i*0.02; const lg=audioCtx.createGain(); lg.gain.value=f*0.003; lfo.connect(lg); lg.connect(o.frequency); const g=audioCtx.createGain(); g.gain.value=0.2; o.connect(g); g.connect(dry); g.connect(rev); o.start(); lfo.start(); mnodes.push(o,lfo); });
+      scheduleMelody(audioCtx, darkN, dry, rev, mnodes, 4.8);
+    } else {
+      const bo=audioCtx.createOscillator(); bo.type='sine'; bo.frequency.value=55; const bg=audioCtx.createGain(); bg.gain.value=0; bo.connect(bg); bg.connect(dry); bg.connect(rev); bo.start(); mnodes.push(bo);
+      let t=audioCtx.currentTime+0.3; for(let i=0;i<60;i++){bg.gain.setValueAtTime(0.65,t);bg.gain.exponentialRampToValueAtTime(0.001,t+0.13);bg.gain.setValueAtTime(0.4,t+0.19);bg.gain.exponentialRampToValueAtTime(0.001,t+0.3);t+=1.25;}
+      scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
+    }
+
+    // Stream = canvas video + musica da Web Audio
     const canvasStream = canvas.captureStream(30);
-    if (displayAudioTrack) canvasStream.addTrack(displayAudioTrack);
+    const audioTrack = audioDest.stream.getAudioTracks()[0];
+    if (audioTrack) canvasStream.addTrack(audioTrack);
 
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
       ? 'video/webm;codecs=vp9,opus' : 'video/webm';
@@ -980,83 +1002,61 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
     const text = (gData && gData.script || '').trim();
     const scriptLines = text.split(/[.!?]+/).filter(s => s.trim()).slice(0, 60);
-    // Durata target = quella selezionata dall'utente (mai meno di 61s se YouTube)
     const targetSec = parseInt(document.getElementById('dur').value) || 61;
     const targetMs = targetSec * 1000;
-    // Ogni clip dura targetMs / numero clip, min 5s max 20s
     const numClips = Math.max(blobUrls.length, 1);
     const clipMs = Math.min(Math.max(targetMs / numClips, 5000), 20000);
 
-    addLog(`Inizio registrazione (durata target: ${targetSec}s, ${numClips} clip × ${Math.round(clipMs/1000)}s)...`);
+    addLog(`Registrazione: ${targetSec}s, ${numClips} clip x ${Math.round(clipMs/1000)}s — musica inclusa nel video`);
+    addLog('Nota: aggiungi la tua voce in CapCut dopo il download.');
     recorder.start(200);
 
-    // TTS: parte e finisce quando vuole, il video dura sempre targetMs
-    const ttsPromise = new Promise(resolve => {
-      if (!text || !window.speechSynthesis || !displayAudioTrack) { resolve(); return; }
-      setTimeout(() => {
-        window.speechSynthesis.cancel();
-        const utt = new SpeechSynthesisUtterance(text);
-        utt.lang = _langCode; utt.rate = 1.0; utt.volume = 1;
-        const voices = window.speechSynthesis.getVoices();
-        const v2 = voices.find(v => v.lang.startsWith(_langCode.slice(0,2)));
-        if (v2) utt.voice = v2;
-        utt.onend = resolve; utt.onerror = resolve;
-        window.speechSynthesis.speak(utt);
-      }, 600);
-    });
+    const deadline = Date.now() + targetMs;
+    let ci = 0;
+    while (Date.now() < deadline) {
+      const blobUrl = blobUrls[ci % numClips];
+      const clipStart = Date.now();
+      const thisClipMs = Math.min(clipMs, deadline - Date.now());
+      if (thisClipMs <= 0) break;
 
-    // Video: gira per esattamente targetMs, ciclando le clip
-    const drawPromise = (async () => {
-      const deadline = Date.now() + targetMs;
-      let ci = 0;
-      while (Date.now() < deadline) {
-        const blobUrl = blobUrls[ci % numClips];
-        const clipStart = Date.now();
-        const thisClipMs = Math.min(clipMs, deadline - Date.now());
-        if (thisClipMs <= 0) break;
-
-        if (blobUrl) {
-          const vid = document.createElement('video');
-          vid.src = blobUrl; vid.muted = true; vid.loop = true; vid.crossOrigin = 'anonymous';
-          await new Promise(r => { vid.onloadeddata = r; vid.onerror = r; vid.load(); });
-          vid.play().catch(() => {});
-          await new Promise(resolve => {
-            const draw = () => {
-              if (Date.now() - clipStart >= thisClipMs) { vid.pause(); resolve(); return; }
-              const cw=canvas.width, ch=canvas.height, vr=(vid.videoWidth/vid.videoHeight)||9/16, cr=cw/ch;
-              let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
-              if(vr>cr){sw=sh*cr;sx=(vid.videoWidth-sw)/2;}else{sh=sw/cr;sy=(vid.videoHeight-sh)/2;}
-              ctx2d.drawImage(vid,sx,sy,sw,sh,0,0,cw,ch);
-              const linePerSec = scriptLines.length / (targetMs / 1000);
-              const elapsed = (Date.now() - deadline + targetMs) / 1000;
-              drawSubtitle(ctx2d, canvas, scriptLines, Math.floor(elapsed * linePerSec), clipStart);
-              requestAnimationFrame(draw);
-            };
+      if (blobUrl) {
+        const vid = document.createElement('video');
+        vid.src = blobUrl; vid.muted = true; vid.loop = true; vid.crossOrigin = 'anonymous';
+        await new Promise(r => { vid.onloadeddata = r; vid.onerror = r; vid.load(); });
+        vid.play().catch(() => {});
+        await new Promise(resolve => {
+          const draw = () => {
+            if (Date.now() - clipStart >= thisClipMs) { vid.pause(); resolve(); return; }
+            const cw=canvas.width, ch=canvas.height, vr=(vid.videoWidth/vid.videoHeight)||9/16, cr=cw/ch;
+            let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
+            if(vr>cr){sw=sh*cr;sx=(vid.videoWidth-sw)/2;}else{sh=sw/cr;sy=(vid.videoHeight-sh)/2;}
+            ctx2d.drawImage(vid,sx,sy,sw,sh,0,0,cw,ch);
+            const elapsed = (Date.now() - deadline + targetMs) / 1000;
+            drawSubtitle(ctx2d,canvas,scriptLines,Math.floor(elapsed*(scriptLines.length/targetSec)),clipStart);
             requestAnimationFrame(draw);
-          });
-        } else {
-          await new Promise(resolve => {
-            const draw = () => {
-              if (Date.now()-clipStart >= thisClipMs) { resolve(); return; }
-              ctx2d.fillStyle='#050508'; ctx2d.fillRect(0,0,canvas.width,canvas.height);
-              const linePerSec = scriptLines.length / (targetMs / 1000);
-              const elapsed = (Date.now() - deadline + targetMs) / 1000;
-              drawSubtitle(ctx2d, canvas, scriptLines, Math.floor(elapsed * linePerSec), clipStart);
-              requestAnimationFrame(draw);
-            };
+          };
+          requestAnimationFrame(draw);
+        });
+      } else {
+        await new Promise(resolve => {
+          const draw = () => {
+            if (Date.now()-clipStart >= thisClipMs) { resolve(); return; }
+            ctx2d.fillStyle='#050508'; ctx2d.fillRect(0,0,canvas.width,canvas.height);
+            const elapsed = (Date.now() - deadline + targetMs) / 1000;
+            drawSubtitle(ctx2d,canvas,scriptLines,Math.floor(elapsed*(scriptLines.length/targetSec)),clipStart);
             requestAnimationFrame(draw);
-          });
-        }
-        addLog(`Clip ${(ci % numClips) + 1} — ${Math.round((deadline - Date.now())/1000)}s rimanenti`);
-        ci++;
+          };
+          requestAnimationFrame(draw);
+        });
       }
-    })();
+      addLog(`Clip ${(ci%numClips)+1} ok — ${Math.round((deadline-Date.now())/1000)}s rimanenti`);
+      ci++;
+    }
 
-    await Promise.all([ttsPromise, drawPromise]);
-
-    try { stopBgMusic(); } catch {}
+    mnodes.forEach(n => { try { n.stop && n.stop(); } catch {} });
     recorder.stop();
     await new Promise(resolve => { recorder.onstop = resolve; });
+    try { audioCtx.close(); } catch {}
 
     const finalBlob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(finalBlob);
@@ -1067,12 +1067,10 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         <a href="${url}" download="viral-os-${Date.now()}.webm" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">Scarica WebM (${sizeMB} MB)</a>
       </div>`;
     badge.textContent = 'Completato'; badge.className = 'badge-done';
-    addLog(`Video pronto! ${sizeMB} MB`);
+    addLog(`Video pronto! ${sizeMB} MB — musica inclusa. Aggiungi voce in CapCut.`);
     btn.textContent = 'Rigenera'; btn.disabled = false;
     blobUrls.forEach(u => u && URL.revokeObjectURL(u));
-    if (displayAudioTrack) displayAudioTrack.stop();
   }
-
   function drawSubtitle(ctx2d, canvas, lines, idx, startMs) {
     if (!lines.length) return;
     const line = lines[idx % lines.length]?.trim();
