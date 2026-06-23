@@ -250,8 +250,8 @@
     <div class="card">
       <div class="card-title">🎙️ Generazione Audio</div>
       <div class="step-card">
-        <div class="step-card-title">🔊 Voce Browser TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Voce italiana integrata nel browser — gratuita, zero dipendenze. Usa un screen recorder per catturare l'audio mentre parla.</div>
+        <div class="step-card-title">🔊 Microsoft Edge Neural TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
+        <div class="step-card-desc">Voce italiana neurale (ElsaNeural) — gratuita, illimitata, scaricabile in MP3.</div>
         <div id="audioResult"></div>
       </div>
       <div class="action-row">
@@ -450,68 +450,84 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
   }
 
-  // --- Generate audio via Web Speech API (built-in browser, no dependencies) ---
-  function generateAudio() {
+  // --- Edge TTS via WebSocket (Microsoft Neural voices, free, unlimited) ---
+  async function generateAudio() {
     if (!gData) return;
-    if (!window.speechSynthesis) {
-      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ Il tuo browser non supporta la sintesi vocale. Usa Chrome o Edge.</div>`;
-      return;
-    }
-
-    window.speechSynthesis.cancel();
     const btn = document.getElementById('audioBtn');
-    btn.disabled = true; btn.textContent = '⏳ Carico voci...';
+    btn.disabled = true; btn.textContent = '⏳ Connessione Edge TTS...';
     document.getElementById('audioBadge').textContent = 'In corso...';
 
     const lang = document.getElementById('lang').value;
-    const langCode = lang === 'inglese' ? 'en' : lang === 'spagnolo' ? 'es' : 'it';
+    const voiceName = lang === 'inglese' ? 'en-US-AriaNeural'
+                    : lang === 'spagnolo' ? 'es-ES-ElviraNeural'
+                    : 'it-IT-ElsaNeural';
 
-    function speak() {
-      const voices = window.speechSynthesis.getVoices();
-      const voice = voices.find(v => v.lang.startsWith(langCode)) || voices[0];
+    const text = (gData.script || '').trim();
 
-      const utt = new SpeechSynthesisUtterance(gData.script || '');
-      utt.voice = voice;
-      utt.lang = langCode === 'it' ? 'it-IT' : langCode === 'es' ? 'es-ES' : 'en-US';
-      utt.rate = 1.05;
-      utt.pitch = 1;
+    const uuid = () => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16));
+    const reqId = uuid();
+    const now = new Date().toISOString().replace(/[-:]/g,'').replace('.',':').slice(0,23) + 'Z';
 
-      utt.onstart = () => {
-        document.getElementById('audioBadge').textContent = '🔊 In riproduzione...';
-        document.getElementById('audioBadge').className = 'badge-done';
-        document.getElementById('audioResult').innerHTML = `
-          <div class="alert-info" style="margin-top:10px">
-            🔊 <strong>Sta parlando...</strong> Premi Stop per fermare.<br>
-            <small>Per scaricare l'audio: apri <strong>OBS</strong> o usa <strong>Estrai audio tab</strong> su Chrome.</small>
-          </div>
-          <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn btn-ghost" onclick="window.speechSynthesis.cancel();document.getElementById('audioBtn').disabled=false;document.getElementById('audioBtn').textContent='🔄 Rileggi'">⏹ Stop</button>
-            <button class="btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(gData.script||'')})">📋 Copia testo</button>
-          </div>
-        `;
-        btn.textContent = '🔄 Rileggi'; btn.disabled = false;
-      };
+    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${voiceName.slice(0,5)}'><voice name='${voiceName}'><prosody rate='+5%'>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</prosody></voice></speak>`;
 
-      utt.onend = () => {
-        document.getElementById('audioBadge').textContent = '✓ Completato';
-        setTimeout(() => goTo(5), 1500);
-      };
+    const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/realtimeaudio/cognitiveservices/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=${reqId}`;
 
-      utt.onerror = (e) => {
-        document.getElementById('audioBadge').textContent = '❌ Errore';
-        document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${e.error}</div>`;
-        btn.disabled = false; btn.textContent = '🎙️ Riprova';
-      };
+    try {
+      const audioChunks = [];
+      await new Promise((resolve, reject) => {
+        const ws = new WebSocket(wsUrl);
+        ws.binaryType = 'arraybuffer';
 
-      window.speechSynthesis.speak(utt);
-    }
+        ws.onopen = () => {
+          // 1. Send speech config
+          ws.send(`X-Timestamp:${now}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":false,"wordBoundaryEnabled":false},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
+          // 2. Send SSML
+          ws.send(`X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${now}\r\nPath:ssml\r\n\r\n${ssml}`);
+          btn.textContent = '⏳ Generando audio...';
+        };
 
-    // Voices may not be loaded yet on first call
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length) {
-      speak();
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => { speak(); };
+        ws.onmessage = (e) => {
+          if (e.data instanceof ArrayBuffer) {
+            // Audio data — skip the header (find 'Path:audio\r\n\r\n')
+            const view = new Uint8Array(e.data);
+            const header = new TextDecoder().decode(view.slice(0, 512));
+            const bodyStart = header.indexOf('Path:audio\r\n\r\n');
+            if (bodyStart !== -1) {
+              const headerBytes = new TextDecoder().encode(header.slice(0, bodyStart + 14)).length;
+              audioChunks.push(e.data.slice(headerBytes));
+            }
+          } else if (typeof e.data === 'string' && e.data.includes('Path:turn.end')) {
+            ws.close();
+            resolve();
+          }
+        };
+
+        ws.onerror = (e) => reject(new Error('WebSocket error — Edge TTS non raggiungibile'));
+        ws.onclose = () => resolve();
+        setTimeout(() => { ws.close(); reject(new Error('Timeout — riprova')); }, 30000);
+      });
+
+      if (!audioChunks.length) throw new Error('Nessun audio ricevuto');
+
+      // Merge chunks into single Blob
+      const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
+      const objUrl = URL.createObjectURL(blob);
+
+      document.getElementById('audioBadge').textContent = '✓ Completato';
+      document.getElementById('audioBadge').className = 'badge-done';
+      document.getElementById('audioResult').innerHTML = `
+        <audio controls style="width:100%;margin-top:8px;border-radius:10px">
+          <source src="${objUrl}" type="audio/mpeg">
+        </audio>
+        <a href="${objUrl}" download="viral-audio.mp3" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica MP3</a>
+      `;
+      btn.textContent = '🔄 Rigenera'; btn.disabled = false;
+      setTimeout(() => goTo(5), 2000);
+
+    } catch(err) {
+      btn.disabled = false; btn.textContent = '🎙️ Riprova';
+      document.getElementById('audioBadge').textContent = '❌ Errore';
+      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
     }
   }
 
