@@ -169,7 +169,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.7</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.8</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -810,8 +810,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
     const theme = (gData && gData.video_theme) || window._videoTheme || 'dark';
     const basePool = themePools[theme] || themePools.dark;
-    const brainrotExtra = ['minecraft parkour','subway surfers gameplay','free running parkour','roller coaster pov','satisfying sand cutting'];
-    const queries = [...basePool, brainrotExtra[Math.floor(Math.random()*brainrotExtra.length)]].slice(0,6).sort(()=>Math.random()-0.5);
+    const queries = [...basePool, ...basePool].slice(0, 6).sort(() => Math.random() - 0.5);
 
     try {
       const results = [];
@@ -1109,10 +1108,10 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         if (expectedIdx !== currentClipIdx) {
           try { videoEls[currentClipIdx].pause(); } catch {}
           currentClipIdx = expectedIdx;
-          try { videoEls[currentClipIdx].currentTime = 0; videoEls[currentClipIdx].play().catch(() => {}); } catch {}
+          try { videoEls[currentClipIdx].play().catch(() => {}); } catch {}
           fadeAlpha = 1.0;
         }
-        if (fadeAlpha > 0) fadeAlpha = Math.max(0, fadeAlpha - 0.07);
+        if (fadeAlpha > 0) fadeAlpha = Math.max(0, fadeAlpha - 0.033); // ~1s fade
 
         // Disegno frame video
         const cw = canvas.width, ch = canvas.height;
