@@ -169,7 +169,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.6</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.7</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -985,22 +985,21 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     if (blobUrls.length === 0) { addLog('❌ Nessuna clip disponibile. Verifica che lo step 5 abbia trovato video.'); btn.disabled = false; return; }
     addLog(`✓ ${blobUrls.length} clip pronte.`);
 
-    // FASE 2: TTS via Groq API (stessa chiave già configurata, supporta italiano)
-    addLog('Genero voce con Groq TTS...');
-    const groqKey = getKeys().groq || _k;
-    const ttsVoiceMap = { 'it-IT': 'Fritz-PlayAI', 'en-US': 'Chip-PlayAI', 'es-ES': 'Celeste-PlayAI' };
-    const ttsVoice = ttsVoiceMap[_langCode] || 'Fritz-PlayAI';
+    // FASE 2: TTS via HuggingFace (gratuito, nessuna chiave, modello italiano nativo)
+    addLog('Genero voce...');
+    const ttsModelMap = { 'it-IT': 'facebook/mms-tts-ita', 'en-US': 'facebook/mms-tts-eng', 'es-ES': 'facebook/mms-tts-spa' };
+    const ttsModel = ttsModelMap[_langCode] || 'facebook/mms-tts-ita';
     let ttsArrayBuffer = null;
     try {
-      const ttsText = (gData.script || '').trim().slice(0, 4000);
-      const ttsRes = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+      const ttsText = (gData.script || '').trim().slice(0, 800);
+      const ttsRes = await fetch(`https://api-inference.huggingface.co/models/${ttsModel}`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'playai-tts', input: ttsText, voice: ttsVoice, response_format: 'mp3' })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: ttsText })
       });
-      if (!ttsRes.ok) { const err = await ttsRes.text(); throw new Error(err); }
+      if (!ttsRes.ok) throw new Error(`HF ${ttsRes.status}: ${await ttsRes.text()}`);
       ttsArrayBuffer = await ttsRes.arrayBuffer();
-      addLog('Voce pronta (Groq TTS).');
+      addLog('Voce pronta.');
     } catch(e) { addLog('Voce non disponibile: ' + (e.message||e)); }
 
     // FASE 3: Precarica video elements
