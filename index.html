@@ -978,6 +978,30 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
     }
 
+    // Voce TTS via StreamElements -> Web Audio -> registrata nel video
+    addLog('Genero voce automatica...');
+    const ttsVoices = { 'it-IT': 'Carla', 'en-US': 'Brian', 'es-ES': 'Conchita' };
+    const ttsVoice = ttsVoices[_langCode] || 'Carla';
+    let ttsAudioEl = null;
+    try {
+      const ttsText = (gData && gData.script || '').trim().slice(0, 900);
+      const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${ttsVoice}&text=${encodeURIComponent(ttsText)}`;
+      const ttsRes = await fetch(ttsUrl, { mode: 'cors' });
+      if (!ttsRes.ok) throw new Error('TTS error');
+      const ttsBlob = await ttsRes.blob();
+      const ttsBlobUrl = URL.createObjectURL(ttsBlob);
+      ttsAudioEl = new Audio(ttsBlobUrl);
+      ttsAudioEl.crossOrigin = 'anonymous';
+      const ttsSource = audioCtx.createMediaElementSource(ttsAudioEl);
+      const ttsGain = audioCtx.createGain(); ttsGain.gain.value = 1.0;
+      ttsSource.connect(ttsGain);
+      ttsGain.connect(master);           // -> audioDest -> video
+      ttsGain.connect(audioCtx.destination); // -> speaker per monitoraggio
+      addLog('Voce generata: inclusa nel video!');
+    } catch(e) {
+      addLog('Voce non disponibile (CORS): video con sola musica. Aggiungi voce in CapCut.');
+    }
+
     // Stream = canvas video + musica da Web Audio
     const canvasStream = canvas.captureStream(30);
     const audioTrack = audioDest.stream.getAudioTracks()[0];
@@ -1010,6 +1034,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     addLog(`Registrazione: ${targetSec}s, ${numClips} clip x ${Math.round(clipMs/1000)}s — musica inclusa nel video`);
     addLog('Nota: aggiungi la tua voce in CapCut dopo il download.');
     recorder.start(200);
+    if (ttsAudioEl) setTimeout(() => ttsAudioEl.play().catch(() => {}), 400);
 
     const deadline = Date.now() + targetMs;
     let ci = 0;
