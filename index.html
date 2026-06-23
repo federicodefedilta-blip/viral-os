@@ -440,7 +440,7 @@ REGOLE STILISTICHE ASSOLUTE:
 - Prima persona, tempo presente o passato prossimo
 - Frasi di MAX 5 parole. Punto. Poi altra frase corta.
 - Niente aggettivi esplicativi (non "era terrificante") — mostra, non dire
-- Il prodotto affiliate appare come oggetto della storia (es: "Ho aperto l'app. Il GPS segnava casa mia. Non ci vivo da anni.")
+- ZERO menzioni di prodotti o pubblicità — storia pura al 100%
 - Finale: ultima riga deve essere la frase più agghiacciante dell'intero script
 
 HOOK DI ESEMPIO (NON copiare, ispirati solo):
@@ -464,7 +464,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     "perche": "perché converte con audience horror",
     "cta": "come appare nella storia — sembra parte della trama non pubblicità"
   },
-  "script": "LA CREEPYPASTA COMPLETA. Atto 1: hook devastante. Atto 2: setup con dettaglio strano. Atto 3: escalation frenetica. Atto 4: finale aperto agghiacciante. Frasi da max 5 parole. Prodotto integrato nella trama.",
+  "script": "LA CREEPYPASTA COMPLETA. Atto 1: hook devastante. Atto 2: setup con dettaglio strano. Atto 3: escalation frenetica. Atto 4: finale aperto agghiacciante. Frasi da max 5 parole. ZERO prodotti o pubblicità.",
   "titolo": "titolo che terrorizza, max 60 caratteri, per ${platform}",
   "descrizione": "descrizione che fa venire i brividi, max 200 caratteri, aumenta curiosità",
   "hashtags": ["#creepypasta","#horror","#scary","#paranormal","#storiedipaura","#horrortok","#brividi","#soprannaturale","#paura","#horrorshorts"],
@@ -598,34 +598,40 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     bgNodes = { gain, nodes, ctx };
   }
 
+  // Stato audio globale — evita problemi con escape nelle stringhe inline
+  let _audioState = { langCode: 'it-IT', bgType: 'drone', bgVol: 0.25 };
+
   // --- TTS con Web Speech API — play manuale ---
   function generateAudio() {
     if (!gData) return;
     const lang = document.getElementById('lang').value;
-    const langCode = lang === 'inglese' ? 'en-US' : lang === 'spagnolo' ? 'es-ES' : 'it-IT';
-    const text = (gData.script || '').trim();
-    const bgType = document.getElementById('bgMusic').value;
-    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100;
+    _audioState.langCode = lang === 'inglese' ? 'en-US' : lang === 'spagnolo' ? 'es-ES' : 'it-IT';
+    _audioState.bgType = document.getElementById('bgMusic').value;
+    _audioState.bgVol = parseInt(document.getElementById('bgVolume').value) / 100;
 
     document.getElementById('audioBadge').textContent = 'Pronto';
     document.getElementById('audioBadge').className = 'badge-done';
     document.getElementById('audioResult').innerHTML = `
       <div class="alert-info" style="margin-top:10px">
-        Premi <strong>▶ Play</strong> per ascoltare voce + musica insieme.<br>
-        <small style="color:var(--muted)">Per registrare: usa OBS oppure il tasto Registra qui sotto.</small>
+        Premi <strong>▶ Play</strong> per ascoltare voce + musica insieme.
       </div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="playBtn" onclick="playAll('${langCode}', ${JSON.stringify(text)}, '${bgType}', ${bgVol})">▶ Play</button>
+        <button class="btn btn-primary" id="playBtn" onclick="playAll()">▶ Play</button>
         <button class="btn btn-ghost" id="stopBtn" onclick="stopAll()" style="display:none">⏹ Stop</button>
-        <button class="btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(text)})">📋 Copia testo</button>
+        <button class="btn-sm" id="copyScriptBtn">📋 Copia testo</button>
       </div>
       <div id="voiceInfo" style="font-size:0.72em;color:var(--muted);margin-top:8px"></div>
     `;
+    document.getElementById('copyScriptBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(gData.script || '').catch(() => {});
+    });
     document.getElementById('audioBtn').textContent = '🔄 Rigenera';
   }
 
-  function playAll(langCode, text, bgType, bgVol) {
-    if (!window.speechSynthesis) return;
+  function playAll() {
+    if (!window.speechSynthesis || !gData) return;
+    const { langCode, bgType, bgVol } = _audioState;
+    const text = (gData.script || '').trim();
     window.speechSynthesis.cancel();
     startBgMusic(bgType, bgVol);
 
