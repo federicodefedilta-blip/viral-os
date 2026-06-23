@@ -250,8 +250,8 @@
     <div class="card">
       <div class="card-title">🎙️ Generazione Audio</div>
       <div class="step-card">
-        <div class="step-card-title">🔊 StreamElements TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Voce italiana "Filomena" — gratuito, nessuna chiave, scaricabile in WAV.</div>
+        <div class="step-card-title">🔊 Hugging Face TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
+        <div class="step-card-desc">Voce italiana AI (facebook/mms-tts-ita) — gratuito, nessuna chiave, scaricabile. Prima generazione ~20s per caricamento modello.</div>
         <div id="audioResult"></div>
       </div>
       <div class="action-row">
@@ -450,7 +450,7 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     }
   }
 
-  // --- Generate audio via StreamElements TTS (free, no key, downloadable MP3) ---
+  // --- Generate audio via Hugging Face TTS (free, no key needed for public models) ---
   async function generateAudio() {
     if (!gData) return;
     const btn = document.getElementById('audioBtn');
@@ -458,11 +458,14 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     document.getElementById('audioBadge').textContent = 'In corso...';
 
     const lang = document.getElementById('lang').value;
-    const voice = lang === 'inglese' ? 'Brian' : lang === 'spagnolo' ? 'Mia' : 'Filomena';
+    const model = lang === 'inglese' ? 'facebook/mms-tts-eng'
+                : lang === 'spagnolo' ? 'facebook/mms-tts-spa'
+                : 'facebook/mms-tts-ita';
+
     const fullText = (gData.script || '').trim();
 
-    // StreamElements has ~500 char limit — split on sentence boundaries
-    function splitText(text, maxLen = 450) {
+    // HF model has input limits — split into chunks
+    function splitText(text, maxLen = 300) {
       const chunks = [];
       const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
       let current = '';
@@ -483,15 +486,37 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const decoded = [];
 
-      for (const chunk of chunks) {
-        const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk)}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`StreamElements error ${res.status}`);
-        const buf = await res.arrayBuffer();
-        decoded.push(await audioCtx.decodeAudioData(buf));
+      for (let i = 0; i < chunks.length; i++) {
+        btn.textContent = `⏳ Chunk ${i+1}/${chunks.length}...`;
+        const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inputs: chunks[i] })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          // Model loading — wait and retry once
+          if (res.status === 503) {
+            btn.textContent = '⏳ Modello in caricamento (~20s)...';
+            await new Promise(r => setTimeout(r, 22000));
+            const retry = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ inputs: chunks[i] })
+            });
+            if (!retry.ok) throw new Error(`HF error ${retry.status}`);
+            const buf = await retry.arrayBuffer();
+            decoded.push(await audioCtx.decodeAudioData(buf));
+          } else {
+            throw new Error(err.error || `HF error ${res.status}`);
+          }
+        } else {
+          const buf = await res.arrayBuffer();
+          decoded.push(await audioCtx.decodeAudioData(buf));
+        }
       }
 
-      // Merge chunks into single buffer
+      // Merge all chunks into one buffer
       const totalLen = decoded.reduce((s, b) => s + b.length, 0);
       const merged = audioCtx.createBuffer(1, totalLen, decoded[0].sampleRate);
       const ch = merged.getChannelData(0);
