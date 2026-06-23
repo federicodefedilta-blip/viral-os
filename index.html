@@ -394,6 +394,8 @@
   }
 
   function goTo(n) {
+    try { window.speechSynthesis.cancel(); } catch {}
+    stopBgMusic();
     for (let i = 1; i <= 6; i++) {
       document.getElementById('panel' + i).classList.remove('active');
       const s = document.getElementById('s' + i);
@@ -557,14 +559,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     if (!bgNodes) return;
     const saved = bgNodes;
     bgNodes = null;
-    try {
-      const fade = setInterval(() => {
-        try {
-          if (saved.gain.gain.value > 0.02) { saved.gain.gain.value -= 0.02; }
-          else { saved.nodes.forEach(n => { try { n.stop(); } catch {} }); clearInterval(fade); }
-        } catch { clearInterval(fade); }
-      }, 80);
-    } catch {}
+    try { saved.ctx.close(); } catch {}
   }
 
   function scheduleMelody(ctx, notes, dry, wet, nodes, interval) {
