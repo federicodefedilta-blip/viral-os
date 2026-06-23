@@ -701,8 +701,10 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     const bgType = document.getElementById('bgMusic').value;
     const bgVol = parseInt(document.getElementById('bgVolume').value) / 100;
     const text = (gData.script || '').trim();
+    if (!text) return;
+
     window.speechSynthesis.cancel();
-    startBgMusic(bgType, bgVol);
+    try { startBgMusic(bgType, bgVol); } catch(e) { console.warn('bgMusic error:', e); }
 
     document.getElementById('playBtn').style.display = 'none';
     document.getElementById('stopBtn').style.display = '';
@@ -721,24 +723,27 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
       const utt = new SpeechSynthesisUtterance(text);
       if (voice) utt.voice = voice;
-      utt.lang = langCode; utt.rate = 1.05; utt.pitch = 1; utt.volume = 1;
+      utt.lang = langCode; utt.rate = 1.0; utt.pitch = 1; utt.volume = 1;
 
       const vi = document.getElementById('voiceInfo');
       if (vi) vi.innerHTML = voice ? `🎙️ Voce: <strong>${voice.name}</strong>` : '🎙️ Voce di sistema';
 
-      utt.onend = () => {
-        stopBgMusic();
-        document.getElementById('playBtn').style.display = '';
-        document.getElementById('stopBtn').style.display = 'none';
-        document.getElementById('audioBtn').style.display = '';
-        document.getElementById('audioBtn').textContent = '🔄 Rigenera';
+      const onDone = () => {
+        try { stopBgMusic(); } catch {}
+        const pb = document.getElementById('playBtn');
+        const sb = document.getElementById('stopBtn');
+        const ab = document.getElementById('audioBtn');
+        if (pb) pb.style.display = '';
+        if (sb) sb.style.display = 'none';
+        if (ab) { ab.style.display = ''; ab.textContent = '🔄 Rigenera'; }
       };
-      utt.onerror = utt.onend;
+      utt.onend = onDone;
+      utt.onerror = onDone;
       window.speechSynthesis.speak(utt);
     }
 
     const v = window.speechSynthesis.getVoices();
-    if (v.length) speak(); else window.speechSynthesis.onvoiceschanged = speak;
+    if (v.length) speak(); else { window.speechSynthesis.onvoiceschanged = speak; speak(); }
   }
 
   function stopAll() {
