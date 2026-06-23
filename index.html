@@ -405,54 +405,71 @@
     let mi = 0;
     const iv = setInterval(() => { document.getElementById('loaderMsg').textContent = loaderMsgs[mi % loaderMsgs.length]; mi++; }, 1600);
 
-    const prompt = `Sei il miglior creatore di contenuti virali su ${platform} in ${lang}. Il tuo obiettivo è creare script che esplodono in viralità nelle prime 24 ore e convertono in vendite affiliate.
+    // Sottogeneri disponibili — scelto casualmente per varietà
+    const sottogeneri = [
+      { nome: 'horror domestico', ambientazione: 'casa, stanze, specchi, seminterrato', video_theme: 'home' },
+      { nome: 'tecnologia maledetta', ambientazione: 'schermo, messaggi, app, algoritmo', video_theme: 'tech' },
+      { nome: 'entità nel bosco', ambientazione: 'foresta, sentiero, nebbia, alberi', video_theme: 'forest' },
+      { nome: 'memoria perduta', ambientazione: 'ricordi distordi, fotografie, deja vu', video_theme: 'dark' },
+      { nome: 'stalker soprannaturale', ambientazione: 'seguire, ombra, rumori, presenza', video_theme: 'urban' },
+      { nome: 'luogo abbandonato', ambientazione: 'ospedale, scuola, fabbrica dismessa', video_theme: 'abandoned' },
+      { nome: 'sogno lucido maledetto', ambientazione: 'sogno, sonno, paralisi, confine realtà', video_theme: 'dark' },
+      { nome: 'bambino inquietante', ambientazione: 'giocattoli, risate, cameretta, buio', video_theme: 'home' },
+    ];
+    const sg = sottogeneri[Math.floor(Math.random() * sottogeneri.length)];
+    // Salva il tema video per usarlo dopo
+    window._videoTheme = sg.video_theme;
 
-DATA ATTUALE: ${new Date().toLocaleDateString('it-IT', {month:'long', year:'numeric'})}
-PIATTAFORMA: ${platform}
-LINGUA: ${lang}
-CATEGORIA: ${affCat === 'auto' ? 'scegli la nicchia con il ROI più alto e la crescita più esplosiva in questo momento' : affCat}
-DURATA: ${dur} secondi
+    const prompt = `Sei uno sceneggiatore horror di fama mondiale specializzato in cortometraggi virali per ${platform}. La tua creepypasta deve fermare lo scroll in 1 secondo e hauntar la mente per giorni.
 
-FORMATO OBBLIGATORIO: CREEPYPASTA VIRALE
-Sei un maestro del terrore breve. Scrivi storie horror psicologiche che paralizzano chi scrolla.
+PARAMETRI:
+- Piattaforma: ${platform}
+- Lingua: ${lang}
+- Durata: ${dur} secondi (circa ${Math.round(parseInt(dur) * 2.2)} parole)
+- Sottogenere OBBLIGATORIO: ${sg.nome}
+- Ambientazione: ${sg.ambientazione}
+- Prodotto affiliate da integrare: ${affCat === 'auto' ? 'scegli tu un prodotto horror/thriller correlato al sottogenere' : affCat}
 
-REGOLE ASSOLUTE:
-1. HOOK devastante nei primi 2 secondi — deve far venire i brividi subito. Esempi:
-   - "Mia figlia parla da sola alle 3 di notte. Abbiamo una figlia sola."
-   - "Ho trovato una foto di me dormiente. Vivo da solo."
-   - "Il GPS mi ha portato a casa mia. Non ci abito da 10 anni."
-2. Narrativa in prima persona — il narratore È la vittima, rende tutto reale
-3. Frasi CORTISSIME. Max 6 parole per frase. Pausa drammatica tra ogni frase.
-4. Costruisci tensione crescente — non rivelare subito il colpo di scena
-5. Finale APERTO o ambiguo — non spiegare tutto, lascia l'orrore nella mente
-6. Integra il prodotto affiliate come oggetto della storia (es. una torcia, un libro, un'app) in modo NATURALE, non come pubblicità
-7. Ritmo da brivido: lento all'inizio, accelera verso il finale
+STRUTTURA NARRATIVA IN 4 ATTI:
+ATTO 1 — HOOK (primi 3 secondi): Una frase sola. Impossibile. Brivido immediato.
+ATTO 2 — SETUP (15%): Chi sei, dove sei. Tutto sembra normale. Dettaglio strano.
+ATTO 3 — ESCALATION (60%): La situazione peggiora. Ogni frase più inquietante. Ritmo accelera.
+ATTO 4 — FINALE APERTO (25%): Colpo di scena. NON spiegare. Lascia il dubbio. Ultima frase devastante.
 
-ESEMPI DI STRUTTURA:
-- Setup normale → dettaglio strano → escalation → colpo di scena → finale aperto
-- "Pensavo fosse un sogno. Non lo era."
+REGOLE STILISTICHE ASSOLUTE:
+- Prima persona, tempo presente o passato prossimo
+- Frasi di MAX 5 parole. Punto. Poi altra frase corta.
+- Niente aggettivi esplicativi (non "era terrificante") — mostra, non dire
+- Il prodotto affiliate appare come oggetto della storia (es: "Ho aperto l'app. Il GPS segnava casa mia. Non ci vivo da anni.")
+- Finale: ultima riga deve essere la frase più agghiacciante dell'intero script
 
-Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza testo prima o dopo.
+HOOK DI ESEMPIO (NON copiare, ispirati solo):
+- "Ho sentito mia madre chiamarmi. È morta tre anni fa."
+- "La telecamera di sicurezza mostra qualcuno in casa. Sono solo."
+- "Ho trovato il mio nome inciso nel muro. La casa ha 200 anni."
+
+Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
 {
-  "nicchia": "sottogenere creepypasta specifico (es: horror domestico, entità soprannaturale, tecnologia maledetta)",
-  "viral_score": numero da 1 a 100,
-  "viral_score_reason": "perché questa storia farà esplodere l'engagement",
-  "competitor_analysis": "che tipo di creepypasta domina ora e come differenziarsi",
+  "nicchia": "${sg.nome}",
+  "video_theme": "${sg.video_theme}",
+  "viral_score": numero 1-100,
+  "viral_score_reason": "perché questo sottogenere esplode ora su ${platform}",
+  "competitor_analysis": "chi domina questo sottogenere e il gap che sfruttiamo",
   "trend_tags": ["tag1","tag2","tag3","tag4","tag5"],
   "affiliate": {
-    "prodotto": "prodotto che si integra naturalmente nella storia horror",
-    "piattaforma": "Amazon/Hotmart/Clickbank/Awin/etc",
+    "prodotto": "prodotto specifico integrato nella storia",
+    "piattaforma": "Amazon/Hotmart/etc",
     "commissione": "X%",
-    "perche": "perché questo prodotto converte con un pubblico horror",
-    "cta": "menzione naturalissima del prodotto DENTRO la storia, non sembra pubblicità"
+    "perche": "perché converte con audience horror",
+    "cta": "come appare nella storia — sembra parte della trama non pubblicità"
   },
-  "script": "CREEPYPASTA COMPLETA in ${lang} per ${dur} secondi. Prima persona. Hook da brivido. Frasi cortissime. Tensione crescente. Prodotto integrato come elemento della storia. Finale aperto inquietante.",
-  "titolo": "titolo horror clickbait per ${platform}, max 60 caratteri, deve terrorizzare",
-  "descrizione": "descrizione misteriosa che aumenta la curiosità, max 200 caratteri",
-  "hashtags": ["#creepypasta","#horror","#scary","#paranormal","#storiedipaura","#horrortok","#brividi","#soprannaturale","#paura","#shortshorrор"],
-  "orario_pubblicazione": "orario ottimale per contenuti horror su ${platform} (solitamente sera/notte)",
-  "tip_viralita": "un consiglio specifico per massimizzare l'engagement su creepypasta ${platform}"
+  "script": "LA CREEPYPASTA COMPLETA. Atto 1: hook devastante. Atto 2: setup con dettaglio strano. Atto 3: escalation frenetica. Atto 4: finale aperto agghiacciante. Frasi da max 5 parole. Prodotto integrato nella trama.",
+  "titolo": "titolo che terrorizza, max 60 caratteri, per ${platform}",
+  "descrizione": "descrizione che fa venire i brividi, max 200 caratteri, aumenta curiosità",
+  "hashtags": ["#creepypasta","#horror","#scary","#paranormal","#storiedipaura","#horrortok","#brividi","#soprannaturale","#paura","#horrorshorts"],
+  "orario_pubblicazione": "orario sera/notte ottimale per horror su ${platform}",
+  "tip_viralita": "consiglio specifico per questo sottogenere su ${platform}"
 }`;
 
     try {
@@ -670,18 +687,22 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
     document.getElementById('imgBadge').textContent = 'In corso...';
     document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${[1,2,3,4].map(i=>`<div class="img-placeholder">🎬 ${i}/4...</div>`).join('')}</div>`;
 
-    // Brainrot background pool — rotates randomly ogni generazione
-    const brainrotPools = [
-      ['minecraft parkour','dark forest night','abandoned house','subway surfers gameplay'],
-      ['horror dark corridor','free running parkour','haunted hallway','city night rain'],
-      ['dark empty street night','roller coaster pov','creepy woods','satisfying kinetic sand'],
-      ['abandoned building explore','skateboard tricks','dark tunnel walk','highway driving night'],
-      ['minecraft cave dark','night city timelapse','foggy forest walk','soap cutting asmr'],
-      ['dark staircase','satisfying slime','empty school hallway','street racing night'],
-    ];
-    const pool = brainrotPools[Math.floor(Math.random() * brainrotPools.length)];
-    // Shuffle pool so ordine è sempre diverso
-    const queries = pool.sort(() => Math.random() - 0.5);
+    // Pool tematici per sottogenere — scelto in base al video_theme dell'AI
+    const themePools = {
+      home:     ['dark hallway house','mirror reflection horror','empty room night','basement dark stairs'],
+      tech:     ['computer screen dark','phone notification night','code screen glitch','hacker dark room'],
+      forest:   ['foggy forest walk','dark woods night','misty trees path','night forest trail'],
+      dark:     ['dark room single light','shadow corridor','dark abstract','night city rain'],
+      urban:    ['empty street night','dark alley walk','subway empty night','city fog night'],
+      abandoned:['abandoned hospital','empty school hallway','derelict building','abandoned factory dark'],
+    };
+    const theme = (gData && gData.video_theme) || window._videoTheme || 'dark';
+    const basePool = themePools[theme] || themePools.dark;
+    // Aggiunge sempre 1 clip brainrot per varietà visiva
+    const brainrotExtra = ['minecraft parkour','subway surfers gameplay','satisfying slime','free running parkour','roller coaster pov'];
+    const extra = brainrotExtra[Math.floor(Math.random() * brainrotExtra.length)];
+    const fullPool = [...basePool.slice(0,3), extra];
+    const queries = fullPool.sort(() => Math.random() - 0.5);
 
     try {
       const results = [];
