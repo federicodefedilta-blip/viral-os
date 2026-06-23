@@ -1,415 +1,60 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Viral OS — Content Generator</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #080b12; --surface: #0f1420; --surface2: #161d2e;
-    --border: #1e2a40; --accent: #3b82f6; --accent2: #8b5cf6;
-    --green: #10b981; --orange: #f59e0b; --red: #ef4444;
-    --text: #e2e8f0; --muted: #64748b; --mono: 'JetBrains Mono', monospace;
-  }
-  body { font-family: 'Space Grotesk', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-  .header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface); position: sticky; top: 0; z-index: 10; }
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-icon { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 17px; }
-  .logo-text { font-size: 1.05em; font-weight: 700; }
-  .logo-text span { color: var(--accent); }
-  .status-pill { font-size: 0.7em; font-family: var(--mono); background: #0f2a1a; color: var(--green); border: 1px solid #1a4a2e; border-radius: 20px; padding: 4px 12px; display: flex; align-items: center; gap: 6px; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-  .main { padding: 28px 24px; max-width: 820px; margin: 0 auto; }
-  .steps { display: flex; align-items: flex-start; margin-bottom: 32px; }
-  .step-item { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1; position: relative; min-width: 50px; }
-  .step-line { position: absolute; top: 15px; left: 50%; right: -50%; height: 2px; background: var(--border); z-index: 0; transition: background 0.4s; }
-  .step-item:last-child .step-line { display: none; }
-  .step-item.done .step-line { background: var(--green); }
-  .step-circle { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75em; font-weight: 700; color: var(--muted); background: var(--surface); z-index: 1; position: relative; transition: all 0.3s; }
-  .step-item.active .step-circle { border-color: var(--accent); color: var(--accent); background: #0a1628; box-shadow: 0 0 0 4px rgba(59,130,246,0.15); }
-  .step-item.done .step-circle { border-color: var(--green); background: #0f2a1a; color: var(--green); }
-  .step-label { font-size: 0.58em; color: var(--muted); text-align: center; font-weight: 500; }
-  .step-item.active .step-label { color: var(--accent); }
-  .step-item.done .step-label { color: var(--green); }
-  .panel { display: none; animation: fadeIn 0.3s ease; }
-  .panel.active { display: block; }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 16px; }
-  .card-title { font-size: 0.78em; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 18px; }
-  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 10px; border: none; font-family: 'Space Grotesk', sans-serif; font-size: 0.88em; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
-  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59,130,246,0.3); }
-  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
-  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-green { background: linear-gradient(135deg, #059669, #10b981); color: white; }
-  .btn-green:hover { opacity: 0.9; transform: translateY(-1px); }
-  .btn-sm { padding: 5px 12px; font-size: 0.72em; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--mono); transition: all 0.2s; }
-  .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
-  .input-group { margin-bottom: 16px; }
-  .input-label { font-size: 0.8em; color: var(--muted); margin-bottom: 7px; display: block; font-weight: 500; }
-  .input-field { width: 100%; padding: 11px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'Space Grotesk', sans-serif; font-size: 0.87em; outline: none; transition: border-color 0.2s; appearance: none; }
-  .input-field:focus { border-color: var(--accent); }
-  .channel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
-  .ch-card { background: var(--surface2); border: 2px solid var(--border); border-radius: 12px; padding: 14px 10px; text-align: center; cursor: pointer; transition: all 0.2s; }
-  .ch-card:hover { border-color: #2d4a7a; }
-  .ch-card.selected { border-color: var(--accent); background: #0a1628; }
-  .ch-icon { font-size: 1.7em; margin-bottom: 5px; }
-  .ch-name { font-size: 0.78em; font-weight: 600; }
-  .ch-desc { font-size: 0.67em; color: var(--muted); margin-top: 2px; }
-  .loader { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 24px; gap: 18px; }
-  .spinner { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--accent); animation: spin 0.75s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .loader-text { color: var(--text); font-size: 0.9em; text-align: center; font-weight: 500; }
-  .loader-sub { color: var(--muted); font-size: 0.72em; font-family: var(--mono); }
-  .viral-score-row { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
-  .score-ring { width: 76px; height: 76px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0; }
-  .score-inner { position: absolute; width: 56px; height: 56px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; flex-direction: column; }
-  .score-num { font-size: 1.05em; font-weight: 700; font-family: var(--mono); }
-  .score-label { font-size: 0.5em; color: var(--muted); margin-top: 1px; }
-  .score-info h3 { font-size: 1.05em; font-weight: 700; margin-bottom: 5px; }
-  .score-info p { font-size: 0.79em; color: var(--muted); line-height: 1.55; }
-  .section-label { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin: 16px 0 8px; display: flex; align-items: center; justify-content: space-between; }
-  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
-  .tag { font-size: 0.7em; padding: 3px 10px; border-radius: 20px; font-family: var(--mono); font-weight: 500; }
-  .tag-blue { background: #0a1628; color: #60a5fa; border: 1px solid #1e3a5f; }
-  .tag-purple { background: #150f28; color: #a78bfa; border: 1px solid #2d1f4e; }
-  .aff-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; gap: 14px; }
-  .aff-emoji { font-size: 1.9em; flex-shrink: 0; }
-  .aff-info h4 { font-size: 0.9em; font-weight: 600; margin-bottom: 4px; }
-  .aff-info p { font-size: 0.78em; color: var(--muted); line-height: 1.45; }
-  .commission { font-size: 0.73em; font-family: var(--mono); color: var(--green); font-weight: 600; margin-top: 5px; }
-  .text-surface { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 14px; font-size: 0.82em; line-height: 1.65; }
-  .script-surface { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.8em; line-height: 1.7; font-family: var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; }
-  .script-surface::-webkit-scrollbar { width: 4px; }
-  .script-surface::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-  .tip-box { background: #0a1f0e; border: 1px solid #163a1e; border-radius: 10px; padding: 13px 14px; font-size: 0.8em; color: #86efac; line-height: 1.55; }
-  .cta-box { background: var(--surface2); border: 1px dashed #2d4a7a; border-radius: 10px; padding: 13px 14px; font-size: 0.82em; font-style: italic; color: #93c5fd; }
-  .aff-link-box { background: #071a10; border: 1px solid #163a1e; border-radius: 10px; padding: 14px; font-size: 0.8em; color: var(--green); line-height: 1.6; }
-  .title-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 14px; font-size: 0.9em; font-weight: 600; }
-  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-  .meta-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-  .meta-box h5 { font-size: 0.7em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
-  .meta-box p { font-size: 0.82em; line-height: 1.5; }
-  .time-big { font-size: 1.4em; font-weight: 700; color: var(--accent); font-family: var(--mono); }
-  .action-row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
-  .alert-info { background: #0a1628; border: 1px solid #1e3a5f; color: #93c5fd; padding: 12px 15px; border-radius: 10px; font-size: 0.8em; margin-bottom: 16px; line-height: 1.5; }
-  .error-box { background: #1a0808; border: 1px solid #4a1010; border-radius: 10px; padding: 16px; color: #fca5a5; font-size: 0.82em; line-height: 1.5; }
-  .images-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
-  .img-preview { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
-  .img-placeholder { width: 100%; aspect-ratio: 9/16; border-radius: 10px; border: 1px dashed var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.75em; }
-  .step-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 12px; }
-  .step-card-title { font-size: 0.85em; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
-  .step-card-desc { font-size: 0.78em; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
-  .badge-done { font-size: 0.65em; background: #0f2a1a; color: var(--green); border: 1px solid #1a4a2e; border-radius: 20px; padding: 2px 8px; }
-  .badge-pending { font-size: 0.65em; background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px; }
-  .hashtag-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 0.82em; font-family: var(--mono); line-height: 1.9; }
-  .capcut-steps { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.8em; line-height: 1.9; color: var(--muted); }
-</style>
-</head>
-<body>
-<div class="header">
-  <div class="logo">
-    <div class="logo-icon">🚀</div>
-    <div class="logo-text">Viral<span>OS</span></div>
-  </div>
-  <div class="status-pill"><div class="dot"></div>AI Online</div>
-</div>
-<div class="main">
-  <div class="steps">
-    <div class="step-item active" id="s1"><div class="step-line"></div><div class="step-circle">1</div><div class="step-label">Config</div></div>
-    <div class="step-item" id="s2"><div class="step-line"></div><div class="step-circle">2</div><div class="step-label">Trend AI</div></div>
-    <div class="step-item" id="s3"><div class="step-line"></div><div class="step-circle">3</div><div class="step-label">Contenuto</div></div>
-    <div class="step-item" id="s4"><div class="step-line"></div><div class="step-circle">4</div><div class="step-label">Audio</div></div>
-    <div class="step-item" id="s5"><div class="step-line"></div><div class="step-circle">5</div><div class="step-label">Immagini</div></div>
-    <div class="step-item" id="s6"><div class="step-line"></div><div class="step-circle">6</div><div class="step-label">Pubblica</div></div>
-  </div>
-
-  <!-- PANEL 1 -->
-  <div class="panel active" id="panel1">
-    <div class="card">
-      <div class="card-title">⚙️ Configurazione canale</div>
-      <div class="channel-grid">
-        <div class="ch-card selected" onclick="selCh(this,'YouTube Shorts')"><div class="ch-icon">▶️</div><div class="ch-name">YouTube</div><div class="ch-desc">Shorts & ads</div></div>
-        <div class="ch-card" onclick="selCh(this,'TikTok')"><div class="ch-icon">🎵</div><div class="ch-name">TikTok</div><div class="ch-desc">Viralità organica</div></div>
-        <div class="ch-card" onclick="selCh(this,'Instagram Reels')"><div class="ch-icon">📸</div><div class="ch-name">Instagram</div><div class="ch-desc">Reels & Italia</div></div>
-      </div>
-      <div class="input-group">
-        <label class="input-label">Lingua</label>
-        <select class="input-field" id="lang">
-          <option value="italiano">🇮🇹 Italiano — meno saturo</option>
-          <option value="inglese">🇬🇧 Inglese — views globali</option>
-          <option value="spagnolo">🇪🇸 Spagnolo — mercato enorme</option>
-        </select>
-      </div>
-      <div class="input-group">
-        <label class="input-label">Categoria affiliate</label>
-        <select class="input-field" id="affCat">
-          <option value="auto">🤖 Lascia decidere all'AI</option>
-          <option value="tech">📱 Tech & Gadget</option>
-          <option value="corsi online">🎓 Corsi online</option>
-          <option value="finanza e investimenti">💰 Finanza & Investimenti</option>
-          <option value="salute e fitness">💪 Salute & Fitness</option>
-          <option value="libri e ebook">📚 Libri & Ebook</option>
-        </select>
-      </div>
-      <div class="input-group">
-        <label class="input-label">Durata video</label>
-        <select class="input-field" id="dur">
-          <option value="30">30 secondi — massima retention</option>
-          <option value="45" selected>45 secondi — bilanciato</option>
-          <option value="60">60 secondi — più contenuto</option>
-        </select>
-      </div>
-      <button class="btn btn-primary" onclick="startGen()" style="width:100%;justify-content:center;padding:14px">
-        🔍 Analizza trend e genera contenuto
-      </button>
-    </div>
-  </div>
-
-  <!-- PANEL 2 -->
-  <div class="panel" id="panel2">
-    <div class="card">
-      <div class="loader">
-        <div class="spinner"></div>
-        <div class="loader-text" id="loaderMsg">Analizzando i trend del momento...</div>
-        <div class="loader-sub">llama-3.3-70b · groq</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- PANEL 3 -->
-  <div class="panel" id="panel3">
-    <div id="trendCard" class="card"></div>
-    <div id="affiliateCard" class="card"></div>
-    <div id="contentCard" class="card"></div>
-    <div class="action-row">
-      <button class="btn btn-primary" onclick="goTo(4)">🎙️ Genera Audio →</button>
-      <button class="btn btn-ghost" onclick="startGen()">🔄 Rigenera</button>
-    </div>
-  </div>
-
-  <!-- PANEL 4 -->
-  <div class="panel" id="panel4">
-    <div class="card">
-      <div class="card-title">🎙️ Generazione Audio</div>
-      <div class="step-card">
-        <div class="step-card-title">🔊 ElevenLabs TTS <span class="badge-pending" id="audioBadge">In attesa</span></div>
-        <div class="step-card-desc">Converto lo script in audio con voce naturalistica multilingua. Potrebbero volerci 10-20 secondi.</div>
-        <div id="audioResult"></div>
-      </div>
-      <div class="action-row">
-        <button class="btn btn-primary" id="audioBtn" onclick="generateAudio()">🎙️ Genera Audio</button>
-        <button class="btn btn-ghost" onclick="goTo(3)">← Torna allo script</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- PANEL 5 -->
-  <div class="panel" id="panel5">
-    <div class="card">
-      <div class="card-title">🖼️ Generazione Immagini AI</div>
-      <div class="step-card">
-        <div class="step-card-title">🎨 Stable Diffusion XL <span class="badge-pending" id="imgBadge">In attesa</span></div>
-        <div class="step-card-desc">Genero 4 immagini verticali 9:16 ottimizzate per la nicchia. Possono volerci 1-3 minuti.</div>
-        <div id="imagesResult"></div>
-      </div>
-      <div class="action-row">
-        <button class="btn btn-primary" id="imgBtn" onclick="generateImages()">🎨 Genera Immagini</button>
-        <button class="btn btn-ghost" onclick="goTo(4)">← Torna all'audio</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- PANEL 6 -->
-  <div class="panel" id="panel6">
-    <div class="card">
-      <div class="card-title">📤 Pronto per la pubblicazione</div>
-      <div class="alert-info">💡 Hai tutto il necessario. Assembla in CapCut in 3 minuti e pubblica!</div>
-      <div id="publishContent"></div>
-      <div class="action-row" style="margin-top:24px">
-        <button class="btn btn-primary" onclick="goTo(1)">🚀 Genera nuovo video</button>
-        <button class="btn btn-ghost" onclick="goTo(5)">← Torna alle immagini</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-  let platform = 'YouTube Shorts';
-  let gData = null;
-  let audioBase64 = null;
-  let generatedImages = [];
-
-  const loaderMsgs = ['Analizzando i trend del momento...','Scansiono YouTube, TikTok e Reddit...','Calcolo il Viral Score...','Trovo il prodotto affiliate più redditizio...','Scrivo lo script virale ottimizzato...','Genero titoli e hashtag SEO...','Quasi pronto...'];
-
-  function selCh(el, p) {
-    document.querySelectorAll('.ch-card').forEach(c => c.classList.remove('selected'));
-    el.classList.add('selected');
-    platform = p;
+exports.handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  function goTo(n) {
-    for (let i = 1; i <= 6; i++) {
-      document.getElementById('panel' + i).classList.remove('active');
-      const s = document.getElementById('s' + i);
-      s.classList.remove('active', 'done');
-      const c = s.querySelector('.step-circle');
-      if (i < n) { s.classList.add('done'); c.textContent = '✓'; }
-      else if (i === n) { s.classList.add('active'); c.textContent = i; }
-      else { c.textContent = i; }
+  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+  if (!ELEVENLABS_API_KEY) {
+    return { statusCode: 500, body: JSON.stringify({ error: 'ElevenLabs API key non configurata' }) };
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body);
+  } catch {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Body non valido' }) };
+  }
+
+  // Truncate text to max 400 chars to stay within timeout
+  const rawText = body.text || '';
+  const text = rawText.length > 400 ? rawText.slice(0, 400) + '...' : rawText;
+
+  // Adam - free premade voice on ElevenLabs
+  const voice_id = 'pNInz6obpgDQGcFmaJgB';
+
+  try {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': ELEVENLABS_API_KEY
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const msg = err.detail?.message || err.detail || JSON.stringify(err);
+      return { statusCode: response.status, body: JSON.stringify({ error: msg }) };
     }
-    document.getElementById('panel' + n).classList.add('active');
-    if (n === 6 && gData) renderPublish();
+
+    const audioBuffer = await response.arrayBuffer();
+    const base64Audio = Buffer.from(audioBuffer).toString('base64');
+
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio_base64: base64Audio, format: 'mp3' })
+    };
+
+  } catch (err) {
+    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
-
-  async function startGen() {
-    const lang = document.getElementById('lang').value;
-    const affCat = document.getElementById('affCat').value;
-    const dur = document.getElementById('dur').value;
-    goTo(2);
-    let mi = 0;
-    const iv = setInterval(() => { document.getElementById('loaderMsg').textContent = loaderMsgs[mi % loaderMsgs.length]; mi++; }, 1600);
-    try {
-      const res = await fetch('/.netlify/functions/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ platform, lang, affCat, duration: dur }) });
-      clearInterval(iv);
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `HTTP ${res.status}`); }
-      gData = await res.json();
-      renderResults(gData);
-      goTo(3);
-    } catch(err) {
-      clearInterval(iv);
-      document.getElementById('panel2').querySelector('.card').innerHTML = `<div style="padding:24px"><div class="error-box">❌ ${err.message}</div><div class="action-row" style="margin-top:16px"><button class="btn btn-ghost" onclick="goTo(1)">← Torna indietro</button></div></div>`;
-    }
-  }
-
-  async function generateAudio() {
-    if (!gData) return;
-    const btn = document.getElementById('audioBtn');
-    btn.disabled = true; btn.textContent = '⏳ Generando audio...';
-    document.getElementById('audioBadge').textContent = 'In corso...';
-    try {
-      const res = await fetch('/.netlify/functions/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: gData.script }) });
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `HTTP ${res.status}`); }
-      const data = await res.json();
-      audioBase64 = data.audio_base64;
-      document.getElementById('audioBadge').textContent = '✓ Completato';
-      document.getElementById('audioBadge').className = 'badge-done';
-      document.getElementById('audioResult').innerHTML = `
-        <audio controls style="width:100%;margin-top:8px;border-radius:10px">
-          <source src="data:audio/mp3;base64,${audioBase64}" type="audio/mp3">
-        </audio>
-        <a href="data:audio/mp3;base64,${audioBase64}" download="viral-audio.mp3" class="btn btn-green" style="margin-top:12px;text-decoration:none;display:inline-flex">⬇️ Scarica MP3</a>
-      `;
-      btn.textContent = '🔄 Rigenera'; btn.disabled = false;
-      setTimeout(() => goTo(5), 2000);
-    } catch(err) {
-      btn.disabled = false; btn.textContent = '🎙️ Riprova';
-      document.getElementById('audioBadge').textContent = '❌ Errore';
-      document.getElementById('audioResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
-    }
-  }
-
-  async function generateImages() {
-    if (!gData) return;
-    const btn = document.getElementById('imgBtn');
-    btn.disabled = true; btn.textContent = '⏳ Generando immagini... (1-3 min)';
-    document.getElementById('imgBadge').textContent = 'In corso...';
-    document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${[1,2,3,4].map(i=>`<div class="img-placeholder">🎨 ${i}/4...</div>`).join('')}</div>`;
-    const nicchia = gData.nicchia || 'lifestyle virale';
-    const prompts = [
-      `${nicchia}, dramatic cinematic scene, vibrant colors, vertical portrait 9:16`,
-      `${nicchia}, close up dramatic moment, high contrast lighting, vertical format`,
-      `${nicchia}, storytelling visual, compelling atmosphere, vertical 9:16`,
-      `${nicchia}, viral social media aesthetic, eye-catching, vertical format`
-    ];
-    try {
-      const res = await fetch('/.netlify/functions/images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompts }) });
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || `HTTP ${res.status}`); }
-      const data = await res.json();
-      generatedImages = data.images;
-      document.getElementById('imgBadge').textContent = '✓ Completato';
-      document.getElementById('imgBadge').className = 'badge-done';
-      document.getElementById('imagesResult').innerHTML = `<div class="images-grid">${generatedImages.map((img,i)=>`<div><img src="data:image/png;base64,${img}" class="img-preview"><a href="data:image/png;base64,${img}" download="viral-img-${i+1}.png" class="btn-sm" style="display:block;text-align:center;margin-top:6px;text-decoration:none">⬇️ Scarica</a></div>`).join('')}</div>`;
-      btn.textContent = '🔄 Rigenera'; btn.disabled = false;
-      setTimeout(() => goTo(6), 1500);
-    } catch(err) {
-      btn.disabled = false; btn.textContent = '🎨 Riprova';
-      document.getElementById('imgBadge').textContent = '❌ Errore';
-      document.getElementById('imagesResult').innerHTML = `<div class="error-box" style="margin-top:10px">❌ ${err.message}</div>`;
-    }
-  }
-
-  function scColor(s) { return s>=75?'#10b981':s>=50?'#f59e0b':'#ef4444'; }
-
-  function renderResults(d) {
-    const sc = Math.min(100, Math.max(0, d.viral_score||70));
-    const col = scColor(sc);
-    const deg = Math.round(sc*3.6);
-    document.getElementById('trendCard').innerHTML = `
-      <div class="card-title">📊 Analisi nicchia</div>
-      <div class="viral-score-row">
-        <div class="score-ring" style="background:conic-gradient(${col} ${deg}deg,#1e2a40 0deg)">
-          <div class="score-inner"><div class="score-num" style="color:${col}">${sc}</div><div class="score-label">score</div></div>
-        </div>
-        <div class="score-info"><h3>${d.nicchia}</h3><p>${d.viral_score_reason}</p></div>
-      </div>
-      <div class="section-label">Competizione</div>
-      <p style="font-size:0.8em;color:var(--muted);line-height:1.55">${d.competitor_analysis}</p>
-      <div class="section-label">Trend tags</div>
-      <div class="tag-row">${(d.trend_tags||[]).map(t=>`<span class="tag tag-blue">${t}</span>`).join('')}</div>
-      <p style="margin-top:14px;font-size:0.76em;color:var(--muted)">⏰ Orario migliore: <strong style="color:var(--text)">${d.orario_pubblicazione}</strong></p>
-    `;
-    const af = d.affiliate||{};
-    document.getElementById('affiliateCard').innerHTML = `
-      <div class="card-title">💰 Prodotto Affiliate</div>
-      <div class="aff-box"><div class="aff-emoji">🛒</div><div class="aff-info"><h4>${af.prodotto}</h4><p>${af.perche}</p><div class="commission">Commissione: ${af.commissione} · ${af.piattaforma}</div></div></div>
-      <div class="section-label">Call-to-action</div>
-      <div class="cta-box">"${af.cta}"</div>
-    `;
-    document.getElementById('contentCard').innerHTML = `
-      <div class="card-title">✍️ Script virale</div>
-      <div class="section-label">Script <button class="btn-sm" onclick="cp('scriptEl')">Copia</button></div>
-      <div class="script-surface" id="scriptEl">${d.script}</div>
-      <div class="section-label" style="margin-top:14px">Titolo SEO <button class="btn-sm" onclick="cp('titleEl')">Copia</button></div>
-      <div class="title-box" id="titleEl">${d.titolo}</div>
-      <div class="section-label">Hashtag</div>
-      <div class="tag-row">${(d.hashtags||[]).map(h=>`<span class="tag tag-purple">${h}</span>`).join('')}</div>
-      <div class="section-label">💡 Tip viralità</div>
-      <div class="tip-box">${d.tip_viralita}</div>
-    `;
-  }
-
-  function renderPublish() {
-    if (!gData) return;
-    const d = gData; const af = d.affiliate||{};
-    document.getElementById('publishContent').innerHTML = `
-      <div class="meta-grid">
-        <div class="meta-box"><h5>📋 Titolo</h5><p style="font-weight:600">${d.titolo}</p><button class="btn-sm" style="margin-top:8px" onclick="cpText(${JSON.stringify(d.titolo)})">Copia</button></div>
-        <div class="meta-box"><h5>⏰ Pubblica alle</h5><p class="time-big">${d.orario_pubblicazione}</p></div>
-      </div>
-      <div class="section-label">📱 Come assemblare in CapCut</div>
-      <div class="capcut-steps">
-        1️⃣ Apri CapCut → Nuovo progetto → <strong>9:16 verticale</strong><br>
-        2️⃣ Importa le <strong>4 immagini</strong> scaricate in sequenza<br>
-        3️⃣ Importa l'<strong>audio MP3</strong> scaricato<br>
-        4️⃣ Clicca <strong>"Sottotitoli automatici"</strong><br>
-        5️⃣ Esporta HD → pubblica su ${platform}
-      </div>
-      <div class="section-label">Descrizione <button class="btn-sm" onclick="cpText(${JSON.stringify(d.descrizione)})">Copia</button></div>
-      <div class="text-surface" style="margin-bottom:14px">${d.descrizione}</div>
-      <div class="section-label">Hashtag <button class="btn-sm" onclick="cpText(${JSON.stringify((d.hashtags||[]).join(' '))})">Copia tutti</button></div>
-      <div class="hashtag-box">${(d.hashtags||[]).join(' ')}</div>
-      <div class="section-label" style="margin-top:14px">🛒 Link Affiliate</div>
-      <div class="aff-link-box">Cerca <strong>"${af.prodotto}"</strong> su <strong>${af.piattaforma}</strong> → crea link affiliato → metti in bio<br><br><em style="color:#a7f3d0">"${af.cta}"</em></div>
-    `;
-  }
-
-  function cp(id) { const el=document.getElementById(id); if(el) navigator.clipboard.writeText(el.textContent).catch(()=>{}); }
-  function cpText(txt) { navigator.clipboard.writeText(txt).catch(()=>{}); }
-</script>
-</body>
-</html>
+};
