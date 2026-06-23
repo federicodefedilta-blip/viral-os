@@ -552,15 +552,17 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
   let bgNodes = null; // tiene riferimento ai nodi Web Audio attivi
 
   function stopBgMusic() {
-    if (bgNodes) {
-      try {
-        const fade = setInterval(() => {
-          if (bgNodes.gain.gain.value > 0.02) bgNodes.gain.gain.value -= 0.02;
-          else { bgNodes.nodes.forEach(n => { try { n.stop(); } catch{} }); clearInterval(fade); }
-        }, 80);
-      } catch {}
-      bgNodes = null;
-    }
+    if (!bgNodes) return;
+    const saved = bgNodes;
+    bgNodes = null;
+    try {
+      const fade = setInterval(() => {
+        try {
+          if (saved.gain.gain.value > 0.02) { saved.gain.gain.value -= 0.02; }
+          else { saved.nodes.forEach(n => { try { n.stop(); } catch {} }); clearInterval(fade); }
+        } catch { clearInterval(fade); }
+      }, 80);
+    } catch {}
   }
 
   function scheduleMelody(ctx, notes, dry, wet, nodes, interval) {
