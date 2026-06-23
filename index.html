@@ -398,34 +398,46 @@ LINGUA: ${lang}
 CATEGORIA: ${affCat === 'auto' ? 'scegli la nicchia con il ROI più alto e la crescita più esplosiva in questo momento' : affCat}
 DURATA: ${dur} secondi
 
-REGOLE SCRIPT VIRALE OBBLIGATORIE:
-1. Hook nei primi 2 secondi: deve essere uno shock, una domanda impossibile o una affermazione controversa che impedisce lo scroll
-2. Loop psicologico: crea curiosità che si risolve solo alla fine
-3. Ritmo veloce: frasi corte, max 8 parole per frase
-4. CTA affiliate NATURALE: integrata come consiglio personale, non come pubblicità
-5. Finale con urgenza ("solo per oggi", "prima che sparisca", ecc.)
+FORMATO OBBLIGATORIO: CREEPYPASTA VIRALE
+Sei un maestro del terrore breve. Scrivi storie horror psicologiche che paralizzano chi scrolla.
+
+REGOLE ASSOLUTE:
+1. HOOK devastante nei primi 2 secondi — deve far venire i brividi subito. Esempi:
+   - "Mia figlia parla da sola alle 3 di notte. Abbiamo una figlia sola."
+   - "Ho trovato una foto di me dormiente. Vivo da solo."
+   - "Il GPS mi ha portato a casa mia. Non ci abito da 10 anni."
+2. Narrativa in prima persona — il narratore È la vittima, rende tutto reale
+3. Frasi CORTISSIME. Max 6 parole per frase. Pausa drammatica tra ogni frase.
+4. Costruisci tensione crescente — non rivelare subito il colpo di scena
+5. Finale APERTO o ambiguo — non spiegare tutto, lascia l'orrore nella mente
+6. Integra il prodotto affiliate come oggetto della storia (es. una torcia, un libro, un'app) in modo NATURALE, non come pubblicità
+7. Ritmo da brivido: lento all'inizio, accelera verso il finale
+
+ESEMPI DI STRUTTURA:
+- Setup normale → dettaglio strano → escalation → colpo di scena → finale aperto
+- "Pensavo fosse un sogno. Non lo era."
 
 Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza testo prima o dopo.
 
 {
-  "nicchia": "nome nicchia specifica e di tendenza",
+  "nicchia": "sottogenere creepypasta specifico (es: horror domestico, entità soprannaturale, tecnologia maledetta)",
   "viral_score": numero da 1 a 100,
-  "viral_score_reason": "perché questa nicchia esplode ora",
-  "competitor_analysis": "chi domina questa nicchia e il loro punto debole",
+  "viral_score_reason": "perché questa storia farà esplodere l'engagement",
+  "competitor_analysis": "che tipo di creepypasta domina ora e come differenziarsi",
   "trend_tags": ["tag1","tag2","tag3","tag4","tag5"],
   "affiliate": {
-    "prodotto": "nome prodotto specifico con brand reale",
+    "prodotto": "prodotto che si integra naturalmente nella storia horror",
     "piattaforma": "Amazon/Hotmart/Clickbank/Awin/etc",
     "commissione": "X%",
-    "perche": "perché converte: problema che risolve + urgenza + prova sociale",
-    "cta": "frase CTA naturalissima, sembra un consiglio non una pubblicità"
+    "perche": "perché questo prodotto converte con un pubblico horror",
+    "cta": "menzione naturalissima del prodotto DENTRO la storia, non sembra pubblicità"
   },
-  "script": "SCRIPT COMPLETO in ${lang} per ${dur} secondi. Hook devastante. Frasi cortissime. Ritmo veloce. CTA affiliate come consiglio personale. Chiudi con urgenza.",
-  "titolo": "titolo clickbait SEO per ${platform}, max 60 caratteri",
-  "descrizione": "descrizione SEO + CTA affiliate + urgenza, max 200 caratteri",
-  "hashtags": ["#tag1","#tag2","#tag3","#tag4","#tag5","#tag6","#tag7","#tag8","#tag9","#tag10"],
-  "orario_pubblicazione": "orario ottimale per audience italiana su ${platform}",
-  "tip_viralita": "un solo consiglio ultra-specifico per questa nicchia su ${platform}"
+  "script": "CREEPYPASTA COMPLETA in ${lang} per ${dur} secondi. Prima persona. Hook da brivido. Frasi cortissime. Tensione crescente. Prodotto integrato come elemento della storia. Finale aperto inquietante.",
+  "titolo": "titolo horror clickbait per ${platform}, max 60 caratteri, deve terrorizzare",
+  "descrizione": "descrizione misteriosa che aumenta la curiosità, max 200 caratteri",
+  "hashtags": ["#creepypasta","#horror","#scary","#paranormal","#storiedipaura","#horrortok","#brividi","#soprannaturale","#paura","#shortshorrор"],
+  "orario_pubblicazione": "orario ottimale per contenuti horror su ${platform} (solitamente sera/notte)",
+  "tip_viralita": "un consiglio specifico per massimizzare l'engagement su creepypasta ${platform}"
 }`;
 
     try {
@@ -566,11 +578,12 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown, senza backtick, senza 
 
     // Brainrot background pool — rotates randomly ogni generazione
     const brainrotPools = [
-      ['minecraft parkour','subway surfers gameplay','satisfying slime','street racing night'],
-      ['asmr cutting soap','free running parkour','satisfying sand','drift car city'],
-      ['minecraft building','roller coaster pov','satisfying kinetic sand','city night timelapse'],
-      ['water satisfying','skateboard tricks','soap cutting asmr','highway driving night'],
-      ['oddly satisfying','bike stunts','slime satisfying','tokyo night street'],
+      ['minecraft parkour','dark forest night','abandoned house','subway surfers gameplay'],
+      ['horror dark corridor','free running parkour','haunted hallway','city night rain'],
+      ['dark empty street night','roller coaster pov','creepy woods','satisfying kinetic sand'],
+      ['abandoned building explore','skateboard tricks','dark tunnel walk','highway driving night'],
+      ['minecraft cave dark','night city timelapse','foggy forest walk','soap cutting asmr'],
+      ['dark staircase','satisfying slime','empty school hallway','street racing night'],
     ];
     const pool = brainrotPools[Math.floor(Math.random() * brainrotPools.length)];
     // Shuffle pool so ordine è sempre diverso
