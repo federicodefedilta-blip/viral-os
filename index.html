@@ -302,7 +302,7 @@
       <div class="card-title">🎬 Montaggio automatico</div>
       <div class="step-card">
         <div class="step-card-title">⚙️ Assembla il video finale <span class="badge-pending" id="assembleBadge">In attesa</span></div>
-        <div class="step-card-desc">Unisce le 4 clip video + musica horror + sottotitoli animati in un unico file pronto per YouTube Shorts.</div>
+        <div class="step-card-desc">Unisce le 4 clip video + musica horror + sottotitoli animati. <strong>Nota:</strong> la voce va aggiunta dopo in CapCut (il browser non permette di catturarla durante la registrazione).</div>
         <div id="assembleLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:160px;overflow-y:auto"></div>
         <div id="assemblePreview" style="margin-top:12px"></div>
       </div>
@@ -1006,31 +1006,34 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     if (!lines.length) return;
     const line = lines[idx % lines.length]?.trim();
     if (!line) return;
-    const alpha = Math.min(1, (Date.now() - startMs) / 300);
     ctx2d.save();
-    ctx2d.globalAlpha = alpha;
-    const fontSize = Math.round(canvas.width * 0.058);
+    ctx2d.globalAlpha = Math.min(1, (Date.now() - startMs) / 300);
+    const fontSize = Math.round(canvas.width * 0.055);
     ctx2d.font = `bold ${fontSize}px Arial, sans-serif`;
-    ctx2d.textAlign = 'center'; ctx2d.textBaseline = 'bottom';
-    const maxW = canvas.width * 0.85;
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'top';
+    const maxW = canvas.width * 0.82;
+    const lineH = fontSize * 1.4;
     const words = line.split(' ');
-    const lineH = fontSize * 1.35;
     const wrapped = [];
     let cur = '';
     for (const w of words) {
-      const test = cur ? cur+' '+w : w;
+      const test = cur ? cur + ' ' + w : w;
       if (ctx2d.measureText(test).width > maxW) { wrapped.push(cur); cur = w; }
       else cur = test;
     }
     if (cur) wrapped.push(cur);
-    const y0 = canvas.height * 0.80;
-    ctx2d.shadowColor='#000'; ctx2d.shadowBlur=20;
-    wrapped.forEach((l,i) => {
-      const tw = ctx2d.measureText(l).width;
-      ctx2d.fillStyle='rgba(0,0,0,0.6)';
-      ctx2d.fillRect(canvas.width/2-tw/2-14, y0+i*lineH-fontSize-2, tw+28, fontSize+10);
-      ctx2d.fillStyle='#fff'; ctx2d.fillText(l, canvas.width/2, y0+(i+1)*lineH);
-    });
+    const blockH = wrapped.length * lineH;
+    const blockY = canvas.height * 0.78; // Y di partenza del blocco testo
+    const pad = 16;
+    // Un singolo rettangolo per tutto il blocco
+    const maxLineW = Math.max(...wrapped.map(l => ctx2d.measureText(l).width));
+    ctx2d.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx2d.fillRect(canvas.width / 2 - maxLineW / 2 - pad, blockY - pad / 2, maxLineW + pad * 2, blockH + pad);
+    // Testo sopra il rettangolo
+    ctx2d.shadowColor = '#000'; ctx2d.shadowBlur = 8;
+    ctx2d.fillStyle = '#ffffff';
+    wrapped.forEach((l, i) => ctx2d.fillText(l, canvas.width / 2, blockY + i * lineH));
     ctx2d.restore();
   }
 
