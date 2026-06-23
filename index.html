@@ -166,7 +166,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.2</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v0.9.3</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -982,16 +982,16 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     if (blobUrls.length === 0) { addLog('❌ Nessuna clip disponibile. Verifica che lo step 5 abbia trovato video.'); btn.disabled = false; return; }
     addLog(`✓ ${blobUrls.length} clip pronte.`);
 
-    // FASE 2: TTS audio (scaricato ma NON riprodotto in cuffia)
+    // FASE 2: TTS audio — scaricato come ArrayBuffer per decodeAudioData (affidabile)
     addLog('Genero voce...');
     const ttsVoices = { 'it-IT': 'Carla', 'en-US': 'Brian', 'es-ES': 'Conchita' };
     const ttsVoice = ttsVoices[_langCode] || 'Carla';
-    let ttsBlobUrl = null;
+    let ttsArrayBuffer = null;
     try {
       const ttsText = (gData.script || '').trim().slice(0, 900);
       const ttsRes = await fetch(`https://api.streamelements.com/kappa/v2/speech?voice=${ttsVoice}&text=${encodeURIComponent(ttsText)}`, { mode: 'cors' });
       if (!ttsRes.ok) throw new Error();
-      ttsBlobUrl = URL.createObjectURL(await ttsRes.blob());
+      ttsArrayBuffer = await ttsRes.arrayBuffer();
       addLog('Voce pronta.');
     } catch { addLog('Voce non disponibile: solo musica nel video.'); }
 
@@ -1037,16 +1037,17 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
     }
 
-    // TTS audio element collegato al grafo audio (silenzioso verso speaker)
-    let ttsAudioEl = null;
-    if (ttsBlobUrl) {
-      ttsAudioEl = new Audio(ttsBlobUrl);
-      ttsAudioEl.crossOrigin = 'anonymous';
+    // TTS via BufferSourceNode — decodifica l'ArrayBuffer nel grafo audio (affidabile)
+    let ttsBufferNode = null;
+    if (ttsArrayBuffer) {
       try {
-        const ttsSrc = audioCtx.createMediaElementSource(ttsAudioEl);
+        const ttsDecoded = await audioCtx.decodeAudioData(ttsArrayBuffer);
+        ttsBufferNode = audioCtx.createBufferSource();
+        ttsBufferNode.buffer = ttsDecoded;
         const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.2;
-        ttsSrc.connect(ttsG); ttsG.connect(master); // solo a audioDest
-      } catch {}
+        ttsBufferNode.connect(ttsG); ttsG.connect(master);
+        addLog('Voce collegata al grafo audio.');
+      } catch(e) { addLog('Errore decodifica voce: ' + e.message); }
     }
 
     // FASE 5: Canvas + MediaRecorder
@@ -1070,7 +1071,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     badge.textContent = 'Registrazione...';
 
     recorder.start(100);
-    if (ttsAudioEl) ttsAudioEl.play().catch(() => {});
+    if (ttsBufferNode) ttsBufferNode.start(audioCtx.currentTime + 0.3);
 
     const startTime = Date.now();
     let currentClipIdx = 0;
@@ -1179,7 +1180,6 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     addLog(`✓ Video pronto (${sizeMB} MB) — voce + musica inclusi.`);
     btn.textContent = '🔄 Rigenera'; btn.disabled = false;
     blobUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch {} });
-    if (ttsBlobUrl) try { URL.revokeObjectURL(ttsBlobUrl); } catch {}
   }
   function drawSubtitle(ctx2d, canvas, lines, idx, startMs) {
     if (!lines.length) return;
