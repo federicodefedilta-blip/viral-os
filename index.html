@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.4.2';
+  const CURRENT_VERSION = 'v1.4.3';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.2</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.3</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -507,7 +507,10 @@ ESEMPI DI HOOK POTENTI (NON copiare, ispirati alla forza):
 
 Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
+IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tutti gli altri campi. La storia DEVE avere un inizio, uno sviluppo e una conclusione devastante entro il numero di parole richiesto — mai interrompersi a metà.
+
 {
+  "script": "La storia completa, AUTOCONCLUSIVA e LUNGA (almeno ${Math.round(parseInt(dur) * 2.6)} parole): flusso unico, niente atti, niente titoletti. Hook fulminante nella prima frase. Frasi brevi ma numerose, ricche di eventi. Tensione crescente. DEVE arrivare a un finale che chiude la storia con un colpo allo stomaco — non lasciarla sospesa a metà racconto. ZERO pubblicità.",
   "nicchia": "${sg.nome}",
   "video_theme": "${sg.video_theme}",
   "viral_score": numero 1-100,
@@ -521,7 +524,6 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     "perche": "perché converte con audience horror",
     "cta": "come appare nella storia — sembra parte della trama non pubblicità"
   },
-  "script": "La storia completa e LUNGA (almeno ${Math.round(parseInt(dur) * 2.6)} parole): flusso unico, niente atti, niente titoletti. Frasi brevi ma numerose, ricche di eventi. Tensione crescente naturale. Finale aperto devastante. ZERO pubblicità.",
   "titolo": "titolo che terrorizza, max 60 caratteri, per ${platform}",
   "descrizione": "descrizione che fa venire i brividi, max 200 caratteri, aumenta curiosità",
   "hashtags": ["#creepypasta","#horror","#scary","#paranormal","#storiedipaura","#horrortok","#brividi","#soprannaturale","#paura","#horrorshorts"],
@@ -533,7 +535,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k.groq}` },
-        body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.8, max_tokens: 2000 })
+        body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.8, max_tokens: 5000 })
       });
       clearInterval(iv);
       if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
