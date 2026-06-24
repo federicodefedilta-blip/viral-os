@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.5.3';
+  const CURRENT_VERSION = 'v1.6.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.5.3</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.6.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -211,17 +211,6 @@
         </select>
       </div>
       <div class="input-group">
-        <label class="input-label">Prodotto affiliate</label>
-        <select class="input-field" id="affCat">
-          <option value="auto">🤖 Scegli l'AI in base alla storia</option>
-          <option value="torcia tattica LED">🔦 Torcia tattica</option>
-          <option value="telecamera di sicurezza">📷 Telecamera di sicurezza</option>
-          <option value="libro horror bestseller">📚 Libro horror</option>
-          <option value="lucchetto smart">🔐 Lucchetto smart</option>
-          <option value="rilevatore EMF paranormale">👻 Rilevatore EMF</option>
-        </select>
-      </div>
-      <div class="input-group">
         <label class="input-label">Durata video</label>
         <select class="input-field" id="dur">
           <option value="30">30s — Instagram Reels (reach massimo)</option>
@@ -251,7 +240,6 @@
   <!-- PANEL 3 -->
   <div class="panel" id="panel3">
     <div id="trendCard" class="card"></div>
-    <div id="affiliateCard" class="card"></div>
     <div id="contentCard" class="card"></div>
     <div class="action-row">
       <button class="btn btn-primary" onclick="goTo(4)">🎙️ Genera Audio →</button>
@@ -275,8 +263,8 @@
       </div>
       <div class="input-group" style="display:flex;align-items:center;gap:12px">
         <label class="input-label" style="margin:0;min-width:80px">🔊 Volume musica</label>
-        <input type="range" id="bgVolume" min="0" max="100" value="25" style="flex:1;accent-color:var(--accent)">
-        <span id="bgVolumeVal" style="font-size:0.75em;font-family:var(--mono);color:var(--muted);min-width:30px">25%</span>
+        <input type="range" id="bgVolume" min="0" max="100" value="100" style="flex:1;accent-color:var(--accent)">
+        <span id="bgVolumeVal" style="font-size:0.75em;font-family:var(--mono);color:var(--muted);min-width:30px">100%</span>
       </div>
       <div class="step-card">
         <div class="step-card-title">🔊 Edge Neural TTS + Registrazione <span class="badge-pending" id="audioBadge">In attesa</span></div>
@@ -355,7 +343,7 @@
     abandoned:['abandoned hospital horror','creepy empty hallway','derelict scary building','abandoned asylum dark','haunted ruins fog'],
   };
 
-  const loaderMsgs = ['Analizzando i trend del momento...','Scansiono YouTube, TikTok e Reddit...','Calcolo il Viral Score...','Trovo il prodotto affiliate più redditizio...','Scrivo lo script virale ottimizzato...','Genero titoli e hashtag SEO...','Quasi pronto...'];
+  const loaderMsgs = ['Analizzando i trend del momento...','Scansiono YouTube, TikTok e Reddit...','Calcolo il Viral Score...','Costruisco l\'hook perfetto...','Scrivo lo script virale ottimizzato...','Genero titoli e hashtag SEO...','Quasi pronto...'];
 
   // --- Key management ---
   function getKeys() {
@@ -444,7 +432,6 @@
     if (!k.groq) { openKeys(); return; }
 
     const lang = document.getElementById('lang').value;
-    const affCat = document.getElementById('affCat').value;
     const dur = document.getElementById('dur').value;
     goTo(2);
     let mi = 0;
@@ -482,7 +469,6 @@ PARAMETRI:
 - Durata: ${dur} secondi — lo script DEVE contenere ALMENO ${Math.round(parseInt(dur) * 2.6)} parole per riempire tutto il video. Una voce narrante legge ~2.6 parole al secondo: se scrivi meno parole, il video resta in silenzio. NON scrivere meno del minimo.
 - Sottogenere OBBLIGATORIO: ${sg.nome}
 - Ambientazione: ${sg.ambientazione}
-- Prodotto affiliate da integrare: ${affCat === 'auto' ? 'scegli tu un prodotto horror/thriller correlato al sottogenere' : affCat}
 
 COME SCRIVERE LO SCRIPT:
 Scrivi una vera creepypasta in prima persona: un fatto reale, quotidiano, che lentamente si rivela impossibile. Niente titoli, niente atti. Il lettore deve essere trascinato dalla prima parola all'ultima senza mai sapere dove sta andando. La tensione cresce come nella vita vera, poi precipita.
@@ -502,10 +488,12 @@ TECNICA NARRATIVA (CREEPYPASTA AVVINCENTE):
 - FINALE A TWIST: l'ultima frase deve RIBALTARE tutto e ricontestualizzare la storia, facendo capire al lettore che l'orrore era lì dall'inizio. Non spiegare nulla. Un colpo allo stomaco che resta in testa per giorni e fa rileggere da capo.
 
 REGOLE ASSOLUTE:
+- È SOLO una storia: nessun prodotto, nessuna pubblicità, nessuna menzione di oggetti da comprare. Pura narrazione horror che cattura.
 - Prima persona, tempo passato o presente
 - Frasi brevi e incisive, MA TANTE: la storia deve essere ricca di eventi e svolte per riempire tutta la durata. Aggiungi dettagli, scene, escalation — non finire troppo presto.
 - Mai "era spaventoso" o "avevo paura" — mostra, non dire
 - ZERO struttura a atti, ZERO titoletti, ZERO pubblicità
+- Ogni 2-3 frasi deve esserci una mini-rivelazione che spinge a continuare: il pubblico non deve poter smettere di guardare
 - Lo script è un flusso unico di coscienza, come un messaggio mandato a un amico alle 3 di notte
 
 ESEMPI DI HOOK POTENTI (NON copiare, ispirati alla forza):
@@ -528,16 +516,9 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
   "viral_score_reason": "perché questo sottogenere esplode ora su ${platform}",
   "competitor_analysis": "chi domina questo sottogenere e il gap che sfruttiamo",
   "trend_tags": ["tag1","tag2","tag3","tag4","tag5"],
-  "affiliate": {
-    "prodotto": "prodotto specifico integrato nella storia",
-    "piattaforma": "Amazon/Hotmart/etc",
-    "commissione": "X%",
-    "perche": "perché converte con audience horror",
-    "cta": "come appare nella storia — sembra parte della trama non pubblicità"
-  },
-  "titolo": "titolo che terrorizza, max 60 caratteri, per ${platform}",
-  "descrizione": "descrizione che fa venire i brividi, max 200 caratteri, aumenta curiosità",
-  "hashtags": ["#creepypasta","#horror","#scary","#paranormal","#storiedipaura","#horrortok","#brividi","#soprannaturale","#paura","#horrorshorts"],
+  "titolo": "titolo che terrorizza scritto in ${langName}, max 60 caratteri, per ${platform}",
+  "descrizione": "descrizione che fa venire i brividi scritta in ${langName}, max 200 caratteri, aumenta curiosità",
+  "hashtags": ["10 hashtag horror virali scritti in ${langName} (tradotti, NON in italiano se la lingua è diversa), ognuno con #, mix di tag generici horror e specifici del sottogenere"],
   "orario_pubblicazione": "orario sera/notte ottimale per horror su ${platform}",
   "tip_viralita": "consiglio specifico per questo sottogenere su ${platform}"
 }`;
@@ -913,13 +894,6 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
       <div class="tag-row">${(d.trend_tags||[]).map(t=>`<span class="tag tag-blue">${t}</span>`).join('')}</div>
       <p style="margin-top:14px;font-size:0.76em;color:var(--muted)">⏰ Orario migliore: <strong style="color:var(--text)">${d.orario_pubblicazione}</strong></p>
     `;
-    const af = d.affiliate||{};
-    document.getElementById('affiliateCard').innerHTML = `
-      <div class="card-title">💰 Prodotto Affiliate</div>
-      <div class="aff-box"><div class="aff-emoji">🛒</div><div class="aff-info"><h4>${af.prodotto}</h4><p>${af.perche}</p><div class="commission">Commissione: ${af.commissione} · ${af.piattaforma}</div></div></div>
-      <div class="section-label">Call-to-action</div>
-      <div class="cta-box">"${af.cta}"</div>
-    `;
     document.getElementById('contentCard').innerHTML = `
       <div class="card-title">✍️ Script virale</div>
       <div class="section-label">Script <button class="btn-sm" onclick="cp('scriptEl')">Copia</button></div>
@@ -935,7 +909,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
 
   function renderPublish() {
     if (!gData) return;
-    const d = gData; const af = d.affiliate||{};
+    const d = gData;
     document.getElementById('publishContent').innerHTML = `
       <div class="meta-grid">
         <div class="meta-box"><h5>📋 Titolo</h5><p style="font-weight:600">${d.titolo}</p><button class="btn-sm" style="margin-top:8px" onclick="cpText(${JSON.stringify(d.titolo)})">Copia</button></div>
@@ -953,8 +927,6 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
       <div class="text-surface" style="margin-bottom:14px">${d.descrizione}</div>
       <div class="section-label">Hashtag <button class="btn-sm" onclick="cpText(${JSON.stringify((d.hashtags||[]).join(' '))})">Copia tutti</button></div>
       <div class="hashtag-box">${(d.hashtags||[]).join(' ')}</div>
-      <div class="section-label" style="margin-top:14px">🛒 Link Affiliate</div>
-      <div class="aff-link-box">Cerca <strong>"${af.prodotto}"</strong> su <strong>${af.piattaforma}</strong> → crea link affiliato → metti in bio<br><br><em style="color:#a7f3d0">"${af.cta}"</em></div>
     `;
   }
 
@@ -971,7 +943,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
 
     const targetSec = parseInt(document.getElementById('dur').value) || 61;
     const targetMs = targetSec * 1000;
-    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 0.25;
+    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 1.0;
     const bgType = document.getElementById('bgMusic').value !== 'none' ? document.getElementById('bgMusic').value : 'drone';
     const pexelsKey = (document.getElementById('pexelsKey') && document.getElementById('pexelsKey').value.trim()) || _p;
 
