@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.3.0';
+  const CURRENT_VERSION = 'v1.3.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.3.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.3.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1006,14 +1006,13 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     const ttsText = (gData.script || '').trim().slice(0, 1200);
     const ttsVoice = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
 
+    window._ttsRawMp3 = null;
     try {
       const ttsUrl = `http://127.0.0.1:5555/tts?text=${encodeURIComponent(ttsText)}&voice=${encodeURIComponent(ttsVoice)}`;
       const ttsRes = await fetch(ttsUrl);
       if (!ttsRes.ok) throw new Error('server HTTP ' + ttsRes.status);
-      const ttsArrayBuffer = await ttsRes.arrayBuffer();
-      const decoded = await audioCtx.decodeAudioData(ttsArrayBuffer);
-      window._ttsBuffer = { buffer: decoded, decoded: true };
-      addLog('Voce pronta (edge-tts neurale).');
+      window._ttsRawMp3 = await ttsRes.arrayBuffer();
+      addLog('Voce scaricata (edge-tts neurale).');
     } catch(e) {
       addLog('⚠️ Server vocale non raggiungibile: ' + (e.message || e));
       addLog('   Avvia "py voice_server.py" per avere la voce nel video.');
@@ -1061,17 +1060,18 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
       scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
     }
 
-    // TTS — connette meSpeak buffer al grafo audio
+    // TTS — decodifica l'MP3 (qui audioCtx esiste) e lo connette al grafo audio
     let ttsBufferNode = null;
-    if (window._ttsBuffer && window._ttsBuffer.decoded) {
+    if (window._ttsRawMp3) {
       try {
+        const decoded = await audioCtx.decodeAudioData(window._ttsRawMp3.slice(0));
         ttsBufferNode = audioCtx.createBufferSource();
-        ttsBufferNode.buffer = window._ttsBuffer.buffer;
-        const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.0;
+        ttsBufferNode.buffer = decoded;
+        const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.6;
         ttsBufferNode.connect(ttsG);
         ttsG.connect(master); // → audioDest → video
-        addLog('Voce meSpeak collegata al grafo audio.');
-      } catch(e) { addLog('Errore connessione audio: ' + (e.message||e)); }
+        addLog('Voce collegata al grafo audio.');
+      } catch(e) { addLog('Errore decodifica voce: ' + (e.message||e)); }
     }
 
     // FASE 5: Canvas + MediaRecorder
