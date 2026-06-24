@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.9.1';
+  const CURRENT_VERSION = 'v2.0.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.9.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.0.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -223,6 +223,18 @@
       <button class="btn btn-primary" onclick="startGen()" style="width:100%;justify-content:center;padding:14px">
         🔍 Analizza trend e genera contenuto
       </button>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">📅 Batch settimanale (automatico)</div>
+      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Genera N video di fila, li monta e li <strong>programma su YouTube</strong> a giorni consecutivi. Per ogni video salva anche video+didascalia in <code>output/</code> per caricarli a mano su TikTok/Instagram. Richiede server attivo e YouTube collegato (step 6).</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="input-group" style="flex:1;min-width:90px"><label class="input-label">Quanti</label><input class="input-field" id="batchDays" type="number" min="1" max="14" value="7"></div>
+        <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Ora/giorno</label><input class="input-field" id="batchTime" type="time" value="21:00"></div>
+        <div class="input-group" style="flex:1;min-width:120px"><label class="input-label">Visibilità</label><select class="input-field" id="batchPrivacy"><option value="private" selected>🔒 Privato</option><option value="public">🌍 Pubblico</option><option value="unlisted">🔗 Non in elenco</option></select></div>
+      </div>
+      <button class="btn btn-primary" id="batchBtn" onclick="runWeeklyBatch()" style="width:100%;justify-content:center">🚀 Genera e programma</button>
+      <div id="batchLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:200px;overflow-y:auto"></div>
     </div>
   </div>
 
@@ -426,152 +438,109 @@
     if (n === 6 && gData) renderPublish();
   }
 
-  // --- Generate script via Groq (direct browser call) ---
-  async function startGen() {
+  // --- Core generazione script (riusabile da manuale e batch) ---
+  async function generateScriptData(lang, dur) {
     const k = getKeys();
-    if (!k.groq) { openKeys(); return; }
-
-    const lang = document.getElementById('lang').value;
-    const dur = document.getElementById('dur').value;
-    goTo(2);
-    let mi = 0;
-    const iv = setInterval(() => { document.getElementById('loaderMsg').textContent = loaderMsgs[mi % loaderMsgs.length]; mi++; }, 1600);
-
-    // Sottogeneri disponibili — scelto casualmente per varietà
     const sottogeneri = [
       { nome: 'horror domestico', ambientazione: 'casa, stanze, specchi, seminterrato', video_theme: 'home' },
       { nome: 'tecnologia maledetta', ambientazione: 'schermo, messaggi, app, algoritmo', video_theme: 'tech' },
       { nome: 'entità nel bosco', ambientazione: 'foresta, sentiero, nebbia, alberi', video_theme: 'forest' },
-      { nome: 'memoria perduta', ambientazione: 'ricordi distordi, fotografie, deja vu', video_theme: 'dark' },
+      { nome: 'memoria perduta', ambientazione: 'ricordi distorti, fotografie, deja vu', video_theme: 'dark' },
       { nome: 'stalker soprannaturale', ambientazione: 'seguire, ombra, rumori, presenza', video_theme: 'urban' },
       { nome: 'luogo abbandonato', ambientazione: 'ospedale, scuola, fabbrica dismessa', video_theme: 'abandoned' },
       { nome: 'sogno lucido maledetto', ambientazione: 'sogno, sonno, paralisi, confine realtà', video_theme: 'dark' },
       { nome: 'bambino inquietante', ambientazione: 'giocattoli, risate, cameretta, buio', video_theme: 'home' },
     ];
     const sg = sottogeneri[Math.floor(Math.random() * sottogeneri.length)];
-    // Salva il tema video per usarlo dopo
     window._videoTheme = sg.video_theme;
 
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
-    // System message nella lingua target — guida fortemente la lingua di output
     const langSystem = lang === 'inglese'
       ? 'You are a world-class horror screenwriter. You MUST write every single piece of text (script, title, description, all string values) exclusively in ENGLISH. Never write in Italian or any other language. The JSON keys stay as given, but every text VALUE must be in English.'
       : lang === 'spagnolo'
-      ? 'Eres un guionista de terror de fama mundial. DEBES escribir absolutamente todo el texto (guion, título, descripción, todos los valores de texto) exclusivamente en ESPAÑOL. Nunca escribas en italiano ni en ningún otro idioma. Las claves JSON quedan igual, pero cada VALOR de texto debe estar en español.'
+      ? 'Eres un guionista de terror de fama mundial. DEBES escribir absolutamente todo el texto exclusivamente en ESPAÑOL. Nunca escribas en italiano ni en ningún otro idioma. Las claves JSON quedan igual, pero cada VALOR de texto debe estar en español.'
       : 'Sei uno sceneggiatore horror di fama mondiale. Scrivi tutti i testi esclusivamente in ITALIANO.';
     const prompt = `Sei uno sceneggiatore horror di fama mondiale specializzato in cortometraggi virali per ${platform}. La tua creepypasta deve fermare lo scroll in 1 secondo e hauntar la mente per giorni.
 
-⚠️ LINGUA OBBLIGATORIA: scrivi TUTTI i contenuti testuali (script, titolo, descrizione, e ogni altro testo) ESCLUSIVAMENTE in ${langName}. Anche se queste istruzioni sono in italiano, il tuo output DEVE essere interamente in ${langName}. Non mischiare le lingue.
+⚠️ LINGUA OBBLIGATORIA: scrivi TUTTI i contenuti testuali ESCLUSIVAMENTE in ${langName}. Anche se queste istruzioni sono in italiano, il tuo output DEVE essere interamente in ${langName}.
 
 PARAMETRI:
 - Piattaforma: ${platform}
 - Lingua output: ${langName}
-- Durata: ${dur} secondi — lo script DEVE contenere ALMENO ${Math.round(parseInt(dur) * 2.6)} parole per riempire tutto il video. Una voce narrante legge ~2.6 parole al secondo: se scrivi meno parole, il video resta in silenzio. NON scrivere meno del minimo.
+- Durata: ${dur} secondi — lo script DEVE contenere ALMENO ${Math.round(parseInt(dur) * 2.6)} parole. Una voce legge ~2.6 parole/sec: meno parole = video muto. NON scrivere meno del minimo.
 - Sottogenere OBBLIGATORIO: ${sg.nome}
 - Ambientazione: ${sg.ambientazione}
 
-COME SCRIVERE LO SCRIPT:
-Scrivi una vera creepypasta in prima persona: un fatto reale, quotidiano, che lentamente si rivela impossibile. Niente titoli, niente atti. Il lettore deve essere trascinato dalla prima parola all'ultima senza mai sapere dove sta andando. La tensione cresce come nella vita vera, poi precipita.
+LA PRIMA FRASE È TUTTO (HOOK): deve fermare lo scroll in mezzo secondo, uno shock immediato che crea una domanda bruciante. Mai introduzioni lente.
 
-LA PRIMA FRASE È TUTTO (HOOK):
-La prima frase deve fermare lo scroll in mezzo secondo. Deve essere uno shock immediato: un'affermazione tranquilla che nasconde un orrore agghiacciante, o un dettaglio impossibile detto con naturalezza. Deve creare INSTANTANEAMENTE una domanda bruciante a cui il lettore DEVE sapere la risposta. Mai un'introduzione lenta, mai "ti racconto di quella volta". Colpisci subito.
-Esempi di forza dell'hook: "Mia figlia ride sempre quando dorme. Stanotte ho sentito due risate." / "Ogni notte qualcuno spegne la luce di camera mia. Vivo da solo."
+TECNICA (CREEPYPASTA AVVINCENTE):
+- Protagonista ordinario, dettagli mondani specifici (un nome, "le 3:14", un oggetto comune)
+- Dal normale al dettaglio sbagliato che gela il sangue; dettagli sensoriali concreti
+- Ogni frase apre una nuova domanda; a metà un secondo shock più grande
+- Orrore implicito e suggerito; escalation continua
+- FINALE A TWIST che ribalta tutto e fa rileggere da capo
 
-TECNICA NARRATIVA (CREEPYPASTA AVVINCENTE):
-- Protagonista ordinario e relazionabile: dettagli mondani e specifici (un nome, un orario preciso come "le 3:14", un oggetto comune) così lo spettatore si immedesima e ci crede
-- Parti dal normale e quotidiano, poi infila UN dettaglio sbagliato che gela il sangue
-- Dettagli sensoriali concreti (suoni, odori, temperatura, texture) — mai aggettivi vaghi
-- Ogni frase apre una nuova domanda inquietante, mai chiude quella prima — il lettore DEVE sapere cosa succede dopo
-- A METÀ storia metti un secondo shock più grande del primo: quando il lettore pensa di aver capito, peggiora
-- Usa la regola d'oro dell'horror virale: l'orrore è implicito e suggerito, mai mostrato del tutto — la mente del lettore fa il resto, ed è sempre peggio
-- Escalation continua: piccolo segnale → realizzazione lenta → il protagonista fa una cosa sbagliata → punto di non ritorno
-- FINALE A TWIST: l'ultima frase deve RIBALTARE tutto e ricontestualizzare la storia, facendo capire al lettore che l'orrore era lì dall'inizio. Non spiegare nulla. Un colpo allo stomaco che resta in testa per giorni e fa rileggere da capo.
+REGOLE: SOLO una storia (zero prodotti/pubblicità), prima persona, frasi brevi ma numerose, mostra non dire, mini-rivelazione ogni 2-3 frasi.
 
-REGOLE ASSOLUTE:
-- È SOLO una storia: nessun prodotto, nessuna pubblicità, nessuna menzione di oggetti da comprare. Pura narrazione horror che cattura.
-- Prima persona, tempo passato o presente
-- Frasi brevi e incisive, MA TANTE: la storia deve essere ricca di eventi e svolte per riempire tutta la durata. Aggiungi dettagli, scene, escalation — non finire troppo presto.
-- Mai "era spaventoso" o "avevo paura" — mostra, non dire
-- ZERO struttura a atti, ZERO titoletti, ZERO pubblicità
-- Ogni 2-3 frasi deve esserci una mini-rivelazione che spinge a continuare: il pubblico non deve poter smettere di guardare
-- Lo script è un flusso unico di coscienza, come un messaggio mandato a un amico alle 3 di notte
-
-ESEMPI DI HOOK POTENTI (NON copiare, ispirati alla forza):
-- "Ho sentito mia madre chiamarmi dal piano di sotto. È sepolta nel giardino da tre anni."
-- "Il GPS mi ha portato a casa mia. Non ci abito più da cinque anni."
-- "Ho trovato una foto di me dormiente sul mio telefono. Ero sveglio."
-- "Mia figlia ride sempre quando dorme. Stanotte ho sentito due risate."
-- "Il citofono suona ogni notte alle 3:07. Sullo schermo ci sono sempre io."
-- "Mio marito è morto a marzo. I suoi vestiti sporchi sono ancora nel cesto, e cambiano."
-
-Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
-
-IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tutti gli altri campi. La storia DEVE avere un inizio, uno sviluppo e una conclusione devastante entro il numero di parole richiesto — mai interrompersi a metà.
+Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, prima degli altri campi.
 
 {
-  "script": "La storia completa, AUTOCONCLUSIVA e LUNGA (almeno ${Math.round(parseInt(dur) * 2.6)} parole): flusso unico, niente atti, niente titoletti. Hook fulminante nella prima frase. Frasi brevi ma numerose, ricche di eventi. Tensione crescente. DEVE arrivare a un finale che chiude la storia con un colpo allo stomaco — non lasciarla sospesa a metà racconto. ZERO pubblicità.",
+  "script": "Storia completa AUTOCONCLUSIVA e LUNGA (almeno ${Math.round(parseInt(dur) * 2.6)} parole): hook fulminante, frasi brevi numerose, tensione crescente, finale a colpo di scena. ZERO pubblicità.",
   "nicchia": "${sg.nome}",
   "video_theme": "${sg.video_theme}",
   "viral_score": numero 1-100,
-  "viral_score_reason": "perché questo sottogenere esplode ora su ${platform}",
-  "competitor_analysis": "chi domina questo sottogenere e il gap che sfruttiamo",
+  "viral_score_reason": "perché esplode ora su ${platform}",
+  "competitor_analysis": "chi domina e il gap",
   "trend_tags": ["tag1","tag2","tag3","tag4","tag5"],
-  "titolo": "titolo che terrorizza scritto in ${langName}, max 60 caratteri, per ${platform}",
-  "descrizione": "descrizione che fa venire i brividi scritta in ${langName}, max 200 caratteri, aumenta curiosità",
-  "hashtags": ["10 hashtag horror virali scritti in ${langName} (tradotti, NON in italiano se la lingua è diversa), ognuno con #, mix di tag generici horror e specifici del sottogenere"],
-  "scene_queries": ["UNA query di ricerca video stock per OGNI frase dello script, NELLO STESSO ORDINE delle frasi. SEMPRE in INGLESE (anche se lo script è in altra lingua). Ogni query = 2-4 parole che descrivono VISIVAMENTE e in modo concreto cosa si vede in quella frase, in stile horror cinematografico (es. 'dark empty hallway', 'old photograph hand', 'child bedroom night', 'foggy forest path', 'phone screen glow dark'). Deve esserci esattamente una query per frase, stesso numero di frasi dello script."],
+  "titolo": "titolo che terrorizza in ${langName}, max 60 caratteri",
+  "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
+  "hashtags": ["10 hashtag horror in ${langName} (tradotti), ognuno con #"],
+  "scene_queries": ["UNA query video stock per OGNI frase, stesso ordine, SEMPRE in INGLESE, 2-4 parole visive horror (es. 'dark empty hallway','old photograph hand','child bedroom night'). Una per frase."],
   "orario_pubblicazione": "orario sera/notte ottimale per horror su ${platform}",
-  "tip_viralita": "consiglio specifico per questo sottogenere su ${platform}"
+  "tip_viralita": "consiglio specifico"
 }`;
 
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k.groq}` },
-        body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'system', content: langSystem }, { role: 'user', content: prompt }], temperature: 0.85, max_tokens: 3000 })
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k.groq}` },
+      body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'system', content: langSystem }, { role: 'user', content: prompt }], temperature: 0.85, max_tokens: 3000 })
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
+    const dataR = await res.json();
+    let text = dataR.choices?.[0]?.message?.content || '';
+    let clean = text.replace(/```json|```/g, '').trim();
+    const start = clean.indexOf('{'); const end = clean.lastIndexOf('}');
+    if (start !== -1 && end !== -1) clean = clean.slice(start, end + 1);
+    clean = clean.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,\s*([}\]])/g, '$1').replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    let out;
+    try { out = normalizeData(JSON.parse(clean)); }
+    catch {
+      const extract = (key, def) => { const m = clean.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`)); return m ? m[1] : def; };
+      const extractArr = (key) => { const m = clean.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*?)\\]`)); if (!m) return []; return m[1].match(/"([^"]*)"/g)?.map(s => s.replace(/"/g,'')) || []; };
+      out = normalizeData({
+        nicchia: extract('nicchia','Creepypasta'), viral_score: 78, viral_score_reason: extract('viral_score_reason','Alta viralità'),
+        competitor_analysis: extract('competitor_analysis',''), trend_tags: extractArr('trend_tags'),
+        orario_pubblicazione: extract('orario_pubblicazione','21:00'), titolo: extract('titolo','Storia di terrore'),
+        script: extract('script', clean.slice(0, 500)), hashtags: extractArr('hashtags'),
+        descrizione: extract('descrizione',''), tip_viralita: extract('tip_viralita',''),
+        scene_queries: extractArr('scene_queries'), video_theme: extract('video_theme','dark'),
       });
+    }
+    return out;
+  }
+
+  // --- Generate script (flusso manuale) ---
+  async function startGen() {
+    const k = getKeys();
+    if (!k.groq) { openKeys(); return; }
+    const lang = document.getElementById('lang').value;
+    const dur = document.getElementById('dur').value;
+    goTo(2);
+    let mi = 0;
+    const iv = setInterval(() => { document.getElementById('loaderMsg').textContent = loaderMsgs[mi % loaderMsgs.length]; mi++; }, 1600);
+    try {
+      gData = await generateScriptData(lang, dur);
       clearInterval(iv);
-      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
-      const data = await res.json();
-      let text = data.choices?.[0]?.message?.content || '';
-      let clean = text.replace(/```json|```/g, '').trim();
-      const start = clean.indexOf('{'); const end = clean.lastIndexOf('}');
-      if (start !== -1 && end !== -1) clean = clean.slice(start, end + 1);
-      // Ripara JSON rotto: rimuove trailing comma, commenti, caratteri di controllo
-      clean = clean
-        .replace(/[\x00-\x1F\x7F]/g, ' ')   // caratteri di controllo
-        .replace(/,\s*([}\]])/g, '$1')        // trailing comma
-        .replace(/\/\/[^\n]*/g, '')           // commenti //
-        .replace(/\/\*[\s\S]*?\*\//g, '');    // commenti /* */
-      try {
-        gData = JSON.parse(clean);
-        gData = normalizeData(gData);
-      } catch {
-        // Fallback: estrae i campi chiave con regex se JSON è irrecuperabile
-        const extract = (key, def) => {
-          const m = clean.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`) );
-          return m ? m[1] : def;
-        };
-        const extractArr = (key) => {
-          const m = clean.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*?)\\]`));
-          if (!m) return [];
-          return m[1].match(/"([^"]*)"/g)?.map(s => s.replace(/"/g,'')) || [];
-        };
-        gData = {
-          nicchia: extract('nicchia','Creepypasta'),
-          viral_score: 78, viral_score_reason: extract('viral_score_reason','Alta viralità'),
-          competitor_analysis: extract('competitor_analysis',''),
-          trend_tags: extractArr('trend_tags'),
-          orario_pubblicazione: extract('orario_pubblicazione','20:00'),
-          titolo: extract('titolo','Storia di terrore'),
-          script: extract('script', clean.slice(0, 500)),
-          hashtags: extractArr('hashtags'),
-          descrizione: extract('descrizione',''),
-          tip_viralita: extract('tip_viralita',''),
-          affiliate: { prodotto: extract('prodotto',''), perche:'', commissione:'', piattaforma:'', cta:'' },
-          video_theme: extract('video_theme','dark'),
-        };
-      }
       renderResults(gData);
       goTo(3);
     } catch(err) {
@@ -816,7 +785,36 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     if (ab) { ab.style.display = ''; ab.textContent = '🔄 Rigenera'; }
   }
 
-  // --- Fetch video stock via Pexels (direct browser call) ---
+  // --- Core fetch clip (riusabile da manuale e batch) ---
+  async function fetchClipsData(data, pexelsKey) {
+    const theme = (data && data.video_theme) || window._videoTheme || 'dark';
+    const basePool = themePools[theme] || themePools.dark;
+    const sceneQ = (data.scene_queries || []).filter(q => q && q.trim()).slice(0, 16);
+    const perSentence = sceneQ.length >= 3;
+    const queries = perSentence ? sceneQ : [...basePool, ...basePool].slice(0, 10);
+    const maxClips = perSentence ? sceneQ.length : 10;
+    const results = [];
+    for (const query of queries) {
+      if (results.length >= maxClips) break;
+      const page = perSentence ? 1 : Math.floor(Math.random() * 3) + 1;
+      let video = null;
+      try {
+        const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=8&page=${page}&orientation=portrait`, { headers: { Authorization: pexelsKey } });
+        if (res.ok) {
+          const d = await res.json();
+          const vids = d.videos || [];
+          video = perSentence ? vids[0] : vids[Math.floor(Math.random() * Math.min(vids.length, 5))];
+        }
+      } catch {}
+      if (video) {
+        const file = video.video_files.filter(f => f.quality === 'hd' || f.quality === 'sd').sort((a, b) => a.width - b.width)[0];
+        results.push({ url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url, query });
+      }
+    }
+    return { results, perSentence };
+  }
+
+  // --- Fetch video stock via Pexels (flusso manuale) ---
   async function generateImages() {
     if (!gData) return;
     const k = getKeys();
@@ -829,47 +827,11 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     document.getElementById('imgBadge').textContent = 'In corso...';
     document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${Array.from({length:10},(_,i)=>`<div class="img-placeholder">🎬 ${i+1}/10...</div>`).join('')}</div>`;
 
-    const theme = (gData && gData.video_theme) || window._videoTheme || 'dark';
-    const basePool = themePools[theme] || themePools.dark;
-    // Se l'AI ha generato query per frase, usa QUELLE in ordine (clip a tema, allineate alle frasi).
-    // Altrimenti ripiega sul pool tematico generico.
-    const sceneQ = (gData.scene_queries || []).filter(q => q && q.trim()).slice(0, 16);
-    const perSentence = sceneQ.length >= 3;
-    const queries = perSentence ? sceneQ : [...basePool, ...basePool].slice(0, 10);
-    const maxClips = perSentence ? sceneQ.length : 10;
-    // estende il placeholder grid al numero giusto
-    document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${Array.from({length:Math.min(maxClips,16)},(_,i)=>`<div class="img-placeholder">🎬 ${i+1}/${maxClips}...</div>`).join('')}</div>`;
-
     try {
-      const results = [];
-      for (const query of queries) {
-        if (results.length >= maxClips) break;
-        const page = perSentence ? 1 : Math.floor(Math.random() * 3) + 1;
-        let video = null;
-        try {
-          const res = await fetch(
-            `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=8&page=${page}&orientation=portrait`,
-            { headers: { Authorization: k.pexels } }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            const vids = data.videos || [];
-            // per-frase: prendo il PIÙ pertinente (primo); generico: random tra i primi
-            video = perSentence ? vids[0] : vids[Math.floor(Math.random() * Math.min(vids.length, 5))];
-          }
-        } catch {}
-        if (video) {
-          const file = video.video_files
-            .filter(f => f.quality === 'hd' || f.quality === 'sd')
-            .sort((a, b) => a.width - b.width)[0];
-          results.push({ url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url, query });
-        } else if (!perSentence) {
-          results.push(null);
-        }
-      }
-      // NON filtrare/troncare per-frase: l'ordine deve corrispondere alle frasi
-      generatedVideos = perSentence ? results.filter(Boolean) : results.filter(Boolean).slice(0, 10);
-      window._perSentenceClips = perSentence;
+      const r = await fetchClipsData(gData, k.pexels);
+      const results = r.results;
+      generatedVideos = results;
+      window._perSentenceClips = r.perSentence;
       document.getElementById('imgBadge').textContent = '✓ Completato';
       document.getElementById('imgBadge').className = 'badge-done';
       document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${results.map((v,i) => v
@@ -1116,6 +1078,111 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     buildMusicInto(octx, master, bgType);
     const buf = await octx.startRendering();
     return audioBufferToWavBase64(buf);
+  }
+
+  // --- Render riusabile (manuale + batch): tts + musica + /render -> blob MP4 ---
+  async function renderVideoData(data, clips, opts) {
+    const targetSec = opts.targetSec || 61;
+    const bgVol = opts.bgVol != null ? opts.bgVol : 1.0;
+    const bgType = opts.bgType || 'drone';
+    const voice = opts.voice || 'it-IT-DiegoNeural';
+    const ttsText = (data.script || '').trim().slice(0, 3000);
+    const r = await fetch(`http://127.0.0.1:5555/tts_json?text=${encodeURIComponent(ttsText)}&voice=${encodeURIComponent(voice)}`);
+    if (!r.ok) throw new Error('TTS HTTP ' + r.status);
+    const j = await r.json();
+    const voiceB64 = j.audio;
+    const timings = (j.words || []).filter(x => x.w && x.w.trim());
+    if (!timings.length) throw new Error('nessuna frase');
+    const voiceDurMs = timings[timings.length-1].t + timings[timings.length-1].d;
+    const totalMs = Math.max(targetSec*1000, voiceDurMs + 1200);
+    let musicB64 = null;
+    if (bgType !== 'none') { try { musicB64 = await renderMusicWavBase64(bgType, bgVol, totalMs/1000); } catch {} }
+    const rr = await fetch('http://127.0.0.1:5555/render', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ voice_mp3_b64: voiceB64, timings, music_wav_b64: musicB64, clips, total_ms: totalMs, voice_vol: 1.8, music_vol: bgVol })
+    });
+    if (!rr.ok) throw new Error(await rr.text());
+    return await rr.blob();
+  }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  function voiceForLang(lang) {
+    const v = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
+    if (lang === 'inglese') return v.startsWith('en-') ? v : 'en-US-GuyNeural';
+    if (lang === 'spagnolo') return v.startsWith('es-') ? v : 'es-ES-AlvaroNeural';
+    return v.startsWith('it-') ? v : 'it-IT-DiegoNeural';
+  }
+
+  // --- Batch settimanale: genera N video, monta, programma su YouTube, salva pack TikTok/IG ---
+  async function runWeeklyBatch() {
+    const log = document.getElementById('batchLog');
+    const btn = document.getElementById('batchBtn');
+    const add = m => { log.innerHTML += `<div>${m}</div>`; log.scrollTop = log.scrollHeight; };
+    log.innerHTML = '';
+    const days = Math.max(1, Math.min(14, parseInt(document.getElementById('batchDays').value) || 7));
+    const timeStr = document.getElementById('batchTime').value || '21:00';
+    const privacy = document.getElementById('batchPrivacy').value;
+    const lang = document.getElementById('lang').value;
+    const dur = document.getElementById('dur').value;
+    const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
+    const bgType = document.getElementById('bgMusic') && document.getElementById('bgMusic').value !== 'none' ? document.getElementById('bgMusic').value : 'drone';
+    const voice = voiceForLang(lang);
+    const k = getKeys();
+
+    btn.disabled = true; btn.textContent = '⏳ In corso...';
+    // verifiche
+    try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
+    catch { add('⚠️ Server locale non attivo (py voice_server.py).'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+    try { const s = await (await fetch('http://127.0.0.1:5555/youtube_status')).json(); if (!s.authorized) { add('⚠️ YouTube non collegato. Vai allo step 6 e collega prima.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; } add('✅ YouTube: ' + (s.channel||'collegato')); }
+    catch { add('⚠️ Impossibile verificare YouTube.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+    if (!k.pexels) { add('⚠️ Chiave Pexels mancante.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+
+    // base data: prossima occorrenza dell'orario scelto
+    const [hh, mm] = timeStr.split(':').map(n=>parseInt(n));
+    const base = new Date(); base.setHours(hh, mm, 0, 0);
+    if (base.getTime() < Date.now() + 10*60*1000) base.setDate(base.getDate()+1);
+
+    let ok = 0;
+    for (let i = 0; i < days; i++) {
+      const dayLabel = `[${i+1}/${days}]`;
+      try {
+        add(`${dayLabel} genero script...`);
+        const data = await generateScriptData(lang, dur);
+        add(`${dayLabel} «${data.titolo}»`);
+        const clips = (await fetchClipsData(data, k.pexels)).results.map(v=>v.url);
+        if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
+        add(`${dayLabel} monto video (${clips.length} clip)...`);
+        await renderVideoData(data, clips, { voice, bgType, bgVol, targetSec: parseInt(dur) });
+        // programma il giorno i
+        const when = new Date(base); when.setDate(base.getDate()+i);
+        const publishAt = when.toISOString();
+        const desc = (data.descrizione||'') + '\n\n' + (data.hashtags||[]).join(' ');
+        const tags = [...(data.hashtags||[]).map(h=>h.replace(/^#/,'')), ...(data.trend_tags||[])].filter(Boolean);
+        add(`${dayLabel} carico su YouTube (${when.toLocaleDateString()} ${timeStr})...`);
+        const up = await fetch('http://127.0.0.1:5555/youtube_upload', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ title: data.titolo, description: desc, tags, privacy, publishAt, thumbnail: true })
+        });
+        if (!up.ok) throw new Error(await up.text());
+        const uj = await up.json();
+        // salva pacchetto per TikTok/IG
+        const dayStr = when.toISOString().slice(0,10);
+        try {
+          await fetch('http://127.0.0.1:5555/save_pack', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ date: dayStr, title: data.titolo, caption: data.titolo + '\n\n' + desc })
+          });
+        } catch {}
+        add(`${dayLabel} ✅ ${uj.url} · pacchetto TikTok/IG salvato (${dayStr})`);
+        ok++;
+      } catch(e) {
+        add(`${dayLabel} ❌ ${e.message||e}`);
+      }
+      if (i < days-1) { add(`${dayLabel} attendo 60s (limite API Groq)...`); await sleep(60000); }
+    }
+    add(`🎉 Fatto: ${ok}/${days} video programmati. Pacchetti TikTok/IG nella cartella output/.`);
+    btn.disabled = false; btn.textContent = '🚀 Genera e programma';
   }
 
   async function assembleVideo() {
