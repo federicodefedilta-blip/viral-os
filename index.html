@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.3.2';
+  const CURRENT_VERSION = 'v1.4.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.3.2</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -470,7 +470,7 @@
 PARAMETRI:
 - Piattaforma: ${platform}
 - Lingua: ${lang}
-- Durata: ${dur} secondi (circa ${Math.round(parseInt(dur) * 2.2)} parole)
+- Durata: ${dur} secondi — lo script DEVE contenere ALMENO ${Math.round(parseInt(dur) * 2.6)} parole per riempire tutto il video. Una voce narrante legge ~2.6 parole al secondo: se scrivi meno parole, il video resta in silenzio. NON scrivere meno del minimo.
 - Sottogenere OBBLIGATORIO: ${sg.nome}
 - Ambientazione: ${sg.ambientazione}
 - Prodotto affiliate da integrare: ${affCat === 'auto' ? 'scegli tu un prodotto horror/thriller correlato al sottogenere' : affCat}
@@ -487,7 +487,7 @@ TECNICA NARRATIVA:
 
 REGOLE ASSOLUTE:
 - Prima persona, tempo passato o presente
-- Frasi brevi. Molto brevi. Poi silenzio. Poi un'altra.
+- Frasi brevi e incisive, MA TANTE: la storia deve essere ricca di eventi e svolte per riempire tutta la durata. Aggiungi dettagli, scene, escalation — non finire troppo presto.
 - Mai "era spaventoso" o "avevo paura" — mostra, non dire
 - ZERO struttura a atti, ZERO titoletti, ZERO pubblicità
 - Lo script è un flusso unico di coscienza, come un messaggio mandato a un amico alle 3 di notte
@@ -513,7 +513,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     "perche": "perché converte con audience horror",
     "cta": "come appare nella storia — sembra parte della trama non pubblicità"
   },
-  "script": "La storia completa: flusso unico, niente atti, niente titoletti. Frasi brevi. Tensione crescente naturale. Finale aperto devastante. ZERO pubblicità.",
+  "script": "La storia completa e LUNGA (almeno ${Math.round(parseInt(dur) * 2.6)} parole): flusso unico, niente atti, niente titoletti. Frasi brevi ma numerose, ricche di eventi. Tensione crescente naturale. Finale aperto devastante. ZERO pubblicità.",
   "titolo": "titolo che terrorizza, max 60 caratteri, per ${platform}",
   "descrizione": "descrizione che fa venire i brividi, max 200 caratteri, aumenta curiosità",
   "hashtags": ["#creepypasta","#horror","#scary","#paranormal","#storiedipaura","#horrortok","#brividi","#soprannaturale","#paura","#horrorshorts"],
@@ -1003,7 +1003,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
     // FASE 2: TTS via server vocale locale (edge-tts, voce neurale italiana)
     addLog('Genero voce neurale (server locale)...');
-    const ttsText = (gData.script || '').trim().slice(0, 1200);
+    const ttsText = (gData.script || '').trim().slice(0, 3000);
     const ttsVoice = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
 
     window._ttsRawMp3 = null;
@@ -1023,9 +1023,12 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     const videoEls = [];
     for (const url of blobUrls) {
       const v = document.createElement('video');
-      v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.crossOrigin = 'anonymous';
-      await new Promise(r => { v.onloadeddata = r; v.onerror = r; setTimeout(r, 3000); v.load(); });
-      if (v.readyState >= 1) videoEls.push(v);
+      v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
+      // Aspetta canplaythrough (readyState 4) per playback fluido, con timeout di sicurezza
+      await new Promise(r => {
+        v.oncanplaythrough = r; v.onerror = r; setTimeout(r, 4000); v.load();
+      });
+      if (v.readyState >= 2) videoEls.push(v);
     }
     if (videoEls.length === 0) { addLog('Errore: clip non caricabili.'); btn.disabled = false; return; }
 
@@ -1131,6 +1134,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
     const startTime = Date.now();
     let currentClipIdx = 0;
+    let prerolledIdx = -1;
     videoEls[0] && videoEls[0].play().catch(() => {});
 
     await new Promise(resolve => {
@@ -1147,12 +1151,25 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
           return;
         }
 
-        // Cambio clip
         const expectedIdx = Math.min(Math.floor(elapsed / clipDurMs), numClips - 1);
+
+        // Pre-roll: avvia la clip successiva ~0.8s prima del cambio, così è già fluida
+        const nextIdx = Math.min(expectedIdx + 1, numClips - 1);
+        if (nextIdx !== currentClipIdx && nextIdx !== prerolledIdx) {
+          const tIntoClip = elapsed - expectedIdx * clipDurMs;
+          if (tIntoClip > clipDurMs - 800) {
+            try { videoEls[nextIdx].play().catch(() => {}); } catch {}
+            prerolledIdx = nextIdx;
+          }
+        }
+
+        // Cambio clip (la nuova è già in riproduzione grazie al pre-roll)
         if (expectedIdx !== currentClipIdx) {
-          try { videoEls[currentClipIdx].pause(); } catch {}
+          const prev = currentClipIdx;
           currentClipIdx = expectedIdx;
           try { videoEls[currentClipIdx].play().catch(() => {}); } catch {}
+          // Pausa la clip precedente dopo un attimo (evita scatti durante lo switch)
+          setTimeout(() => { try { videoEls[prev].pause(); } catch {} }, 100);
         }
 
         // Disegno frame video
