@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.5.0';
+  const CURRENT_VERSION = 'v1.5.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.5.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.5.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -316,7 +316,7 @@
       <div class="card-title">🎬 Montaggio automatico</div>
       <div class="step-card">
         <div class="step-card-title">⚙️ Assembla il video finale <span class="badge-pending" id="assembleBadge">In attesa</span></div>
-        <div class="step-card-desc">Assembla fino a 10 clip video + musica horror + voce neurale + sottotitoli. Richiede il server vocale locale attivo (<code>py voice_server.py</code>).</div>
+        <div class="step-card-desc">Assembla fino a 10 clip video + musica horror + voce neurale + sottotitoli. Richiede il server vocale locale attivo (<code>py voice_server.py</code>). ⚠️ Tieni questa scheda in primo piano durante la registrazione, altrimenti il video si congela.</div>
         <div style="margin-top:10px">
           <label class="input-label" style="font-size:0.75em">🎙️ Voce</label>
           <select class="input-field" id="ttsVoice">
@@ -1176,7 +1176,9 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
 
     await new Promise(resolve => {
       let lastLoggedSec = -1;
-      function frame() {
+      // setInterval invece di requestAnimationFrame: continua a girare anche se la
+      // scheda perde il focus (rAF si congela in background → video statico).
+      const intervalId = setInterval(() => {
         const elapsed = Date.now() - startTime;
 
         // Aggiorna log ogni 5 secondi
@@ -1187,6 +1189,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
         }
 
         if (elapsed >= recDurMs) {
+          clearInterval(intervalId);
           videoEls.forEach(v => { try { v.pause(); } catch {} });
           resolve();
           return;
@@ -1267,9 +1270,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
         ctx2d.fillStyle = 'rgba(255,255,255,0.15)'; ctx2d.fillRect(0, ch - 6, cw, 6);
         ctx2d.fillStyle = 'rgba(255,80,80,0.85)'; ctx2d.fillRect(0, ch - 6, cw * (elapsed / recDurMs), 6);
 
-        requestAnimationFrame(frame);
-      }
-      requestAnimationFrame(frame);
+      }, Math.floor(1000 / 30));
     });
 
     mnodes.forEach(n => { try { n.stop && n.stop(); } catch {} });
