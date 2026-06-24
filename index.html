@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.4.5';
+  const CURRENT_VERSION = 'v1.4.6';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.5</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.6</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -466,6 +466,12 @@
     window._videoTheme = sg.video_theme;
 
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
+    // System message nella lingua target — guida fortemente la lingua di output
+    const langSystem = lang === 'inglese'
+      ? 'You are a world-class horror screenwriter. You MUST write every single piece of text (script, title, description, all string values) exclusively in ENGLISH. Never write in Italian or any other language. The JSON keys stay as given, but every text VALUE must be in English.'
+      : lang === 'spagnolo'
+      ? 'Eres un guionista de terror de fama mundial. DEBES escribir absolutamente todo el texto (guion, título, descripción, todos los valores de texto) exclusivamente en ESPAÑOL. Nunca escribas en italiano ni en ningún otro idioma. Las claves JSON quedan igual, pero cada VALOR de texto debe estar en español.'
+      : 'Sei uno sceneggiatore horror di fama mondiale. Scrivi tutti i testi esclusivamente in ITALIANO.';
     const prompt = `Sei uno sceneggiatore horror di fama mondiale specializzato in cortometraggi virali per ${platform}. La tua creepypasta deve fermare lo scroll in 1 secondo e hauntar la mente per giorni.
 
 ⚠️ LINGUA OBBLIGATORIA: scrivi TUTTI i contenuti testuali (script, titolo, descrizione, e ogni altro testo) ESCLUSIVAMENTE in ${langName}. Anche se queste istruzioni sono in italiano, il tuo output DEVE essere interamente in ${langName}. Non mischiare le lingue.
@@ -538,7 +544,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k.groq}` },
-        body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.8, max_tokens: 4000 })
+        body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'system', content: langSystem }, { role: 'user', content: prompt }], temperature: 0.8, max_tokens: 4000 })
       });
       clearInterval(iv);
       if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
