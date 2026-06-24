@@ -16,6 +16,8 @@ Endpoint:
 
 import asyncio
 import sys
+import json
+import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -27,14 +29,22 @@ DEFAULT_VOICE = "it-IT-DiegoNeural"
 
 
 def genera_mp3(testo, voce):
-    """Genera l'MP3 della voce e restituisce i byte."""
+    """Genera l'MP3 della voce e restituisce (bytes_audio, lista_parole)."""
     async def _run():
         chunks = bytearray()
+        words = []
         communicate = edge_tts.Communicate(testo, voce)
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 chunks.extend(chunk["data"])
-        return bytes(chunks)
+            elif chunk["type"] in ("SentenceBoundary", "WordBoundary"):
+                # offset e duration sono in unità da 100 nanosecondi
+                words.append({
+                    "t": chunk["offset"] / 10000.0,   # ms di inizio
+                    "d": chunk["duration"] / 10000.0,  # ms di durata
+                    "w": chunk.get("text", ""),
+                })
+        return bytes(chunks), words
     return asyncio.run(_run())
 
 
@@ -61,7 +71,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"ok")
             return
 
-        if parsed.path == "/tts":
+        if parsed.path in ("/tts", "/tts_json"):
             testo = (qs.get("text", [""])[0]).strip()
             voce = qs.get("voice", [DEFAULT_VOICE])[0] or DEFAULT_VOICE
             if not testo:
@@ -72,14 +82,26 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 print(f"  -> genero voce ({voce}): {testo[:50]}...")
-                audio = genera_mp3(testo, voce)
-                print(f"     OK {len(audio)//1024} KB")
-                self.send_response(200)
-                self._cors()
-                self.send_header("Content-Type", "audio/mpeg")
-                self.send_header("Content-Length", str(len(audio)))
-                self.end_headers()
-                self.wfile.write(audio)
+                audio, words = genera_mp3(testo, voce)
+                print(f"     OK {len(audio)//1024} KB, {len(words)} parole")
+                if parsed.path == "/tts_json":
+                    payload = json.dumps({
+                        "audio": base64.b64encode(audio).decode("ascii"),
+                        "words": words,
+                    }).encode("utf-8")
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                else:
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-Type", "audio/mpeg")
+                    self.send_header("Content-Length", str(len(audio)))
+                    self.end_headers()
+                    self.wfile.write(audio)
             except Exception as e:
                 print(f"     ERRORE: {e}")
                 self.send_response(500)
