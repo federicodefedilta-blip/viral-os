@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.3.1';
+  const CURRENT_VERSION = 'v1.3.2';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.3.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.3.2</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1062,15 +1062,17 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
     // TTS — decodifica l'MP3 (qui audioCtx esiste) e lo connette al grafo audio
     let ttsBufferNode = null;
+    let voiceDurMs = 0;
     if (window._ttsRawMp3) {
       try {
         const decoded = await audioCtx.decodeAudioData(window._ttsRawMp3.slice(0));
+        voiceDurMs = decoded.duration * 1000;
         ttsBufferNode = audioCtx.createBufferSource();
         ttsBufferNode.buffer = decoded;
         const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.6;
         ttsBufferNode.connect(ttsG);
         ttsG.connect(master); // → audioDest → video
-        addLog('Voce collegata al grafo audio.');
+        addLog(`Voce collegata (${Math.round(voiceDurMs/1000)}s).`);
       } catch(e) { addLog('Errore decodifica voce: ' + (e.message||e)); }
     }
 
@@ -1089,13 +1091,35 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
     const sentences = (gData.script || '').trim().split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 2);
     const numClips = videoEls.length;
-    const clipDurMs = targetMs / numClips;
+    // Durata registrazione: almeno targetMs, ma estesa se la voce è più lunga (così la storia finisce)
+    const recDurMs = voiceDurMs > 1000 ? Math.max(targetMs, voiceDurMs + 1200) : targetMs;
+    const clipDurMs = recDurMs / numClips;
+
+    // Tempi sottotitoli pesati per lunghezza frase (il TTS parla in tempo ~proporzionale ai caratteri).
+    // Sincronizzati sulla durata reale della voce se disponibile, altrimenti sul targetMs.
+    const subTimelineMs = voiceDurMs > 1000 ? voiceDurMs : targetMs;
+    const sentChars = sentences.map(s => s.length);
+    const totalChars = sentChars.reduce((a, b) => a + b, 0) || 1;
+    const sentStartMs = [];
+    let accChars = 0;
+    for (let i = 0; i < sentences.length; i++) {
+      sentStartMs.push((accChars / totalChars) * subTimelineMs);
+      accChars += sentChars[i];
+    }
+    function currentSentenceIdx(elapsed) {
+      if (elapsed >= subTimelineMs) return sentences.length - 1;
+      let idx = 0;
+      for (let i = 0; i < sentStartMs.length; i++) {
+        if (elapsed >= sentStartMs[i]) idx = i; else break;
+      }
+      return idx;
+    }
 
     // Risveglia AudioContext (Edge/Chrome lo avviano sospeso)
     await audioCtx.resume();
     addLog(`AudioCtx: ${audioCtx.state} | tracce audio: ${canvasStream.getAudioTracks().length}`);
 
-    addLog(`Registrazione in corso: ${targetSec}s — nessun audio dal browser, attendi...`);
+    addLog(`Registrazione in corso: ${Math.round(recDurMs/1000)}s — attendi...`);
     badge.textContent = 'Registrazione...';
 
     recorder.start(100);
@@ -1114,9 +1138,9 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         const elapsed = Date.now() - startTime;
 
         // Aggiorna log ogni 5 secondi
-        if (elapsed % 5000 < 50) addLog(`⏱ ${Math.round(elapsed/1000)}s / ${targetSec}s`);
+        if (elapsed % 5000 < 50) addLog(`⏱ ${Math.round(elapsed/1000)}s / ${Math.round(recDurMs/1000)}s`);
 
-        if (elapsed >= targetMs) {
+        if (elapsed >= recDurMs) {
           clearInterval(intervalId);
           videoEls.forEach(v => { try { v.pause(); } catch {} });
           resolve();
@@ -1153,8 +1177,8 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
         ctx2d.fillStyle = grad; ctx2d.fillRect(0, 0, cw, ch);
 
 
-        // Sottotitoli sincronizzati
-        const sentIdx = Math.min(Math.floor((elapsed / targetMs) * sentences.length), sentences.length - 1);
+        // Sottotitoli sincronizzati sulla voce (pesati per lunghezza frase)
+        const sentIdx = currentSentenceIdx(elapsed);
         const sent = (sentences[sentIdx] || '').trim();
         if (sent) {
           const fontSize = Math.min(52, Math.max(36, Math.floor(cw * 0.048)));
@@ -1183,7 +1207,7 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
         // Progress bar
         ctx2d.fillStyle = 'rgba(255,255,255,0.15)'; ctx2d.fillRect(0, ch - 6, cw, 6);
-        ctx2d.fillStyle = 'rgba(255,80,80,0.85)'; ctx2d.fillRect(0, ch - 6, cw * (elapsed / targetMs), 6);
+        ctx2d.fillStyle = 'rgba(255,80,80,0.85)'; ctx2d.fillRect(0, ch - 6, cw * (elapsed / recDurMs), 6);
 
       }, Math.floor(1000 / 30));
     });
