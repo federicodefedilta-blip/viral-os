@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.9.0';
+  const CURRENT_VERSION = 'v1.9.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.9.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.9.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -958,19 +958,43 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
           </select>
         </div>
         <div class="input-group" style="flex:1;min-width:140px">
-          <label class="input-label">Programma (opzionale)</label>
+          <label class="input-label">Programma <button class="btn-sm" onclick="ytSetOptimal()" style="margin-left:4px">🎯 Ottimale</button></label>
           <input class="input-field" id="pubSchedule" type="datetime-local">
         </div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.8em;color:var(--muted);margin:4px 0 8px">
+        <input type="checkbox" id="pubAutoSchedule" checked onchange="if(this.checked){ytSetOptimal();}else{document.getElementById('pubSchedule').value='';}"> Programma automaticamente all'orario ottimale
+      </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:0.8em;color:var(--muted);margin:4px 0 12px">
         <input type="checkbox" id="pubThumb" checked> Genera miniatura automatica
       </label>
 
       <button class="btn btn-primary" id="pubBtn" onclick="ytPublish()" style="width:100%;justify-content:center" disabled>📤 Pubblica su YouTube</button>
       <div id="pubResult" style="margin-top:12px"></div>
-      <div style="font-size:0.68em;color:var(--muted);margin-top:10px">Suggerimento orario: <strong>${escTxt(d.orario_pubblicazione||'sera')}</strong>. Se programmi, la visibilità diventa privata fino all'orario scelto.</div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:10px">Orario ottimale: <strong>${escTxt(d.orario_pubblicazione||'sera')}</strong>. Programmando, la visibilità diventa privata fino all'orario scelto.</div>
     `;
+    ytSetOptimal();
     ytCheckStatus();
+  }
+
+  // Calcola la prossima occorrenza dell'orario ottimale suggerito dall'AI
+  function ytSetOptimal() {
+    const inp = document.getElementById('pubSchedule');
+    if (!inp || !gData) return;
+    const txt = gData.orario_pubblicazione || '';
+    let hh = 21, mm = 0;
+    const m = txt.match(/(\d{1,2})[:.](\d{2})/) || txt.match(/\b(\d{1,2})\b/);
+    if (m) { hh = Math.min(23, parseInt(m[1])); if (m[2]) mm = Math.min(59, parseInt(m[2])); }
+    const now = new Date();
+    const target = new Date(now);
+    target.setHours(hh, mm, 0, 0);
+    // se l'orario di oggi è già passato (o entro 10 min), programma domani
+    if (target.getTime() < now.getTime() + 10*60*1000) target.setDate(target.getDate() + 1);
+    // formatta in valore datetime-local (ora locale)
+    const pad = n => String(n).padStart(2, '0');
+    inp.value = `${target.getFullYear()}-${pad(target.getMonth()+1)}-${pad(target.getDate())}T${pad(target.getHours())}:${pad(target.getMinutes())}`;
+    const auto = document.getElementById('pubAutoSchedule');
+    if (auto) auto.checked = true;
   }
 
   async function ytCheckStatus() {
