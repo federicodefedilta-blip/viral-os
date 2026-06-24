@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.4.6';
+  const CURRENT_VERSION = 'v1.5.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.6</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.5.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -347,12 +347,12 @@
   let audioBase64 = null;
   let generatedVideos = [];
   const themePools = {
-    home:     ['dark hallway house','mirror reflection horror','empty room night','basement dark stairs','ghost house corridor'],
-    tech:     ['computer screen dark','phone notification night','code screen glitch','hacker dark room','surveillance camera static'],
-    forest:   ['foggy forest walk','dark woods night','misty trees path','night forest trail','fog mist nature dark'],
-    dark:     ['dark room single light','shadow corridor','dark abstract','night city rain','dramatic dark cinematic'],
-    urban:    ['empty street night','dark alley walk','subway empty night','city fog night','rain puddle reflection night'],
-    abandoned:['abandoned hospital','empty school hallway','derelict building','abandoned factory dark','old building decay'],
+    home:     ['dark creepy hallway','haunted house horror','empty dark room night','creepy basement stairs','scary abandoned house'],
+    tech:     ['dark glitch horror','creepy computer screen','horror static noise','dark room scary light','eerie surveillance footage'],
+    forest:   ['dark creepy forest fog','scary woods night','eerie misty forest','haunted forest dark','foggy horror trees'],
+    dark:     ['dark horror atmosphere','creepy shadow figure','scary dark hallway','eerie dark fog','horror cinematic dark'],
+    urban:    ['creepy empty street night','dark scary alley','abandoned subway horror','eerie foggy city night','dark rain horror street'],
+    abandoned:['abandoned hospital horror','creepy empty hallway','derelict scary building','abandoned asylum dark','haunted ruins fog'],
   };
 
   const loaderMsgs = ['Analizzando i trend del momento...','Scansiono YouTube, TikTok e Reddit...','Calcolo il Viral Score...','Trovo il prodotto affiliate più redditizio...','Scrivo lo script virale ottimizzato...','Genero titoli e hashtag SEO...','Quasi pronto...'];
@@ -1032,12 +1032,19 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     else if (_langCode === 'es-ES' && !ttsVoice.startsWith('es-')) ttsVoice = 'es-ES-AlvaroNeural';
 
     window._ttsRawMp3 = null;
+    window._ttsTiming = null;
     try {
-      const ttsUrl = `http://127.0.0.1:5555/tts?text=${encodeURIComponent(ttsText)}&voice=${encodeURIComponent(ttsVoice)}`;
+      const ttsUrl = `http://127.0.0.1:5555/tts_json?text=${encodeURIComponent(ttsText)}&voice=${encodeURIComponent(ttsVoice)}`;
       const ttsRes = await fetch(ttsUrl);
       if (!ttsRes.ok) throw new Error('server HTTP ' + ttsRes.status);
-      window._ttsRawMp3 = await ttsRes.arrayBuffer();
-      addLog('Voce scaricata (edge-tts neurale).');
+      const ttsJson = await ttsRes.json();
+      // Decodifica l'audio base64 in ArrayBuffer
+      const bin = atob(ttsJson.audio);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      window._ttsRawMp3 = bytes.buffer;
+      window._ttsTiming = (ttsJson.words || []).filter(x => x.w && x.w.trim());
+      addLog(`Voce scaricata (${window._ttsTiming.length} frasi con timing reale).`);
     } catch(e) {
       addLog('⚠️ Server vocale non raggiungibile: ' + (e.message || e));
       addLog('   Avvia "py voice_server.py" per avere la voce nel video.');
@@ -1117,25 +1124,30 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     const chunks = [];
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-    const sentences = (gData.script || '').trim().split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 2);
     const numClips = videoEls.length;
     // Durata registrazione: almeno targetMs, ma estesa se la voce è più lunga (così la storia finisce)
     const recDurMs = voiceDurMs > 1000 ? Math.max(targetMs, voiceDurMs + 1200) : targetMs;
     const clipDurMs = recDurMs / numClips;
 
-    // Tempi sottotitoli pesati per lunghezza frase (il TTS parla in tempo ~proporzionale ai caratteri).
-    // Sincronizzati sulla durata reale della voce se disponibile, altrimenti sul targetMs.
-    const subTimelineMs = voiceDurMs > 1000 ? voiceDurMs : targetMs;
-    const sentChars = sentences.map(s => s.length);
-    const totalChars = sentChars.reduce((a, b) => a + b, 0) || 1;
-    const sentStartMs = [];
-    let accChars = 0;
-    for (let i = 0; i < sentences.length; i++) {
-      sentStartMs.push((accChars / totalChars) * subTimelineMs);
-      accChars += sentChars[i];
+    // Sottotitoli: usa i tempi REALI per frase dal TTS se disponibili (sync perfetto),
+    // altrimenti ripiega sulla stima pesata per caratteri.
+    let sentences, sentStartMs;
+    if (window._ttsTiming && window._ttsTiming.length) {
+      sentences = window._ttsTiming.map(x => x.w.trim());
+      sentStartMs = window._ttsTiming.map(x => x.t);
+    } else {
+      sentences = (gData.script || '').trim().split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 2);
+      const subTimelineMs = voiceDurMs > 1000 ? voiceDurMs : targetMs;
+      const sentChars = sentences.map(s => s.length);
+      const totalChars = sentChars.reduce((a, b) => a + b, 0) || 1;
+      sentStartMs = [];
+      let accChars = 0;
+      for (let i = 0; i < sentences.length; i++) {
+        sentStartMs.push((accChars / totalChars) * subTimelineMs);
+        accChars += sentChars[i];
+      }
     }
     function currentSentenceIdx(elapsed) {
-      if (elapsed >= subTimelineMs) return sentences.length - 1;
       let idx = 0;
       for (let i = 0; i < sentStartMs.length; i++) {
         if (elapsed >= sentStartMs[i]) idx = i; else break;
