@@ -468,6 +468,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
+        if parsed.path == "/save_pack":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                day = (data.get("date") or "video").replace("/", "-")
+                folder = os.path.join(OUTPUT_DIR, day)
+                os.makedirs(folder, exist_ok=True)
+                if os.path.exists(LAST_RENDER):
+                    shutil.copyfile(LAST_RENDER, os.path.join(folder, "video.mp4"))
+                with open(os.path.join(folder, "caption.txt"), "w", encoding="utf-8") as f:
+                    f.write((data.get("caption") or "").strip())
+                print(f"  -> pacchetto salvato: {folder}")
+                self._send(200, "application/json", json.dumps({"folder": folder}).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE save_pack: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
         if parsed.path == "/youtube_upload":
             try:
                 data = json.loads(raw.decode("utf-8"))
