@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.7.0';
+  const CURRENT_VERSION = 'v1.8.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.7.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.8.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -304,7 +304,7 @@
       <div class="card-title">🎬 Montaggio automatico</div>
       <div class="step-card">
         <div class="step-card-title">⚙️ Assembla il video finale <span class="badge-pending" id="assembleBadge">In attesa</span></div>
-        <div class="step-card-desc">Assembla fino a 10 clip video + musica horror + voce neurale + sottotitoli. Richiede il server vocale locale attivo (<code>py voice_server.py</code>). ⚠️ Tieni questa scheda in primo piano durante la registrazione, altrimenti il video si congela.</div>
+        <div class="step-card-desc">Monta il video finale (MP4) sul server locale con ffmpeg: clip a tema per frase + musica + voce neurale + sottotitoli sincronizzati. Deterministico — puoi cambiare scheda liberamente. Richiede <code>py voice_server.py</code> attivo.</div>
         <div style="margin-top:10px">
           <label class="input-label" style="font-size:0.75em">🎙️ Voce</label>
           <select class="input-field" id="ttsVoice">
@@ -948,7 +948,64 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     `;
   }
 
-  // --- Montaggio automatico canvas + MediaRecorder ---
+  // --- Montaggio video lato server (ffmpeg, deterministico) ---
+  function audioBufferToWavBase64(buf) {
+    const numCh = buf.numberOfChannels, len = buf.length, sr = buf.sampleRate;
+    const blockAlign = numCh * 2, dataLen = len * blockAlign;
+    const ab = new ArrayBuffer(44 + dataLen), dv = new DataView(ab);
+    const ws = (off, s) => { for (let i=0;i<s.length;i++) dv.setUint8(off+i, s.charCodeAt(i)); };
+    ws(0,'RIFF'); dv.setUint32(4,36+dataLen,true); ws(8,'WAVE');
+    ws(12,'fmt '); dv.setUint32(16,16,true); dv.setUint16(20,1,true);
+    dv.setUint16(22,numCh,true); dv.setUint32(24,sr,true);
+    dv.setUint32(28,sr*blockAlign,true); dv.setUint16(32,blockAlign,true);
+    dv.setUint16(34,16,true); ws(36,'data'); dv.setUint32(40,dataLen,true);
+    const chans = [];
+    for (let c=0;c<numCh;c++) chans.push(buf.getChannelData(c));
+    let off = 44;
+    for (let i=0;i<len;i++) for (let c=0;c<numCh;c++) {
+      let s = Math.max(-1, Math.min(1, chans[c][i]));
+      dv.setInt16(off, s<0 ? s*0x8000 : s*0x7FFF, true); off+=2;
+    }
+    let bin=''; const bytes=new Uint8Array(ab), CH=0x8000;
+    for (let i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i,i+CH));
+    return btoa(bin);
+  }
+
+  function buildMusicInto(ctx, master, bgType) {
+    const rev = buildReverb(ctx);
+    const dry = ctx.createGain(); dry.gain.value = 0.65; dry.connect(master);
+    const wet = ctx.createGain(); wet.gain.value = 0.35; rev.connect(wet); wet.connect(master);
+    const mnodes = [rev];
+    const laMin=[110,123.5,130.8,146.8,164.8,174.6,207.7,220];
+    const ghost=[220,233.1,261.6,293.7,329.6,349.2,415.3,440];
+    const tens=[110,116.5,130.8,155.6,164.8,174.6,185,220];
+    const darkN=[55,58.3,65.4,73.4,82.4,87.3,98,110];
+    if (bgType==='drone'){
+      [55,110,164.8].forEach((f,i)=>{const o=ctx.createOscillator();o.type=i===0?'sine':'triangle';o.frequency.value=f;const g=ctx.createGain();g.gain.value=i===0?0.3:0.1;o.connect(g);g.connect(dry);g.connect(rev);o.start();mnodes.push(o);});
+      scheduleMelody(ctx,laMin,dry,rev,mnodes,3.2); scheduleMelody(ctx,ghost,dry,rev,mnodes,6.0);
+    } else if (bgType==='tension'){
+      const o=ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(55,ctx.currentTime);o.frequency.linearRampToValueAtTime(130,ctx.currentTime+40);const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=350;const g=ctx.createGain();g.gain.value=0.22;o.connect(f);f.connect(g);g.connect(dry);g.connect(rev);o.start();mnodes.push(o);
+      scheduleMelody(ctx,tens,dry,rev,mnodes,1.6);
+    } else if (bgType==='dark'){
+      [55,82.4,110].forEach((f,i)=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=f+i*0.15;const lfo=ctx.createOscillator();lfo.frequency.value=0.05+i*0.02;const lg=ctx.createGain();lg.gain.value=f*0.003;lfo.connect(lg);lg.connect(o.frequency);const g=ctx.createGain();g.gain.value=0.2;o.connect(g);g.connect(dry);g.connect(rev);o.start();lfo.start();mnodes.push(o,lfo);});
+      scheduleMelody(ctx,darkN,dry,rev,mnodes,4.8);
+    } else {
+      const bo=ctx.createOscillator();bo.type='sine';bo.frequency.value=55;const bg=ctx.createGain();bg.gain.value=0;bo.connect(bg);bg.connect(dry);bg.connect(rev);bo.start();mnodes.push(bo);
+      let t=ctx.currentTime+0.3;for(let i=0;i<200;i++){bg.gain.setValueAtTime(0.65,t);bg.gain.exponentialRampToValueAtTime(0.001,t+0.13);bg.gain.setValueAtTime(0.4,t+0.19);bg.gain.exponentialRampToValueAtTime(0.001,t+0.3);t+=1.25;}
+      scheduleMelody(ctx,ghost,dry,rev,mnodes,4.2);
+    }
+    return mnodes;
+  }
+
+  async function renderMusicWavBase64(bgType, volume, durationSec) {
+    const sr = 44100;
+    const octx = new OfflineAudioContext(2, Math.ceil(sr*durationSec), sr);
+    const master = octx.createGain(); master.gain.value = volume; master.connect(octx.destination);
+    buildMusicInto(octx, master, bgType);
+    const buf = await octx.startRendering();
+    return audioBufferToWavBase64(buf);
+  }
+
   async function assembleVideo() {
     const btn = document.getElementById('assembleBtn');
     const log = document.getElementById('assembleLog');
@@ -956,352 +1013,70 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     btn.disabled = true; log.innerHTML = '';
     badge.textContent = 'Preparazione...'; badge.className = 'badge-pending';
     const addLog = msg => { log.innerHTML += `<div>${msg}</div>`; log.scrollTop = log.scrollHeight; };
+    if (!gData) { addLog('Genera prima lo script.'); btn.disabled=false; return; }
 
-    if (!gData) { addLog('Genera prima lo script.'); btn.disabled = false; return; }
+    try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
+    catch { addLog('⚠️ Server locale non attivo. Avvia "py voice_server.py" e riprova.'); badge.textContent='Errore'; badge.className='badge-pending'; btn.disabled=false; return; }
 
     const targetSec = parseInt(document.getElementById('dur').value) || 61;
-    const targetMs = targetSec * 1000;
-    const bgVol = parseInt(document.getElementById('bgVolume').value) / 100 || 1.0;
+    const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
     const bgType = document.getElementById('bgMusic').value !== 'none' ? document.getElementById('bgMusic').value : 'drone';
-    const pexelsKey = (document.getElementById('pexelsKey') && document.getElementById('pexelsKey').value.trim()) || _p;
-
-    // FASE 1: Scarico clip — prima quelli già trovati nello step 5, poi ne cerca altri
-    addLog('Scarico clip video...');
-    const tema = (gData.tema) || 'dark';
-    const blobUrls = [];
-    const fetchWithTimeout = (url, opts, ms=12000) => {
-      const ctrl = new AbortController();
-      const id = setTimeout(() => ctrl.abort(), ms);
-      return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
-    };
-
-    // Prima usa i video già trovati nello step 5 (fino a 16 se clip per-frase)
-    const maxDownload = window._perSentenceClips ? 16 : 10;
-    const existing = (generatedVideos || []).filter(Boolean);
-    for (const v of existing) {
-      if (blobUrls.length >= maxDownload) break;
-      try {
-        const res = await fetchWithTimeout(v.url, { mode: 'cors' }, 15000);
-        if (!res.ok) throw new Error();
-        blobUrls.push(URL.createObjectURL(await res.blob()));
-        addLog(`Clip ${blobUrls.length} caricata`);
-      } catch { addLog(`Clip non scaricabile, salto`); }
-    }
-
-    // Se non ci sono clip dallo step 5, tenta Pexels come fallback (con timeout breve)
-    if (blobUrls.length === 0) {
-      const pool = (themePools[tema] || themePools.dark);
-      for (const q of pool.slice(0, 4)) {
-        if (blobUrls.length >= 4) break;
-        try {
-          const res = await fetchWithTimeout(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=2&orientation=portrait&size=medium`, { headers: { Authorization: pexelsKey } }, 6000);
-          const data = await res.json();
-          for (const v of (data.videos || []).slice(0, 1)) {
-            const file = v.video_files.find(f => f.quality === 'sd' && f.height >= 480) || v.video_files[0];
-            if (!file) continue;
-            try {
-              const blob = await fetchWithTimeout(file.link, { mode: 'cors' }, 10000);
-              if (!blob.ok) throw new Error();
-              blobUrls.push(URL.createObjectURL(await blob.blob()));
-              addLog(`Clip ${blobUrls.length} scaricata`);
-            } catch {}
-          }
-        } catch {}
-      }
-    }
-
-    if (blobUrls.length === 0) { addLog('❌ Nessuna clip disponibile. Verifica che lo step 5 abbia trovato video.'); btn.disabled = false; return; }
-    addLog(`✓ ${blobUrls.length} clip pronte.`);
-
-    // FASE 2: TTS via server vocale locale (edge-tts, voce neurale italiana)
-    addLog('Genero voce neurale (server locale)...');
-    const ttsText = (gData.script || '').trim().slice(0, 3000);
-    // Ricalcola la lingua dal menu (robusto anche se lo step 4 è stato saltato)
     const _lang = document.getElementById('lang') ? document.getElementById('lang').value : 'italiano';
-    _langCode = _lang === 'inglese' ? 'en-US' : _lang === 'spagnolo' ? 'es-ES' : 'it-IT';
+    _langCode = _lang==='inglese'?'en-US':_lang==='spagnolo'?'es-ES':'it-IT';
     let ttsVoice = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
-    // Adatta la voce alla lingua dello script (se non è italiano la voce IT lo pronuncerebbe male)
-    if (_langCode === 'en-US' && !ttsVoice.startsWith('en-')) ttsVoice = 'en-US-GuyNeural';
-    else if (_langCode === 'es-ES' && !ttsVoice.startsWith('es-')) ttsVoice = 'es-ES-AlvaroNeural';
+    if (_langCode==='en-US' && !ttsVoice.startsWith('en-')) ttsVoice='en-US-GuyNeural';
+    else if (_langCode==='es-ES' && !ttsVoice.startsWith('es-')) ttsVoice='es-ES-AlvaroNeural';
 
-    window._ttsRawMp3 = null;
-    window._ttsTiming = null;
+    const clips = (generatedVideos||[]).filter(Boolean).map(v=>v.url);
+    if (!clips.length) { addLog('❌ Nessuna clip. Fai prima lo step 5 (Trova Video).'); badge.textContent='Errore'; btn.disabled=false; return; }
+    addLog(`${clips.length} clip pronte.`);
+
+    // 1. voce + timing dal server
+    addLog('Genero voce neurale...');
+    const ttsText = (gData.script||'').trim().slice(0,3000);
+    let voiceB64, timings;
     try {
-      const ttsUrl = `http://127.0.0.1:5555/tts_json?text=${encodeURIComponent(ttsText)}&voice=${encodeURIComponent(ttsVoice)}`;
-      const ttsRes = await fetch(ttsUrl);
-      if (!ttsRes.ok) throw new Error('server HTTP ' + ttsRes.status);
-      const ttsJson = await ttsRes.json();
-      // Decodifica l'audio base64 in ArrayBuffer
-      const bin = atob(ttsJson.audio);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      window._ttsRawMp3 = bytes.buffer;
-      window._ttsTiming = (ttsJson.words || []).filter(x => x.w && x.w.trim());
-      addLog(`Voce scaricata (${window._ttsTiming.length} frasi con timing reale).`);
-    } catch(e) {
-      addLog('⚠️ Server vocale non raggiungibile: ' + (e.message || e));
-      addLog('   Avvia "py voice_server.py" per avere la voce nel video.');
+      const r = await fetch(`http://127.0.0.1:5555/tts_json?text=${encodeURIComponent(ttsText)}&voice=${encodeURIComponent(ttsVoice)}`);
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      voiceB64 = j.audio;
+      timings = (j.words||[]).filter(x=>x.w && x.w.trim());
+      addLog(`Voce pronta (${timings.length} frasi).`);
+    } catch(e){ addLog('❌ Errore voce: '+(e.message||e)); badge.textContent='Errore'; btn.disabled=false; return; }
+    if (!timings.length) { addLog('❌ Nessuna frase rilevata.'); btn.disabled=false; return; }
+
+    const voiceDurMs = timings[timings.length-1].t + timings[timings.length-1].d;
+    const totalMs = Math.max(targetSec*1000, voiceDurMs + 1200);
+
+    // 2. musica offline -> WAV
+    let musicB64 = null;
+    if (bgType !== 'none') {
+      addLog('Genero musica...');
+      try { musicB64 = await renderMusicWavBase64(bgType, bgVol, totalMs/1000); }
+      catch(e){ addLog('Musica saltata: '+(e.message||e)); }
     }
 
-    // FASE 3: Precarica video elements
-    addLog(`Precarico ${blobUrls.length} clip...`);
-    const videoEls = [];
-    for (const url of blobUrls) {
-      const v = document.createElement('video');
-      v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
-      // Aspetta canplaythrough (readyState 4) per playback fluido, con timeout di sicurezza
-      await new Promise(r => {
-        v.oncanplaythrough = r; v.onerror = r; setTimeout(r, 4000); v.load();
+    // 3. render lato server
+    addLog(`Monto il video (${Math.round(totalMs/1000)}s) sul server, attendi...`);
+    badge.textContent='Montaggio...';
+    try {
+      const r = await fetch('http://127.0.0.1:5555/render', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ voice_mp3_b64: voiceB64, timings, music_wav_b64: musicB64, clips, total_ms: totalMs, voice_vol: 1.8, music_vol: bgVol })
       });
-      if (v.readyState >= 2) videoEls.push(v);
-    }
-    if (videoEls.length === 0) { addLog('Errore: clip non caricabili.'); btn.disabled = false; return; }
-
-    // FASE 4: Audio context — SOLO verso audioDest (silenzioso durante la registrazione)
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const audioDest = audioCtx.createMediaStreamDestination();
-    const master = audioCtx.createGain(); master.gain.value = bgVol;
-    master.connect(audioDest); // NON master.connect(audioCtx.destination) → nessun suono in cuffia
-
-    const rev = buildReverb(audioCtx);
-    const dry = audioCtx.createGain(); dry.gain.value = 0.65; dry.connect(master);
-    const wet = audioCtx.createGain(); wet.gain.value = 0.35; rev.connect(wet); wet.connect(master);
-    const mnodes = [rev];
-    const laMin = [110,123.5,130.8,146.8,164.8,174.6,207.7,220];
-    const ghost = [220,233.1,261.6,293.7,329.6,349.2,415.3,440];
-    const tens  = [110,116.5,130.8,155.6,164.8,174.6,185,220];
-    const darkN = [55,58.3,65.4,73.4,82.4,87.3,98,110];
-
-    if (bgType === 'drone') {
-      [55,110,164.8].forEach((f,i)=>{ const o=audioCtx.createOscillator(); o.type=i===0?'sine':'triangle'; o.frequency.value=f; const g=audioCtx.createGain(); g.gain.value=i===0?0.3:0.1; o.connect(g); g.connect(dry); g.connect(rev); o.start(); mnodes.push(o); });
-      scheduleMelody(audioCtx, laMin, dry, rev, mnodes, 3.2);
-      scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 6.0);
-    } else if (bgType === 'tension') {
-      const o=audioCtx.createOscillator(); o.type='sawtooth'; o.frequency.setValueAtTime(55,audioCtx.currentTime); o.frequency.linearRampToValueAtTime(130,audioCtx.currentTime+40); const f=audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=350; const g=audioCtx.createGain(); g.gain.value=0.22; o.connect(f); f.connect(g); g.connect(dry); g.connect(rev); o.start(); mnodes.push(o);
-      scheduleMelody(audioCtx, tens, dry, rev, mnodes, 1.6);
-    } else if (bgType === 'dark') {
-      [55,82.4,110].forEach((f,i)=>{ const o=audioCtx.createOscillator(); o.type='sine'; o.frequency.value=f+i*0.15; const lfo=audioCtx.createOscillator(); lfo.frequency.value=0.05+i*0.02; const lg=audioCtx.createGain(); lg.gain.value=f*0.003; lfo.connect(lg); lg.connect(o.frequency); const g=audioCtx.createGain(); g.gain.value=0.2; o.connect(g); g.connect(dry); g.connect(rev); o.start(); lfo.start(); mnodes.push(o,lfo); });
-      scheduleMelody(audioCtx, darkN, dry, rev, mnodes, 4.8);
-    } else {
-      const bo=audioCtx.createOscillator(); bo.type='sine'; bo.frequency.value=55; const bg=audioCtx.createGain(); bg.gain.value=0; bo.connect(bg); bg.connect(dry); bg.connect(rev); bo.start(); mnodes.push(bo);
-      let t=audioCtx.currentTime+0.3; for(let i=0;i<200;i++){bg.gain.setValueAtTime(0.65,t);bg.gain.exponentialRampToValueAtTime(0.001,t+0.13);bg.gain.setValueAtTime(0.4,t+0.19);bg.gain.exponentialRampToValueAtTime(0.001,t+0.3);t+=1.25;}
-      scheduleMelody(audioCtx, ghost, dry, rev, mnodes, 4.2);
-    }
-
-    // TTS — decodifica l'MP3 (qui audioCtx esiste) e lo connette al grafo audio
-    let ttsBufferNode = null;
-    let voiceDurMs = 0;
-    if (window._ttsRawMp3) {
-      try {
-        const decoded = await audioCtx.decodeAudioData(window._ttsRawMp3.slice(0));
-        voiceDurMs = decoded.duration * 1000;
-        ttsBufferNode = audioCtx.createBufferSource();
-        ttsBufferNode.buffer = decoded;
-        const ttsG = audioCtx.createGain(); ttsG.gain.value = 1.6;
-        ttsBufferNode.connect(ttsG);
-        ttsG.connect(master); // → audioDest → video
-        addLog(`Voce collegata (${Math.round(voiceDurMs/1000)}s).`);
-      } catch(e) { addLog('Errore decodifica voce: ' + (e.message||e)); }
-    }
-
-    // FASE 5: Canvas + MediaRecorder
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080; canvas.height = 1920;
-    const ctx2d = canvas.getContext('2d');
-    const canvasStream = canvas.captureStream(30);
-    const audioTrack = audioDest.stream.getAudioTracks()[0];
-    if (audioTrack) canvasStream.addTrack(audioTrack);
-
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
-    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 5000000 });
-    const chunks = [];
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-
-    const numClips = videoEls.length;
-    // Durata registrazione: almeno targetMs, ma estesa se la voce è più lunga (così la storia finisce)
-    const recDurMs = voiceDurMs > 1000 ? Math.max(targetMs, voiceDurMs + 1200) : targetMs;
-    const clipDurMs = recDurMs / numClips;
-
-    // Sottotitoli: usa i tempi REALI per frase dal TTS se disponibili (sync perfetto),
-    // altrimenti ripiega sulla stima pesata per caratteri.
-    let sentences, sentStartMs;
-    if (window._ttsTiming && window._ttsTiming.length) {
-      sentences = window._ttsTiming.map(x => x.w.trim());
-      sentStartMs = window._ttsTiming.map(x => x.t);
-    } else {
-      sentences = (gData.script || '').trim().split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 2);
-      const subTimelineMs = voiceDurMs > 1000 ? voiceDurMs : targetMs;
-      const sentChars = sentences.map(s => s.length);
-      const totalChars = sentChars.reduce((a, b) => a + b, 0) || 1;
-      sentStartMs = [];
-      let accChars = 0;
-      for (let i = 0; i < sentences.length; i++) {
-        sentStartMs.push((accChars / totalChars) * subTimelineMs);
-        accChars += sentChars[i];
-      }
-    }
-    function currentSentenceIdx(elapsed) {
-      let idx = 0;
-      for (let i = 0; i < sentStartMs.length; i++) {
-        if (elapsed >= sentStartMs[i]) idx = i; else break;
-      }
-      return idx;
-    }
-    // Allinea le clip alle frasi solo se sono clip generate per-frase E abbiamo i tempi reali
-    const alignBySentence = !!(window._perSentenceClips && window._ttsTiming && window._ttsTiming.length && sentences.length);
-    if (alignBySentence) addLog('Clip allineate alle frasi (tema per frase).');
-
-    // Risveglia AudioContext (Edge/Chrome lo avviano sospeso)
-    await audioCtx.resume();
-    addLog(`AudioCtx: ${audioCtx.state} | tracce audio: ${canvasStream.getAudioTracks().length}`);
-
-    addLog(`Registrazione in corso: ${Math.round(recDurMs/1000)}s — attendi...`);
-    badge.textContent = 'Registrazione...';
-
-    recorder.start(100);
-    // Avvia voce meSpeak
-    if (ttsBufferNode) {
-      ttsBufferNode.start(audioCtx.currentTime);
-      addLog('Voce avviata.');
-    }
-
-    const startTime = Date.now();
-    let currentClipIdx = 0;
-    let prerolledIdx = -1;
-    videoEls[0] && videoEls[0].play().catch(() => {});
-
-    await new Promise(resolve => {
-      let lastLoggedSec = -1;
-      let rafId = null, intId = null, done = false;
-      function stopDrivers() {
-        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-        if (intId) { clearInterval(intId); intId = null; }
-      }
-      // Driver ibrido: requestAnimationFrame (fluido) quando la scheda è visibile,
-      // setInterval (anti-freeze) quando va in background.
-      function tick() {
-        if (done) return;
-        const elapsed = Date.now() - startTime;
-
-        // Aggiorna log ogni 5 secondi
-        const sec = Math.floor(elapsed / 1000);
-        if (sec !== lastLoggedSec && sec % 5 === 0) {
-          lastLoggedSec = sec;
-          addLog(`⏱ ${sec}s / ${Math.round(recDurMs/1000)}s`);
-        }
-
-        if (elapsed >= recDurMs) {
-          done = true;
-          stopDrivers();
-          document.removeEventListener('visibilitychange', onVis);
-          videoEls.forEach(v => { try { v.pause(); } catch {} });
-          resolve();
-          return;
-        }
-
-        // Clip a tema per frase: la clip segue la frase narrata. Altrimenti distribuzione a tempo.
-        const sentIdx = currentSentenceIdx(elapsed);
-        const expectedIdx = alignBySentence
-          ? Math.min(Math.floor(sentIdx / Math.max(sentences.length, 1) * numClips), numClips - 1)
-          : Math.min(Math.floor(elapsed / clipDurMs), numClips - 1);
-
-        // Pre-roll: avvia la clip successiva ~0.8s prima del cambio, così è già fluida
-        const nextIdx = Math.min(expectedIdx + 1, numClips - 1);
-        if (nextIdx !== currentClipIdx && nextIdx !== prerolledIdx) {
-          const tIntoClip = elapsed - expectedIdx * clipDurMs;
-          if (tIntoClip > clipDurMs - 800) {
-            try { videoEls[nextIdx].play().catch(() => {}); } catch {}
-            prerolledIdx = nextIdx;
-          }
-        }
-
-        // Cambio clip (la nuova è già in riproduzione grazie al pre-roll)
-        if (expectedIdx !== currentClipIdx) {
-          const prev = currentClipIdx;
-          currentClipIdx = expectedIdx;
-          try { videoEls[currentClipIdx].play().catch(() => {}); } catch {}
-          // Pausa la clip precedente dopo un attimo (evita scatti durante lo switch)
-          setTimeout(() => { try { videoEls[prev].pause(); } catch {} }, 100);
-        }
-
-        // Disegno frame video
-        const cw = canvas.width, ch = canvas.height;
-        const vid = videoEls[currentClipIdx];
-        if (vid && vid.readyState >= 2) {
-          const vr = (vid.videoWidth / vid.videoHeight) || (9/16);
-          const cr = cw / ch;
-          let sx=0,sy=0,sw=vid.videoWidth,sh=vid.videoHeight;
-          if (vr > cr) { sw = sh * cr; sx = (vid.videoWidth - sw) / 2; }
-          else { sh = sw / cr; sy = (vid.videoHeight - sh) / 2; }
-          ctx2d.drawImage(vid, sx, sy, sw, sh, 0, 0, cw, ch);
-        } else {
-          ctx2d.fillStyle = '#050508'; ctx2d.fillRect(0, 0, cw, ch);
-        }
-
-        // Overlay scuro + vignette
-        const grad = ctx2d.createLinearGradient(0, 0, 0, ch);
-        grad.addColorStop(0, 'rgba(0,0,0,0.45)');
-        grad.addColorStop(0.5, 'rgba(0,0,0,0.1)');
-        grad.addColorStop(1, 'rgba(0,0,0,0.75)');
-        ctx2d.fillStyle = grad; ctx2d.fillRect(0, 0, cw, ch);
-
-
-        // Sottotitoli sincronizzati sulla voce (sentIdx già calcolato sopra)
-        const sent = (sentences[sentIdx] || '').trim();
-        if (sent) {
-          const fontSize = Math.min(52, Math.max(36, Math.floor(cw * 0.048)));
-          ctx2d.font = `bold ${fontSize}px Arial, sans-serif`;
-          ctx2d.textAlign = 'center';
-          const words = sent.split(' ');
-          const lines = [];
-          let line = '';
-          for (const w of words) {
-            const test = line ? line + ' ' + w : w;
-            if (ctx2d.measureText(test).width > cw * 0.82) { lines.push(line); line = w; }
-            else { line = test; }
-          }
-          if (line) lines.push(line);
-          const lineH = fontSize * 1.35;
-          const totalH = lines.length * lineH;
-          const baseY = ch * 0.82 - totalH / 2;
-          lines.forEach((l, i) => {
-            const y = baseY + i * lineH;
-            ctx2d.shadowColor = 'black'; ctx2d.shadowBlur = 12;
-            ctx2d.fillStyle = 'white';
-            ctx2d.fillText(l, cw / 2, y);
-            ctx2d.shadowBlur = 0;
-          });
-        }
-
-        // Progress bar
-        ctx2d.fillStyle = 'rgba(255,255,255,0.15)'; ctx2d.fillRect(0, ch - 6, cw, 6);
-        ctx2d.fillStyle = 'rgba(255,80,80,0.85)'; ctx2d.fillRect(0, ch - 6, cw * (elapsed / recDurMs), 6);
-      }
-      function rafLoop() { tick(); if (!done) rafId = requestAnimationFrame(rafLoop); }
-      function useRaf() { stopDrivers(); rafId = requestAnimationFrame(rafLoop); }
-      function useInterval() { stopDrivers(); intId = setInterval(tick, Math.floor(1000 / 30)); }
-      function onVis() { if (done) return; if (document.hidden) useInterval(); else useRaf(); }
-      document.addEventListener('visibilitychange', onVis);
-      if (document.hidden) useInterval(); else useRaf();
-    });
-
-    mnodes.forEach(n => { try { n.stop && n.stop(); } catch {} });
-    recorder.stop();
-    await new Promise(r => { recorder.onstop = r; });
-    try { audioCtx.close(); } catch {}
-
-    const finalBlob = new Blob(chunks, { type: mimeType });
-    const url = URL.createObjectURL(finalBlob);
-    const sizeMB = (finalBlob.size / 1024 / 1024).toFixed(1);
-    document.getElementById('assemblePreview').innerHTML = `
-      <video src="${url}" controls style="width:100%;border-radius:8px;margin-top:12px;max-height:320px"></video>
-      <div style="margin-top:10px">
-        <a href="${url}" download="viral-os-${Date.now()}.webm" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica WebM (${sizeMB} MB)</a>
-      </div>`;
-    badge.textContent = 'Completato'; badge.className = 'badge-done';
-    addLog(`✓ Video pronto (${sizeMB} MB) — voce + musica inclusi.`);
-    btn.textContent = '🔄 Rigenera'; btn.disabled = false;
-    blobUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch {} });
+      if (!r.ok) throw new Error(await r.text());
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const sizeMB = (blob.size/1024/1024).toFixed(1);
+      document.getElementById('assemblePreview').innerHTML = `
+        <video src="${url}" controls style="width:100%;border-radius:8px;margin-top:12px;max-height:320px"></video>
+        <div style="margin-top:10px">
+          <a href="${url}" download="viralos-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${sizeMB} MB)</a>
+        </div>`;
+      badge.textContent='Completato'; badge.className='badge-done';
+      addLog(`✓ Video pronto (${sizeMB} MB) — voce + musica + sottotitoli, montato dal server.`);
+    } catch(e){ addLog('❌ Errore montaggio: '+(e.message||e)); badge.textContent='Errore'; }
+    btn.textContent='🔄 Rigenera'; btn.disabled=false;
   }
   function drawSubtitle(ctx2d, canvas, lines, idx, startMs) {
     if (!lines.length) return;
