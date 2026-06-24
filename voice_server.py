@@ -39,6 +39,15 @@ PORT = 5555
 DEFAULT_VOICE = "it-IT-DiegoNeural"
 W, H = 1080, 1920
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+LAST_RENDER = os.path.join(OUTPUT_DIR, "last_render.mp4")
+CLIENT_SECRET = os.path.join(BASE_DIR, "client_secret.json")
+TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
+YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
+             "https://www.googleapis.com/auth/youtube"]
+
 
 # ----------------------------- TTS -----------------------------
 
@@ -239,8 +248,120 @@ def render_job(data, work):
                              "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "final.mp4"],
            cwd=work)
 
+    # salva una copia persistente per la pubblicazione
+    try:
+        shutil.copyfile(out, LAST_RENDER)
+    except Exception:
+        pass
     with open(out, "rb") as f:
         return f.read()
+
+
+# ----------------------------- YOUTUBE -----------------------------
+
+def yt_get_credentials():
+    """Carica/aggiorna le credenziali OAuth salvate. None se non autorizzato."""
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    if not os.path.exists(TOKEN_FILE):
+        return None
+    creds = Credentials.from_authorized_user_file(TOKEN_FILE, YT_SCOPES)
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+            f.write(creds.to_json())
+    return creds if creds and creds.valid else None
+
+
+def yt_authorize():
+    """Avvia il flusso OAuth (apre il browser per il consenso). Salva token.json."""
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    if not os.path.exists(CLIENT_SECRET):
+        raise RuntimeError("client_secret.json mancante nella cartella viral-os")
+    flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET, YT_SCOPES)
+    creds = flow.run_local_server(port=0, prompt="consent",
+                                  authorization_prompt_message="")
+    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+        f.write(creds.to_json())
+    return creds
+
+
+def yt_service(creds):
+    from googleapiclient.discovery import build
+    return build("youtube", "v3", credentials=creds)
+
+
+def yt_channel_name(creds):
+    try:
+        yt = yt_service(creds)
+        r = yt.channels().list(part="snippet", mine=True).execute()
+        items = r.get("items", [])
+        return items[0]["snippet"]["title"] if items else None
+    except Exception:
+        return None
+
+
+def yt_make_thumbnail(title):
+    """Genera una miniatura dall'ultimo render: frame + titolo in sovrimpressione."""
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg or not os.path.exists(LAST_RENDER):
+        return None
+    thumb = os.path.join(OUTPUT_DIR, "thumb.jpg")
+    safe = title.replace("'", "").replace(":", " ").replace("\\", " ")[:60]
+    # estrae un frame al 25% e scrive il titolo grande in basso
+    vf = (f"scale=720:1280,drawtext=text='{safe}':fontcolor=white:fontsize=54:"
+          f"borderw=4:bordercolor=black:x=(w-text_w)/2:y=h*0.72:line_spacing=8")
+    try:
+        run_ff(ffmpeg, ["-ss", "3", "-i", LAST_RENDER, "-frames:v", "1", "-vf", vf, thumb])
+        return thumb if os.path.exists(thumb) else None
+    except Exception as e:
+        print(f"     thumbnail saltata: {e}")
+        return None
+
+
+def yt_upload(data):
+    from googleapiclient.http import MediaFileUpload
+    creds = yt_get_credentials()
+    if not creds:
+        raise RuntimeError("non autorizzato - clicca prima 'Collega YouTube'")
+    if not os.path.exists(LAST_RENDER):
+        raise RuntimeError("nessun video montato - assembla prima il video")
+
+    title = (data.get("title") or "Storia horror").strip()[:100]
+    desc = (data.get("description") or "").strip()[:4900]
+    tags = [t.lstrip("#") for t in (data.get("tags") or []) if t][:25]
+    privacy = data.get("privacy") or "private"
+    publish_at = data.get("publishAt")  # ISO8601 UTC, opzionale
+
+    status = {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}
+    if publish_at:
+        status["privacyStatus"] = "private"
+        status["publishAt"] = publish_at
+
+    body = {
+        "snippet": {"title": title, "description": desc, "tags": tags,
+                    "categoryId": "24"},
+        "status": status,
+    }
+    yt = yt_service(creds)
+    media = MediaFileUpload(LAST_RENDER, mimetype="video/mp4", resumable=True)
+    req = yt.videos().insert(part="snippet,status", body=body, media_body=media)
+    resp = None
+    while resp is None:
+        _, resp = req.next_chunk()
+    vid = resp["id"]
+
+    thumb_set = False
+    if data.get("thumbnail"):
+        try:
+            tp = yt_make_thumbnail(title)
+            if tp:
+                yt.thumbnails().set(videoId=vid, media_body=MediaFileUpload(tp)).execute()
+                thumb_set = True
+        except Exception as e:
+            print(f"     thumbnail non impostata: {e}")
+    return {"id": vid, "url": f"https://youtu.be/{vid}", "thumbnail": thumb_set,
+            "scheduled": bool(publish_at)}
 
 
 # ----------------------------- HTTP -----------------------------
@@ -272,6 +393,33 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "text/plain", b"ok")
             return
 
+        if parsed.path == "/youtube_status":
+            try:
+                creds = yt_get_credentials()
+                name = yt_channel_name(creds) if creds else None
+                payload = json.dumps({
+                    "configured": os.path.exists(CLIENT_SECRET),
+                    "authorized": bool(creds),
+                    "channel": name,
+                }).encode("utf-8")
+                self._send(200, "application/json", payload)
+            except Exception as e:
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/youtube_auth":
+            try:
+                print("  -> avvio OAuth YouTube (apro il browser per il consenso)...")
+                yt_authorize()
+                name = yt_channel_name(yt_get_credentials())
+                print(f"     autorizzato: {name}")
+                self._send(200, "application/json",
+                           json.dumps({"authorized": True, "channel": name}).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE auth: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
         if parsed.path in ("/tts", "/tts_json"):
             testo = (qs.get("text", [""])[0]).strip()
             voce = qs.get("voice", [DEFAULT_VOICE])[0] or DEFAULT_VOICE
@@ -299,25 +447,40 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/render":
-            self._send(404, "text/plain", b"not found")
-            return
-        try:
-            length = int(self.headers.get("Content-Length", 0))
-            data = json.loads(self.rfile.read(length).decode("utf-8"))
-            print(f"  -> RENDER: {len(data.get('clips', []))} clip, "
-                  f"{len(data.get('timings', []))} frasi, "
-                  f"{round(float(data.get('total_ms', 0))/1000)}s")
-            work = tempfile.mkdtemp(prefix="viralos_")
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b""
+
+        if parsed.path == "/render":
             try:
-                mp4 = render_job(data, work)
-                print(f"     OK video {len(mp4)//1024} KB")
-                self._send(200, "video/mp4", mp4)
-            finally:
-                shutil.rmtree(work, ignore_errors=True)
-        except Exception as e:
-            print(f"     ERRORE render: {e}")
-            self._send(500, "text/plain", str(e).encode("utf-8"))
+                data = json.loads(raw.decode("utf-8"))
+                print(f"  -> RENDER: {len(data.get('clips', []))} clip, "
+                      f"{len(data.get('timings', []))} frasi, "
+                      f"{round(float(data.get('total_ms', 0))/1000)}s")
+                work = tempfile.mkdtemp(prefix="viralos_")
+                try:
+                    mp4 = render_job(data, work)
+                    print(f"     OK video {len(mp4)//1024} KB")
+                    self._send(200, "video/mp4", mp4)
+                finally:
+                    shutil.rmtree(work, ignore_errors=True)
+            except Exception as e:
+                print(f"     ERRORE render: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/youtube_upload":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                print(f"  -> UPLOAD YouTube: {data.get('title', '')[:50]}...")
+                res = yt_upload(data)
+                print(f"     OK {res['url']}")
+                self._send(200, "application/json", json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE upload: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        self._send(404, "text/plain", b"not found")
 
     def log_message(self, *args):
         pass
