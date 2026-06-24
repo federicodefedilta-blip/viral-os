@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.8.0';
+  const CURRENT_VERSION = 'v1.9.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.8.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.9.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -925,27 +925,115 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     `;
   }
 
+  function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function escTxt(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
   function renderPublish() {
     if (!gData) return;
     const d = gData;
+    const tags = [...(d.hashtags||[]).map(h=>h.replace(/^#/,'')), ...(d.trend_tags||[])].filter(Boolean);
+    const descFull = (d.descrizione||'') + '\n\n' + (d.hashtags||[]).join(' ');
     document.getElementById('publishContent').innerHTML = `
-      <div class="meta-grid">
-        <div class="meta-box"><h5>📋 Titolo</h5><p style="font-weight:600">${d.titolo}</p><button class="btn-sm" style="margin-top:8px" onclick="cpText(${JSON.stringify(d.titolo)})">Copia</button></div>
-        <div class="meta-box"><h5>⏰ Pubblica alle</h5><p class="time-big">${d.orario_pubblicazione}</p></div>
+      <div id="ytStatus" style="font-size:0.8em;color:var(--muted);margin-bottom:12px">Verifico collegamento YouTube...</div>
+
+      <div class="input-group">
+        <label class="input-label">Titolo</label>
+        <input class="input-field" id="pubTitle" maxlength="100" value="${escAttr(d.titolo)}">
       </div>
-      <div class="section-label">📱 Come assemblare in CapCut</div>
-      <div class="capcut-steps">
-        1️⃣ Apri CapCut → Nuovo progetto → <strong>9:16 verticale</strong><br>
-        2️⃣ Importa i <strong>4 video stock</strong> scaricati in sequenza<br>
-        3️⃣ Importa l'<strong>audio MP3</strong> scaricato<br>
-        4️⃣ Clicca <strong>"Sottotitoli automatici"</strong><br>
-        5️⃣ Esporta HD → pubblica su ${platform}
+      <div class="input-group">
+        <label class="input-label">Descrizione</label>
+        <textarea class="input-field" id="pubDesc" rows="5" style="resize:vertical">${escTxt(descFull)}</textarea>
       </div>
-      <div class="section-label">Descrizione <button class="btn-sm" onclick="cpText(${JSON.stringify(d.descrizione)})">Copia</button></div>
-      <div class="text-surface" style="margin-bottom:14px">${d.descrizione}</div>
-      <div class="section-label">Hashtag <button class="btn-sm" onclick="cpText(${JSON.stringify((d.hashtags||[]).join(' '))})">Copia tutti</button></div>
-      <div class="hashtag-box">${(d.hashtags||[]).join(' ')}</div>
+      <div class="input-group">
+        <label class="input-label">Tag (separati da virgola)</label>
+        <input class="input-field" id="pubTags" value="${escAttr(tags.join(', '))}">
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="input-group" style="flex:1;min-width:140px">
+          <label class="input-label">Visibilità</label>
+          <select class="input-field" id="pubPrivacy">
+            <option value="public">🌍 Pubblico</option>
+            <option value="unlisted">🔗 Non in elenco</option>
+            <option value="private" selected>🔒 Privato</option>
+          </select>
+        </div>
+        <div class="input-group" style="flex:1;min-width:140px">
+          <label class="input-label">Programma (opzionale)</label>
+          <input class="input-field" id="pubSchedule" type="datetime-local">
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.8em;color:var(--muted);margin:4px 0 12px">
+        <input type="checkbox" id="pubThumb" checked> Genera miniatura automatica
+      </label>
+
+      <button class="btn btn-primary" id="pubBtn" onclick="ytPublish()" style="width:100%;justify-content:center" disabled>📤 Pubblica su YouTube</button>
+      <div id="pubResult" style="margin-top:12px"></div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:10px">Suggerimento orario: <strong>${escTxt(d.orario_pubblicazione||'sera')}</strong>. Se programmi, la visibilità diventa privata fino all'orario scelto.</div>
     `;
+    ytCheckStatus();
+  }
+
+  async function ytCheckStatus() {
+    const el = document.getElementById('ytStatus');
+    const btn = document.getElementById('pubBtn');
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_status');
+      const s = await r.json();
+      if (!s.configured) {
+        el.innerHTML = '⚠️ YouTube non configurato. Manca <code>client_secret.json</code> (vedi setup Google Cloud).';
+        if (btn) btn.disabled = true;
+      } else if (!s.authorized) {
+        el.innerHTML = 'YouTube configurato ma non collegato. <button class="btn-sm" onclick="ytConnect()">🔗 Collega YouTube</button>';
+        if (btn) btn.disabled = true;
+      } else {
+        el.innerHTML = `✅ Collegato a <strong>${escTxt(s.channel||'canale')}</strong>`;
+        if (btn) btn.disabled = false;
+      }
+    } catch {
+      el.innerHTML = '⚠️ Server locale non attivo. Avvia <code>py voice_server.py</code>.';
+      if (btn) btn.disabled = true;
+    }
+  }
+
+  async function ytConnect() {
+    const el = document.getElementById('ytStatus');
+    el.innerHTML = '🔄 Apertura consenso Google nel browser... autorizza e torna qui.';
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_auth');
+      if (!r.ok) throw new Error(await r.text());
+      await ytCheckStatus();
+    } catch(e){ el.innerHTML = '❌ Errore collegamento: ' + escTxt(e.message||e); }
+  }
+
+  async function ytPublish() {
+    const btn = document.getElementById('pubBtn');
+    const res = document.getElementById('pubResult');
+    btn.disabled = true; btn.textContent = '⏳ Caricamento...';
+    res.innerHTML = '';
+    const tags = document.getElementById('pubTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+    let publishAt = null;
+    const sched = document.getElementById('pubSchedule').value;
+    if (sched) publishAt = new Date(sched).toISOString(); // UTC ISO8601
+    const body = {
+      title: document.getElementById('pubTitle').value,
+      description: document.getElementById('pubDesc').value,
+      tags,
+      privacy: document.getElementById('pubPrivacy').value,
+      publishAt,
+      thumbnail: document.getElementById('pubThumb').checked,
+    };
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_upload', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      res.innerHTML = `<div class="alert-info">✅ Pubblicato! <a href="${j.url}" target="_blank" style="color:var(--accent)">${j.url}</a>${j.scheduled?' (programmato)':''}${j.thumbnail?' · miniatura impostata':''}</div>`;
+      btn.textContent = '✅ Fatto';
+    } catch(e){
+      res.innerHTML = `<div class="error-box">❌ ${escTxt(e.message||e)}</div>`;
+      btn.textContent = '📤 Riprova'; btn.disabled = false;
+    }
   }
 
   // --- Montaggio video lato server (ffmpeg, deterministico) ---
