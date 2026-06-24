@@ -131,16 +131,12 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.2.1';
+  const CURRENT_VERSION = 'v1.3.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
     if (stored) location.reload(true);
   }
-</script>
-<script src="https://cdn.jsdelivr.net/npm/mespeak@0.4.0/meSpeak.js"></script>
-<script>
-  if (window.meSpeak) meSpeak.loadConfig('https://cdn.jsdelivr.net/npm/mespeak@0.4.0/voices.json');
 </script>
 </head>
 <body>
@@ -181,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.2.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.3.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -320,7 +316,16 @@
       <div class="card-title">🎬 Montaggio automatico</div>
       <div class="step-card">
         <div class="step-card-title">⚙️ Assembla il video finale <span class="badge-pending" id="assembleBadge">In attesa</span></div>
-        <div class="step-card-desc">Assembla fino a 10 clip video + musica horror + voce automatica + sottotitoli. Silenzioso durante la generazione — vedrai solo il video finale.</div>
+        <div class="step-card-desc">Assembla fino a 10 clip video + musica horror + voce neurale + sottotitoli. Richiede il server vocale locale attivo (<code>py voice_server.py</code>).</div>
+        <div style="margin-top:10px">
+          <label class="input-label" style="font-size:0.75em">🎙️ Voce</label>
+          <select class="input-field" id="ttsVoice">
+            <option value="it-IT-DiegoNeural">Diego (maschile — horror)</option>
+            <option value="it-IT-IsabellaNeural">Isabella (femminile — narrativa)</option>
+            <option value="it-IT-ElsaNeural">Elsa (femminile — chiara)</option>
+            <option value="it-IT-GiuseppeMultilingualNeural">Giuseppe (maschile — versatile)</option>
+          </select>
+        </div>
         <div id="assembleLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:160px;overflow-y:auto"></div>
         <div id="assemblePreview" style="margin-top:12px"></div>
       </div>
@@ -996,31 +1001,22 @@ Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
     if (blobUrls.length === 0) { addLog('❌ Nessuna clip disponibile. Verifica che lo step 5 abbia trovato video.'); btn.disabled = false; return; }
     addLog(`✓ ${blobUrls.length} clip pronte.`);
 
-    // FASE 2: TTS via meSpeak (eSpeak, voce robotica ma gratis 100%, offline, no login)
-    addLog('Genero voce con meSpeak...');
-    const ttsText = (gData.script || '').trim().slice(0, 1000);
+    // FASE 2: TTS via server vocale locale (edge-tts, voce neurale italiana)
+    addLog('Genero voce neurale (server locale)...');
+    const ttsText = (gData.script || '').trim().slice(0, 1200);
+    const ttsVoice = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
 
     try {
-      // Aspetta meSpeak con timeout (CDN potrebbe essere lento)
-      let meSpeak = window.meSpeak;
-      let timeout = 0;
-      while (!meSpeak && timeout < 30) {
-        await new Promise(r => setTimeout(r, 100));
-        meSpeak = window.meSpeak;
-        timeout++;
-      }
-      if (!meSpeak) throw new Error('meSpeak timeout - CDN non raggiungibile');
-
-      const voiceLang = _langCode === 'it-IT' ? 'it' : _langCode === 'es-ES' ? 'es' : 'en';
-      const waveArray = meSpeak.speak(ttsText, { rawdata: 'array', rate: 130, pitch: 50, voice: voiceLang });
-      if (!waveArray || waveArray.length === 0) throw new Error('meSpeak output vuoto');
-      const wavBuffer = new ArrayBuffer(waveArray.length);
-      new Uint8Array(wavBuffer).set(waveArray);
-      const decoded = await audioCtx.decodeAudioData(wavBuffer);
+      const ttsUrl = `http://127.0.0.1:5555/tts?text=${encodeURIComponent(ttsText)}&voice=${encodeURIComponent(ttsVoice)}`;
+      const ttsRes = await fetch(ttsUrl);
+      if (!ttsRes.ok) throw new Error('server HTTP ' + ttsRes.status);
+      const ttsArrayBuffer = await ttsRes.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(ttsArrayBuffer);
       window._ttsBuffer = { buffer: decoded, decoded: true };
-      addLog('Voce pronta (meSpeak).');
+      addLog('Voce pronta (edge-tts neurale).');
     } catch(e) {
-      addLog('TTS non disponibile: ' + (e.message || e));
+      addLog('⚠️ Server vocale non raggiungibile: ' + (e.message || e));
+      addLog('   Avvia "py voice_server.py" per avere la voce nel video.');
     }
 
     // FASE 3: Precarica video elements
