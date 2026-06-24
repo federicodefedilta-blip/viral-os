@@ -1,116 +1,191 @@
 #!/usr/bin/env python3
 """
-Viral OS Voice Automation
-Genera voce con gTTS, mixerebbe con video/musica usando ffmpeg
-Usage: python viral_voice.py input.webm "il tuo script" output.webm
+Viral OS Voice Automation - edge-tts edition
+Genera voce neurale italiana (Microsoft Edge TTS) e la mixa con video + musica.
+
+Uso:
+  py viral_voice.py <input.webm> "<script>" <output.mp4> [voce]
+
+Esempio:
+  py viral_voice.py video.webm "Quella notte sentii dei passi..." finale.mp4
+  py viral_voice.py video.webm "..." finale.mp4 it-IT-IsabellaNeural
+
+Voci italiane disponibili:
+  it-IT-DiegoNeural      (maschile, default - ottimo per horror)
+  it-IT-IsabellaNeural   (femminile)
+  it-IT-ElsaNeural       (femminile)
+  it-IT-GiuseppeMultilingualNeural (maschile)
 """
 
 import sys
-import subprocess
 import os
-from pathlib import Path
-from gtts import gTTS
+import subprocess
+import asyncio
+import glob
+
+# pip_system_certs si auto-attiva: fa usare a Python i certificati di Windows
+# (necessario su reti aziendali con proxy SSL)
+import edge_tts
+
+DEFAULT_VOICE = "it-IT-DiegoNeural"
+
+
+def find_ffmpeg():
+    """Trova ffmpeg: prima nel PATH, poi nella cartella winget."""
+    from shutil import which
+    p = which("ffmpeg")
+    if p:
+        return p
+    # Cerca nell'installazione winget
+    pattern = os.path.join(
+        os.environ.get("LOCALAPPDATA", ""),
+        "Microsoft", "WinGet", "Packages",
+        "Gyan.FFmpeg*", "**", "ffmpeg.exe"
+    )
+    matches = glob.glob(pattern, recursive=True)
+    if matches:
+        return matches[0]
+    return None
+
+
+async def genera_voce(testo, voce, out_mp3):
+    """Genera la voce con edge-tts."""
+    communicate = edge_tts.Communicate(testo, voce)
+    await communicate.save(out_mp3)
+
+
+def run_ffmpeg(ffmpeg, args, desc):
+    """Esegue un comando ffmpeg, gestendo gli errori."""
+    try:
+        subprocess.run(
+            [ffmpeg, "-y"] + args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"   ERRORE {desc}:")
+        print("   " + e.stderr.decode("utf-8", errors="ignore")[-500:])
+        return False
+
 
 def main():
     if len(sys.argv) < 4:
-        print("Usage: python viral_voice.py <input.webm> <script_text> <output.webm>")
-        print("\nExample:")
-        print('  python viral_voice.py video.webm "Una storia del terrore..." output.webm')
+        print(__doc__)
         sys.exit(1)
 
     input_file = sys.argv[1]
-    script_text = sys.argv[2]
+    script_text = sys.argv[2].strip()
     output_file = sys.argv[3]
+    voce = sys.argv[4] if len(sys.argv) > 4 else DEFAULT_VOICE
 
-    # Verifica input
     if not os.path.exists(input_file):
-        print(f"❌ File input non trovato: {input_file}")
+        print(f"File input non trovato: {input_file}")
+        sys.exit(1)
+    if not script_text:
+        print("Il testo dello script e' vuoto.")
         sys.exit(1)
 
-    if len(script_text.strip()) == 0:
-        print("❌ Il testo dello script è vuoto")
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        print("ffmpeg non trovato. Installa con: winget install Gyan.FFmpeg")
         sys.exit(1)
 
-    print("🎙️ Viral OS Voice Generator")
-    print(f"📹 Input: {input_file}")
-    print(f"✍️ Testo: {script_text[:60]}...")
+    print("=" * 55)
+    print("  Viral OS Voice Generator (edge-tts)")
+    print("=" * 55)
+    print(f"  Input:  {input_file}")
+    print(f"  Voce:   {voce}")
+    print(f"  Testo:  {script_text[:55]}...")
     print()
 
-    # 1. Genera voce con gTTS
-    print("1️⃣ Generando voce con gTTS...")
+    voice_mp3 = "_temp_voce.mp3"
+    mixed_audio = "_temp_mix.m4a"
+
+    # 1. Genera voce
+    print("1/3  Genero la voce neurale...")
     try:
-        tts = gTTS(script_text, lang='it', slow=False)
-        voice_file = "temp_voice.mp3"
-        tts.save(voice_file)
-        print(f"   ✅ Voce generata: {voice_file}")
+        asyncio.run(genera_voce(script_text, voce, voice_mp3))
+        if not os.path.exists(voice_mp3) or os.path.getsize(voice_mp3) == 0:
+            raise RuntimeError("file voce vuoto")
+        print(f"     OK ({os.path.getsize(voice_mp3)//1024} KB)")
     except Exception as e:
-        print(f"   ❌ Errore gTTS: {e}")
+        print(f"     ERRORE generazione voce: {e}")
         sys.exit(1)
 
-    # 2. Estrai audio dal video originale (musica di background)
-    print("2️⃣ Estraendo audio dal video...")
-    bg_audio_file = "temp_bg_audio.aac"
-    try:
-        subprocess.run([
-            "ffmpeg", "-i", input_file, "-q:a", "9", "-n", bg_audio_file
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        print(f"   ✅ Audio estratto")
-    except subprocess.CalledProcessError:
-        print(f"   ❌ Errore estrazione audio (ffmpeg installato?)")
-        cleanup([voice_file])
+    # 2. Mixa voce (100%) + audio originale del video / musica (25%)
+    #    Se il video non ha audio, usa solo la voce.
+    print("2/3  Mixo voce + musica di sottofondo...")
+    has_audio = _video_has_audio(ffmpeg, input_file)
+    if has_audio:
+        ok = run_ffmpeg(ffmpeg, [
+            "-i", voice_mp3,
+            "-i", input_file,
+            "-filter_complex",
+            "[0:a]volume=1.6[v];[1:a]volume=0.25[m];[v][m]amix=inputs=2:duration=longest:dropout_transition=0[a]",
+            "-map", "[a]", "-c:a", "aac", "-b:a", "192k",
+            mixed_audio,
+        ], "mixaggio")
+    else:
+        ok = run_ffmpeg(ffmpeg, [
+            "-i", voice_mp3,
+            "-filter:a", "volume=1.6",
+            "-c:a", "aac", "-b:a", "192k",
+            mixed_audio,
+        ], "conversione voce")
+    if not ok:
+        _cleanup([voice_mp3, mixed_audio])
+        sys.exit(1)
+    print("     OK")
+
+    # 3. Combina video + nuovo audio
+    print("3/3  Combino video + audio...")
+    ok = run_ffmpeg(ffmpeg, [
+        "-i", input_file,
+        "-i", mixed_audio,
+        "-map", "0:v:0", "-map", "1:a:0",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest",
+        output_file,
+    ], "combinazione")
+    if not ok:
+        _cleanup([voice_mp3, mixed_audio])
         sys.exit(1)
 
-    # 3. Mixerebbe voce + musica di background
-    print("3️⃣ Mixando voce + musica...")
-    mixed_audio_file = "temp_mixed_audio.aac"
-    try:
-        # Voce al centro (1.0), musica ridotta (0.3) per non coprire la voce
-        subprocess.run([
-            "ffmpeg", "-i", voice_file, "-i", bg_audio_file,
-            "-filter_complex", "[0]volume=1.0[v];[1]volume=0.3[m];[v][m]amix=inputs=2:duration=first:dropout_transition=0[out]",
-            "-map", "[out]", "-c:a", "aac", "-q:a", "9", "-n", mixed_audio_file
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        print(f"   ✅ Audio mixato")
-    except subprocess.CalledProcessError as e:
-        print(f"   ❌ Errore mixaggio: {e}")
-        cleanup([voice_file, bg_audio_file])
-        sys.exit(1)
+    _cleanup([voice_mp3, mixed_audio])
 
-    # 4. Ricombina video + audio mixato
-    print("4️⃣ Ricombinando video + audio...")
-    try:
-        subprocess.run([
-            "ffmpeg", "-i", input_file, "-i", mixed_audio_file,
-            "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
-            "-shortest", "-y", output_file
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        print(f"   ✅ Video finale creato: {output_file}")
-    except subprocess.CalledProcessError as e:
-        print(f"   ❌ Errore ricombinazione: {e}")
-        cleanup([voice_file, bg_audio_file, mixed_audio_file])
-        sys.exit(1)
-
-    # 5. Cleanup
-    cleanup([voice_file, bg_audio_file, mixed_audio_file])
-
-    # 6. Summary
     size_mb = os.path.getsize(output_file) / (1024 * 1024)
     print()
-    print("=" * 50)
-    print(f"✅ COMPLETATO!")
-    print(f"📁 File: {output_file}")
-    print(f"📊 Dimensione: {size_mb:.1f} MB")
-    print("🚀 Pronto per YouTube/TikTok/Instagram!")
-    print("=" * 50)
+    print("=" * 55)
+    print(f"  COMPLETATO!  ->  {output_file}  ({size_mb:.1f} MB)")
+    print("  Pronto per YouTube / TikTok / Instagram")
+    print("=" * 55)
 
-def cleanup(files):
-    """Rimuove file temporanei"""
+
+def _video_has_audio(ffmpeg, path):
+    """Verifica se il video ha una traccia audio."""
+    ffprobe = ffmpeg.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+    try:
+        out = subprocess.run(
+            [ffprobe, "-i", path, "-show_streams", "-select_streams", "a",
+             "-loglevel", "error"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        return b"codec_type=audio" in out.stdout
+    except Exception:
+        return False
+
+
+def _cleanup(files):
     for f in files:
         try:
             if os.path.exists(f):
                 os.remove(f)
-        except:
+        except Exception:
             pass
+
 
 if __name__ == "__main__":
     main()

@@ -1,117 +1,83 @@
-# 🎙️ Viral OS Voice Automation
+# 🎙️ Viral OS Voice Automation (edge-tts)
 
-Script Python per aggiungere automaticamente voce italiana ai video generati da ViralOS.
+Aggiunge automaticamente una **voce neurale italiana naturale** ai video generati da ViralOS, mixandola con la musica di sottofondo.
 
-## Requisiti
-
-- **Python 3.8+**
-- **ffmpeg** (per mixaggio audio/video)
-- Librerie Python: `gtts`, `pydub`
-
-## Setup (una volta)
-
-### 1. Installa Python
-- Windows: Scarica da [python.org](https://www.python.org/downloads/)
-- macOS: `brew install python3`
-- Linux: `sudo apt install python3 python3-pip`
-
-### 2. Installa ffmpeg
-
-**Windows:**
-```bash
-# Via Chocolatey (consigliato)
-choco install ffmpeg
-
-# O scarica manualmente da ffmpeg.org
-```
-
-**macOS:**
-```bash
-brew install ffmpeg
-```
-
-**Linux:**
-```bash
-sudo apt install ffmpeg
-```
-
-### 3. Installa librerie Python
-
-Apri Terminal/PowerShell e esegui:
-
-```bash
-pip install gtts pydub
-```
-
-## Uso
-
-### Flusso veloce:
-
-1. **Genera il video in ViralOS** → Scarica il WebM
-2. **Apri Terminal/PowerShell** nella stessa cartella del video
-3. **Esegui:**
-
-```bash
-python viral_voice.py input.webm "Il tuo script qui" output.webm
-```
-
-### Esempio completo:
-
-```bash
-python viral_voice.py video.webm "Una notte buia, mi svegliai e sentii strani rumori nella casa. Non sapevo che quella sarebbe stata l'ultima notte della mia vita." output.webm
-```
-
-### Output:
-- ✅ File: `output.webm` (video pronto con voce + musica)
-- ✅ Dimensione: ~20-30 MB
-- ✅ Durata: 61 secondi (o come generato in ViralOS)
-
-## Dettagli tecnici
-
-| Elemento | Impostazione |
-|----------|-------------|
-| **Voce** | gTTS (Google Translate TTS) |
-| **Lingua** | Italiano (it-IT) |
-| **Musica background** | Volume 30% (per non coprire la voce) |
-| **Voce** | Volume 100% |
-| **Formato output** | WebM VP9 + AAC |
-| **Costo** | 100% GRATIS |
-
-## Troubleshooting
-
-### "ffmpeg not found"
-- Verifica che ffmpeg sia installato: `ffmpeg -version`
-- Se non è installato, rifai il setup di ffmpeg
-
-### "ModuleNotFoundError: gtts"
-- Reinstalla le librerie:
-```bash
-pip install --upgrade gtts pydub
-```
-
-### "Error estrazione audio"
-- Verifica che il file WebM sia valido
-- Prova a rigenerare il video in ViralOS
-
-### Lo script è lento
-- È normale, gTTS genera la voce in tempo reale (~1-2 minuti per uno script medio)
-- ffmpeg impiega altri 1-2 minuti per mixare
-
-## Prossimi passi
-
-1. **Carica su YouTube/TikTok/Instagram**
-2. **Personalizza i tag/hashtag** per il tuo canale
-3. **Monitora le visualizzazioni**
-
-## Supporto
-
-Se hai problemi:
-1. Verifica che ffmpeg sia installato correttamente
-2. Assicurati che il WebM sia generato correttamente da ViralOS
-3. Prova con uno script più breve prima
+Usa **edge-tts** (le voci neurali di Microsoft Edge): gratuito, illimitato, voce di qualità professionale.
 
 ---
 
-**Nota:** La prima volta che usi lo script, gTTS potrebbe impiegare più tempo (1-2 minuti). Le volte successive saranno più veloci (30-60 secondi).
+## Setup (già fatto su questo PC ✅)
 
-Buona fortuna! 🚀
+Questi comandi sono già stati eseguiti. Servono solo se reinstalli su un altro computer:
+
+```powershell
+py -m pip install edge-tts pip-system-certs
+winget install Gyan.FFmpeg
+```
+
+> `pip-system-certs` serve perché sei su rete aziendale (proxy SSL): fa usare a Python i certificati di Windows.
+
+---
+
+## Uso quotidiano
+
+### 1. Genera il video in ViralOS
+- Completa tutti gli step fino allo step 6
+- Scarica il video (file `.webm` o `.mp4`)
+- Copia anche lo **script** generato (lo stesso testo della voce)
+
+### 2. Esegui lo script
+
+Apri PowerShell nella cartella `viral-os` e lancia:
+
+```powershell
+py viral_voice.py "percorso\al\video.webm" "il testo dello script qui" finale.mp4
+```
+
+**Esempio reale:**
+```powershell
+py viral_voice.py "$env:USERPROFILE\Downloads\viral-os-123.webm" "Quella notte sentii dei passi nella soffitta. Ma in casa ero solo. Mi alzai, e quello che vidi mi gela ancora il sangue." finale.mp4
+```
+
+### 3. Carica `finale.mp4` su YouTube / TikTok / Instagram 🚀
+
+---
+
+## Scegliere la voce
+
+Aggiungi il nome della voce come **quarto parametro**:
+
+```powershell
+py viral_voice.py video.webm "testo" finale.mp4 it-IT-IsabellaNeural
+```
+
+| Voce | Tipo | Note |
+|------|------|------|
+| `it-IT-DiegoNeural` | Maschile | **default** — ottimo per horror |
+| `it-IT-IsabellaNeural` | Femminile | calda, narrativa |
+| `it-IT-ElsaNeural` | Femminile | chiara |
+| `it-IT-GiuseppeMultilingualNeural` | Maschile | versatile |
+
+---
+
+## Come funziona
+
+1. **edge-tts** genera la voce italiana dal testo (MP3)
+2. **ffmpeg** mixa: voce al 160%, musica del video al 25% (così la voce è sempre chiara)
+3. **ffmpeg** ricombina video + nuovo audio in un MP4 finale
+
+Voce + musica + sottotitoli (già nel video) = video completo pronto da pubblicare.
+
+---
+
+## Problemi comuni
+
+**"ffmpeg non trovato"** → riavvia PowerShell (winget ha aggiunto ffmpeg al PATH), oppure lo script lo cerca automaticamente nella cartella winget.
+
+**Errore SSL / certificato** → verifica che `pip-system-certs` sia installato: `py -m pip show pip-system-certs`
+
+**La voce copre troppo la musica (o viceversa)** → modifica i valori `volume=1.6` (voce) e `volume=0.25` (musica) in `viral_voice.py`, riga ~120.
+
+---
+
+100% gratis, illimitato, nessuna carta di credito. 🎬
