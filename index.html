@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.6.1';
+  const CURRENT_VERSION = 'v1.7.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.6.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.7.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -519,6 +519,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
   "titolo": "titolo che terrorizza scritto in ${langName}, max 60 caratteri, per ${platform}",
   "descrizione": "descrizione che fa venire i brividi scritta in ${langName}, max 200 caratteri, aumenta curiosità",
   "hashtags": ["10 hashtag horror virali scritti in ${langName} (tradotti, NON in italiano se la lingua è diversa), ognuno con #, mix di tag generici horror e specifici del sottogenere"],
+  "scene_queries": ["UNA query di ricerca video stock per OGNI frase dello script, NELLO STESSO ORDINE delle frasi. SEMPRE in INGLESE (anche se lo script è in altra lingua). Ogni query = 2-4 parole che descrivono VISIVAMENTE e in modo concreto cosa si vede in quella frase, in stile horror cinematografico (es. 'dark empty hallway', 'old photograph hand', 'child bedroom night', 'foggy forest path', 'phone screen glow dark'). Deve esserci esattamente una query per frase, stesso numero di frasi dello script."],
   "orario_pubblicazione": "orario sera/notte ottimale per horror su ${platform}",
   "tip_viralita": "consiglio specifico per questo sottogenere su ${platform}"
 }`;
@@ -720,6 +721,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     d.video_theme = str(d.video_theme) || 'dark';
     d.hashtags = arr(d.hashtags);
     d.trend_tags = arr(d.trend_tags);
+    d.scene_queries = arr(d.scene_queries);
     if (d.affiliate && typeof d.affiliate === 'object') {
       d.affiliate.prodotto = str(d.affiliate.prodotto);
       d.affiliate.perche = str(d.affiliate.perche);
@@ -829,29 +831,45 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
 
     const theme = (gData && gData.video_theme) || window._videoTheme || 'dark';
     const basePool = themePools[theme] || themePools.dark;
-    const queries = [...basePool, ...basePool].slice(0, 6).sort(() => Math.random() - 0.5);
+    // Se l'AI ha generato query per frase, usa QUELLE in ordine (clip a tema, allineate alle frasi).
+    // Altrimenti ripiega sul pool tematico generico.
+    const sceneQ = (gData.scene_queries || []).filter(q => q && q.trim()).slice(0, 16);
+    const perSentence = sceneQ.length >= 3;
+    const queries = perSentence ? sceneQ : [...basePool, ...basePool].slice(0, 10);
+    const maxClips = perSentence ? sceneQ.length : 10;
+    // estende il placeholder grid al numero giusto
+    document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${Array.from({length:Math.min(maxClips,16)},(_,i)=>`<div class="img-placeholder">🎬 ${i+1}/${maxClips}...</div>`).join('')}</div>`;
 
     try {
       const results = [];
       for (const query of queries) {
-        if (results.filter(Boolean).length >= 10) break;
-        const page = Math.floor(Math.random() * 3) + 1;
-        const res = await fetch(
-          `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=15&page=${page}`,
-          { headers: { Authorization: k.pexels } }
-        );
-        if (!res.ok) throw new Error(`Pexels error: ${res.status}`);
-        const data = await res.json();
-        const videos = (data.videos || []).sort(() => Math.random() - 0.5).slice(0, 2);
-        for (const video of videos) {
+        if (results.length >= maxClips) break;
+        const page = perSentence ? 1 : Math.floor(Math.random() * 3) + 1;
+        let video = null;
+        try {
+          const res = await fetch(
+            `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=8&page=${page}&orientation=portrait`,
+            { headers: { Authorization: k.pexels } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const vids = data.videos || [];
+            // per-frase: prendo il PIÙ pertinente (primo); generico: random tra i primi
+            video = perSentence ? vids[0] : vids[Math.floor(Math.random() * Math.min(vids.length, 5))];
+          }
+        } catch {}
+        if (video) {
           const file = video.video_files
             .filter(f => f.quality === 'hd' || f.quality === 'sd')
             .sort((a, b) => a.width - b.width)[0];
-          results.push({ url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url });
+          results.push({ url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url, query });
+        } else if (!perSentence) {
+          results.push(null);
         }
-        if (!videos.length) results.push(null);
       }
-      generatedVideos = results.filter(Boolean).slice(0, 10);
+      // NON filtrare/troncare per-frase: l'ordine deve corrispondere alle frasi
+      generatedVideos = perSentence ? results.filter(Boolean) : results.filter(Boolean).slice(0, 10);
+      window._perSentenceClips = perSentence;
       document.getElementById('imgBadge').textContent = '✓ Completato';
       document.getElementById('imgBadge').className = 'badge-done';
       document.getElementById('imagesResult').innerHTML = `<div class="videos-grid">${results.map((v,i) => v
@@ -957,10 +975,11 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
       return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
     };
 
-    // Prima usa i video già trovati nello step 5
+    // Prima usa i video già trovati nello step 5 (fino a 16 se clip per-frase)
+    const maxDownload = window._perSentenceClips ? 16 : 10;
     const existing = (generatedVideos || []).filter(Boolean);
     for (const v of existing) {
-      if (blobUrls.length >= 10) break;
+      if (blobUrls.length >= maxDownload) break;
       try {
         const res = await fetchWithTimeout(v.url, { mode: 'cors' }, 15000);
         if (!res.ok) throw new Error();
@@ -1128,6 +1147,9 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
       }
       return idx;
     }
+    // Allinea le clip alle frasi solo se sono clip generate per-frase E abbiamo i tempi reali
+    const alignBySentence = !!(window._perSentenceClips && window._ttsTiming && window._ttsTiming.length && sentences.length);
+    if (alignBySentence) addLog('Clip allineate alle frasi (tema per frase).');
 
     // Risveglia AudioContext (Edge/Chrome lo avviano sospeso)
     await audioCtx.resume();
@@ -1177,7 +1199,11 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
           return;
         }
 
-        const expectedIdx = Math.min(Math.floor(elapsed / clipDurMs), numClips - 1);
+        // Clip a tema per frase: la clip segue la frase narrata. Altrimenti distribuzione a tempo.
+        const sentIdx = currentSentenceIdx(elapsed);
+        const expectedIdx = alignBySentence
+          ? Math.min(Math.floor(sentIdx / Math.max(sentences.length, 1) * numClips), numClips - 1)
+          : Math.min(Math.floor(elapsed / clipDurMs), numClips - 1);
 
         // Pre-roll: avvia la clip successiva ~0.8s prima del cambio, così è già fluida
         const nextIdx = Math.min(expectedIdx + 1, numClips - 1);
@@ -1220,8 +1246,7 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
         ctx2d.fillStyle = grad; ctx2d.fillRect(0, 0, cw, ch);
 
 
-        // Sottotitoli sincronizzati sulla voce (pesati per lunghezza frase)
-        const sentIdx = currentSentenceIdx(elapsed);
+        // Sottotitoli sincronizzati sulla voce (sentIdx già calcolato sopra)
         const sent = (sentences[sentIdx] || '').trim();
         if (sent) {
           const fontSize = Math.min(52, Math.max(36, Math.floor(cw * 0.048)));
