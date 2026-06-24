@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.4.3';
+  const CURRENT_VERSION = 'v1.4.4';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.3</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.4</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -465,11 +465,14 @@
     // Salva il tema video per usarlo dopo
     window._videoTheme = sg.video_theme;
 
+    const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
     const prompt = `Sei uno sceneggiatore horror di fama mondiale specializzato in cortometraggi virali per ${platform}. La tua creepypasta deve fermare lo scroll in 1 secondo e hauntar la mente per giorni.
+
+⚠️ LINGUA OBBLIGATORIA: scrivi TUTTI i contenuti testuali (script, titolo, descrizione, e ogni altro testo) ESCLUSIVAMENTE in ${langName}. Anche se queste istruzioni sono in italiano, il tuo output DEVE essere interamente in ${langName}. Non mischiare le lingue.
 
 PARAMETRI:
 - Piattaforma: ${platform}
-- Lingua: ${lang}
+- Lingua output: ${langName}
 - Durata: ${dur} secondi — lo script DEVE contenere ALMENO ${Math.round(parseInt(dur) * 2.6)} parole per riempire tutto il video. Una voce narrante legge ~2.6 parole al secondo: se scrivi meno parole, il video resta in silenzio. NON scrivere meno del minimo.
 - Sottogenere OBBLIGATORIO: ${sg.nome}
 - Ambientazione: ${sg.ambientazione}
@@ -1014,7 +1017,13 @@ IMPORTANTE: genera "script" PER PRIMO e COMPLETO con il suo finale, prima di tut
     // FASE 2: TTS via server vocale locale (edge-tts, voce neurale italiana)
     addLog('Genero voce neurale (server locale)...');
     const ttsText = (gData.script || '').trim().slice(0, 3000);
-    const ttsVoice = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
+    // Ricalcola la lingua dal menu (robusto anche se lo step 4 è stato saltato)
+    const _lang = document.getElementById('lang') ? document.getElementById('lang').value : 'italiano';
+    _langCode = _lang === 'inglese' ? 'en-US' : _lang === 'spagnolo' ? 'es-ES' : 'it-IT';
+    let ttsVoice = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
+    // Adatta la voce alla lingua dello script (se non è italiano la voce IT lo pronuncerebbe male)
+    if (_langCode === 'en-US' && !ttsVoice.startsWith('en-')) ttsVoice = 'en-US-GuyNeural';
+    else if (_langCode === 'es-ES' && !ttsVoice.startsWith('es-')) ttsVoice = 'es-ES-AlvaroNeural';
 
     window._ttsRawMp3 = null;
     try {
