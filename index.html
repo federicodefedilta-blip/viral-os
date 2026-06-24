@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v1.4.0';
+  const CURRENT_VERSION = 'v1.4.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v1.4.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -476,14 +476,19 @@ PARAMETRI:
 - Prodotto affiliate da integrare: ${affCat === 'auto' ? 'scegli tu un prodotto horror/thriller correlato al sottogenere' : affCat}
 
 COME SCRIVERE LO SCRIPT:
-Scrivi una storia fluida in prima persona, senza titoli di atti o strutture visibili. Il lettore deve essere trascinato dalla prima parola all'ultima senza mai sapere dove sta andando. La tensione cresce in modo naturale come nella vita vera.
+Scrivi una vera creepypasta in prima persona: un fatto reale, quotidiano, che lentamente si rivela impossibile. Niente titoli, niente atti. Il lettore deve essere trascinato dalla prima parola all'ultima senza mai sapere dove sta andando. La tensione cresce come nella vita vera, poi precipita.
 
-TECNICA NARRATIVA:
-- Inizia con un fatto strano, concreto, specifico — non generico
-- Aggiungi dettagli sensoriali (suoni, odori, sensazioni fisiche) — non aggettivi
-- Ogni frase deve creare una domanda nella mente del lettore
-- Il ritmo accelera da solo man mano che la situazione peggiora
-- Finale: non spiegare nulla. Lascia una domanda senza risposta. L'ultima frase deve essere un colpo allo stomaco.
+LA PRIMA FRASE È TUTTO (HOOK):
+La prima frase deve fermare lo scroll in mezzo secondo. Deve essere uno shock immediato: un'affermazione tranquilla che nasconde un orrore agghiacciante, o un dettaglio impossibile detto con naturalezza. Deve creare INSTANTANEAMENTE una domanda bruciante a cui il lettore DEVE sapere la risposta. Mai un'introduzione lenta, mai "ti racconto di quella volta". Colpisci subito.
+Esempi di forza dell'hook: "Mia figlia ride sempre quando dorme. Stanotte ho sentito due risate." / "Ogni notte qualcuno spegne la luce di camera mia. Vivo da solo."
+
+TECNICA NARRATIVA (CREEPYPASTA):
+- Parti dal normale e quotidiano, poi infila UN dettaglio sbagliato che gela il sangue
+- Dettagli sensoriali concreti (suoni, odori, temperatura, texture) — mai aggettivi vaghi
+- Ogni frase apre una nuova domanda inquietante, mai chiude quella prima
+- L'orrore è implicito, suggerito, mai mostrato del tutto — la mente del lettore fa il resto
+- Escalation: piccoli segnali → realizzazione lenta → punto di non ritorno
+- Finale: NON spiegare nulla. Un'ultima frase che ribalta tutto e fa raggelare. Un colpo allo stomaco che resta in testa per giorni.
 
 REGOLE ASSOLUTE:
 - Prima persona, tempo passato o presente
@@ -492,10 +497,13 @@ REGOLE ASSOLUTE:
 - ZERO struttura a atti, ZERO titoletti, ZERO pubblicità
 - Lo script è un flusso unico di coscienza, come un messaggio mandato a un amico alle 3 di notte
 
-ESEMPI DI INCIPIT (NON copiare, ispirati):
+ESEMPI DI HOOK POTENTI (NON copiare, ispirati alla forza):
 - "Ho sentito mia madre chiamarmi dal piano di sotto. È sepolta nel giardino da tre anni."
 - "Il GPS mi ha portato a casa mia. Non ci abito più da cinque anni."
 - "Ho trovato una foto di me dormiente sul mio telefono. Ero sveglio."
+- "Mia figlia ride sempre quando dorme. Stanotte ho sentito due risate."
+- "Il citofono suona ogni notte alle 3:07. Sullo schermo ci sono sempre io."
+- "Mio marito è morto a marzo. I suoi vestiti sporchi sono ancora nel cesto, e cambiano."
 
 Rispondi SOLO con JSON valido, zero markdown, zero testo fuori dal JSON.
 
