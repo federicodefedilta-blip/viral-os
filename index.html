@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.2.0';
+  const CURRENT_VERSION = 'v2.3.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -170,6 +170,17 @@
     </div>
 
     <div class="input-group">
+      <label class="input-label" style="display:flex;align-items:center;gap:6px">
+        <span class="key-status" id="dotPixabay"></span> Pixabay API Key <span style="color:var(--orange);font-size:0.8em">opzionale</span>
+      </label>
+      <div class="key-input-wrap">
+        <input class="key-input" type="password" id="keyPixabay" placeholder="..." oninput="saveKeys()">
+        <button class="key-toggle" onclick="toggleVis('keyPixabay')">👁</button>
+      </div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>pixabay.com/api/docs</strong> — seconda fonte clip (più varietà)</div>
+    </div>
+
+    <div class="input-group">
       <label class="input-label" style="display:flex;align-items:center;gap:6px">▶️ YouTube (pubblicazione + analisi)</label>
       <div id="ytStatusModal" style="font-size:0.72em;color:var(--muted);margin:4px 0 8px"></div>
       <button class="btn btn-ghost" onclick="ytReconnect('ytStatusModal')" style="width:100%;justify-content:center">🔗 Collega / Ricollega YouTube</button>
@@ -184,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.2.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.3.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -379,15 +390,18 @@
   function getKeys() {
     return {
       groq: localStorage.getItem('vos_groq') || '',
-      pexels: localStorage.getItem('vos_pexels') || ''
+      pexels: localStorage.getItem('vos_pexels') || '',
+      pixabay: localStorage.getItem('vos_pixabay') || ''
     };
   }
 
   function saveKeys() {
     const g = document.getElementById('keyGroq').value.trim();
     const p = document.getElementById('keyPexels').value.trim();
+    const px = document.getElementById('keyPixabay') ? document.getElementById('keyPixabay').value.trim() : '';
     if (g) localStorage.setItem('vos_groq', g); else localStorage.removeItem('vos_groq');
     if (p) localStorage.setItem('vos_pexels', p); else localStorage.removeItem('vos_pexels');
+    if (px) localStorage.setItem('vos_pixabay', px); else localStorage.removeItem('vos_pixabay');
     updateKeyDots();
   }
 
@@ -400,6 +414,7 @@
     };
     dot('dotGroq', !!k.groq, false);
     dot('dotPexels', !!k.pexels, true);
+    dot('dotPixabay', !!k.pixabay, true);
     document.getElementById('headerStatus').textContent = k.groq ? 'AI Online' : 'Configura chiavi';
     const banner = document.getElementById('missingKeysBanner');
     if (!k.groq) {
@@ -413,6 +428,7 @@
     const k = getKeys();
     document.getElementById('keyGroq').value = k.groq;
     document.getElementById('keyPexels').value = k.pexels;
+    if (document.getElementById('keyPixabay')) document.getElementById('keyPixabay').value = k.pixabay;
     updateKeyDots();
     document.getElementById('keysModal').classList.remove('hidden');
     ytShowStatus('ytStatusModal');
@@ -804,28 +820,59 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     if (ab) { ab.style.display = ''; ab.textContent = '🔄 Rigenera'; }
   }
 
-  // --- Core fetch clip (riusabile da manuale e batch) ---
+  // --- Core fetch clip (Pexels + Pixabay, riusabile da manuale e batch) ---
   async function pexelsSearch(query, pexelsKey, usedIds) {
-    // niente orientation (più risultati); sceglie un clip vario non già usato
     const page = Math.floor(Math.random() * 4) + 1;
     try {
       const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=12&page=${page}`, { headers: { Authorization: pexelsKey } });
       if (!res.ok) return null;
       const d = await res.json();
-      let vids = (d.videos || []).filter(v => !usedIds.has(v.id));
-      if (!vids.length) vids = d.videos || [];
+      let vids = (d.videos || []).filter(v => !usedIds.has('px'+v.id));
       if (!vids.length) return null;
-      // privilegia clip verticali/quadrate ma non obbligatorio; varietà tra i primi
       vids.sort((a,b) => (a.height/a.width >= 1 ? -1 : 1) - (b.height/b.width >= 1 ? -1 : 1));
       const top = vids.slice(0, 6);
       const video = top[Math.floor(Math.random() * top.length)];
-      usedIds.add(video.id);
+      usedIds.add('px'+video.id);
       const file = video.video_files.filter(f => f.quality === 'hd' || f.quality === 'sd').sort((a, b) => a.width - b.width)[0];
-      return { url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url, query };
+      return { url: file?.link || video.video_files[0].link, thumbnail: video.image, id: 'px'+video.id, photographer: video.user.name, pexels_url: video.url, query };
     } catch { return null; }
   }
 
+  async function pixabaySearch(query, pixabayKey, usedIds) {
+    if (!pixabayKey) return null;
+    const page = Math.floor(Math.random() * 3) + 1;
+    try {
+      const res = await fetch(`https://pixabay.com/api/videos/?key=${pixabayKey}&q=${encodeURIComponent(query)}&per_page=12&page=${page}`);
+      if (!res.ok) return null;
+      const d = await res.json();
+      let hits = (d.hits || []).filter(h => !usedIds.has('pb'+h.id));
+      if (!hits.length) return null;
+      const hit = hits[Math.floor(Math.random() * Math.min(hits.length, 6))];
+      usedIds.add('pb'+hit.id);
+      const v = hit.videos || {};
+      const url = (v.medium && v.medium.url) || (v.small && v.small.url) || (v.large && v.large.url) || (v.tiny && v.tiny.url);
+      if (!url) return null;
+      return { url, thumbnail: '', id: 'pb'+hit.id, photographer: hit.user || 'Pixabay', pexels_url: hit.pageURL || 'https://pixabay.com', query };
+    } catch { return null; }
+  }
+
+  // cerca una clip alternando le due fonti (varietà), con fallback all'altra
+  async function searchClip(query, keys, usedIds) {
+    const sources = [];
+    if (keys.pexels) sources.push('px');
+    if (keys.pixabay) sources.push('pb');
+    if (!sources.length) return null;
+    // ordine casuale per mescolare le fonti
+    sources.sort(() => Math.random() - 0.5);
+    for (const s of sources) {
+      const v = s === 'px' ? await pexelsSearch(query, keys.pexels, usedIds) : await pixabaySearch(query, keys.pixabay, usedIds);
+      if (v) return v;
+    }
+    return null;
+  }
+
   async function fetchClipsData(data, pexelsKey) {
+    const keys = getKeys();
     const theme = (data && data.video_theme) || window._videoTheme || 'dark';
     const basePool = themePools[theme] || themePools.dark;
     const sceneQ = (data.scene_queries || []).filter(q => q && q.trim()).slice(0, 16);
@@ -834,18 +881,16 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const results = [];
     if (perSentence) {
       for (const query of sceneQ) {
-        let v = await pexelsSearch(query, pexelsKey, usedIds);
-        // fallback: se la query specifica non trova nulla, usa una query del tema
-        if (!v) v = await pexelsSearch(basePool[Math.floor(Math.random()*basePool.length)], pexelsKey, usedIds);
+        let v = await searchClip(query, keys, usedIds);
+        if (!v) v = await searchClip(basePool[Math.floor(Math.random()*basePool.length)], keys, usedIds);
         if (v) results.push(v);
       }
     }
-    // se per-frase ha prodotto poco, riempi col pool tematico
     if (results.length < 4) {
       const pool = [...basePool, ...basePool];
       for (const q of pool) {
         if (results.length >= 10) break;
-        const v = await pexelsSearch(q, pexelsKey, usedIds);
+        const v = await searchClip(q, keys, usedIds);
         if (v) results.push(v);
       }
     }
