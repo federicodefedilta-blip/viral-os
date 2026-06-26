@@ -1,0 +1,16 @@
+# Segreti OAuth - NON committare mai
+client_secret.json
+token.json
+
+# Output runtime
+output/
+__pycache__/
+*.pyc
+
+# Asset locali del canale
+AbissoCreepy_banner_1.jpg
+AbissoCreepy_logo.jpg
+logoabissocreepy*.png
+*.webm
+_temp*
+_render*
