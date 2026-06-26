@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.7.1';
+  const CURRENT_VERSION = 'v2.8.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.7.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.8.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -229,6 +229,19 @@
         </select>
       </div>
       <div class="input-group">
+        <label class="input-label">🎬 Format</label>
+        <select class="input-field" id="format" onchange="onFormatChange()">
+          <option value="classica">📖 Storia classica (creepypasta)</option>
+          <option value="interattivo">🎮 Sopravvivi o Muori (a scelte)</option>
+        </select>
+      </div>
+      <div id="intParams" style="display:none">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="3"></div>
+          <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="3" max="8" value="5"></div>
+        </div>
+      </div>
+      <div class="input-group">
         <label class="input-label">Durata video</label>
         <select class="input-field" id="dur">
           <option value="30">30s — Instagram Reels (reach massimo)</option>
@@ -238,19 +251,9 @@
           <option value="180">3 min — TikTok guadagni premium ✓</option>
         </select>
       </div>
-      <button class="btn btn-primary" onclick="startGen()" style="width:100%;justify-content:center;padding:14px">
+      <button class="btn btn-primary" id="genBtn" onclick="startGenerate()" style="width:100%;justify-content:center;padding:14px">
         🔍 Analizza trend e genera contenuto
       </button>
-    </div>
-
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">🎮 Video interattivo "Sopravvivi o Muori"</div>
-      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Storia a bivi: ad ogni scelta hai <strong>5 secondi</strong>, una ti salva e una ti uccide. Format virale ad alta retention. Genera, monta sul server e scarica (poi pubblichi dallo step 6). Richiede server attivo.</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-        <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="3"></div>
-        <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="3" max="8" value="5"></div>
-      </div>
-      <button class="btn btn-primary" id="intBtn" onclick="assembleInteractive()" style="width:100%;justify-content:center">🎮 Genera video interattivo</button>
       <div id="intLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:160px;overflow-y:auto"></div>
       <div id="intPreview" style="margin-top:12px"></div>
     </div>
@@ -263,6 +266,7 @@
         <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Ora/giorno</label><input class="input-field" id="batchTime" type="time" value="21:00"></div>
         <div class="input-group" style="flex:1;min-width:120px"><label class="input-label">Visibilità</label><select class="input-field" id="batchPrivacy"><option value="private" selected>🔒 Privato</option><option value="public">🌍 Pubblico</option><option value="unlisted">🔗 Non in elenco</option></select></div>
       </div>
+      <div class="input-group"><label class="input-label">🎬 Format</label><select class="input-field" id="batchFormat"><option value="classica">📖 Storia classica</option><option value="interattivo">🎮 Sopravvivi o Muori</option><option value="misto">🎲 Misto (alterna i due)</option></select></div>
       <button class="btn btn-primary" id="batchBtn" onclick="runWeeklyBatch()" style="width:100%;justify-content:center">🚀 Genera e programma</button>
       <div id="batchLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:200px;overflow-y:auto"></div>
     </div>
@@ -611,6 +615,22 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   }
 
   // --- Generate script (flusso manuale) ---
+  // mostra/nasconde i parametri interattivi + aggiorna l'etichetta del pulsante
+  function onFormatChange() {
+    const f = document.getElementById('format').value;
+    const ip = document.getElementById('intParams');
+    if (ip) ip.style.display = f === 'interattivo' ? '' : 'none';
+    const b = document.getElementById('genBtn');
+    if (b) b.textContent = f === 'interattivo' ? '🎮 Genera video interattivo' : '🔍 Analizza trend e genera contenuto';
+  }
+
+  // dispatcher in base al format scelto
+  function startGenerate() {
+    const f = document.getElementById('format') ? document.getElementById('format').value : 'classica';
+    if (f === 'interattivo') assembleInteractive();
+    else startGen();
+  }
+
   async function startGen() {
     const k = getKeys();
     if (!k.groq) { openKeys(); return; }
@@ -1289,6 +1309,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const days = Math.max(1, Math.min(14, parseInt(document.getElementById('batchDays').value) || 7));
     const timeStr = document.getElementById('batchTime').value || '21:00';
     const privacy = document.getElementById('batchPrivacy').value;
+    const batchFmt = document.getElementById('batchFormat') ? document.getElementById('batchFormat').value : 'classica';
     const lang = document.getElementById('lang').value;
     const dur = document.getElementById('dur').value;
     const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
@@ -1315,27 +1336,52 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       // spaziatura PRIMA di ogni chiamata Groq (tranne la prima) per il limite TPM
       if (i > 0) { add(`${dayLabel} attendo 60s (limite API Groq)...`); await sleep(60000); }
       try {
-        add(`${dayLabel} genero script...`);
-        const data = await genScriptRetry(lang, dur, add, dayLabel);
-        add(`${dayLabel} «${data.titolo}»`);
-        const clips = (await fetchClipsData(data, k.pexels)).results.map(v=>v.url);
-        if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
-        // voce e musica casuali per varietà tra i video
+        // format del video corrente (misto = alterna)
+        const fmt = batchFmt === 'misto' ? (i % 2 === 0 ? 'classica' : 'interattivo') : batchFmt;
         const vVoice = randomVoice(lang);
         const vMusic = rnd(MUSIC_POOL);
-        add(`${dayLabel} monto video (${clips.length} clip · ${vVoice.split('-').pop()} · ${vMusic})...`);
-        await renderVideoData(data, clips, { voice: vVoice, bgType: vMusic, bgVol, targetSec: parseInt(dur) });
+        let data;
+        if (fmt === 'interattivo') {
+          add(`${dayLabel} genero storia a bivi...`);
+          const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value) || 3));
+          const choiceSec = Math.max(3, Math.min(8, parseInt(document.getElementById('intSeconds').value) || 5));
+          for (let a = 0; a < 3; a++) {
+            try { data = await generateInteractiveData(lang, dur, rounds); break; }
+            catch(e) { const msg = e.message||''; const m = msg.match(/try again in ([\d.]+)s/);
+              if (/rate limit|TPM|429/i.test(msg) && a < 2) { const w = Math.ceil(m?parseFloat(m[1]):30)+5; add(`${dayLabel} rate limit, attendo ${w}s...`); await sleep(w*1000); continue; }
+              throw e; } }
+          add(`${dayLabel} «${data.titolo}» — ${(data.rounds||[]).length} scelte`);
+          const clips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:[]}, k.pexels)).results.map(v=>v.url);
+          if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
+          const estSec = 20 + (data.rounds||[]).length*(choiceSec+6) + 8;
+          let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
+          add(`${dayLabel} monto interattivo (${clips.length} clip · ${vVoice.split('-').pop()})...`);
+          const rr = await fetch('http://127.0.0.1:5555/render_interactive', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ voice: vVoice, clips, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+              choice_ms: choiceSec*1000, intro: data.intro, rounds: data.rounds, finale: data.finale }) });
+          if (!rr.ok) throw new Error(await rr.text());
+          await rr.blob();
+        } else {
+          add(`${dayLabel} genero script...`);
+          data = await genScriptRetry(lang, dur, add, dayLabel);
+          add(`${dayLabel} «${data.titolo}»`);
+          const clips = (await fetchClipsData(data, k.pexels)).results.map(v=>v.url);
+          if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
+          add(`${dayLabel} monto video (${clips.length} clip · ${vVoice.split('-').pop()} · ${vMusic})...`);
+          await renderVideoData(data, clips, { voice: vVoice, bgType: vMusic, bgVol, targetSec: parseInt(dur) });
+        }
         // programma il giorno i
         const when = new Date(base); when.setDate(base.getDate()+i);
         const publishAt = when.toISOString();
         const desc = (data.descrizione||'') + '\n\n' + (data.hashtags||[]).join(' ');
         const tags = [...(data.hashtags||[]).map(h=>h.replace(/^#/,'')), ...(data.trend_tags||[])].filter(Boolean);
         add(`${dayLabel} carico su YouTube (${when.toLocaleDateString()} ${timeStr})...`);
-        const hook = (data.script||'').trim().split(/(?<=[.!?])\s+/)[0] || '';
+        const hook = ((data.script||data.intro||'')).trim().split(/(?<=[.!?])\s+/)[0] || '';
         const up = await fetch('http://127.0.0.1:5555/youtube_upload', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ title: data.titolo, description: desc, tags, privacy, publishAt, thumbnail: true,
-            meta: { nicchia: data.nicchia, hook, voice: vVoice, music: vMusic, duration: dur, lang } })
+            meta: { nicchia: data.nicchia, hook, voice: vVoice, music: vMusic, duration: dur, lang, format: fmt } })
         });
         if (!up.ok) throw new Error(await up.text());
         const uj = await up.json();
@@ -1509,7 +1555,7 @@ Rispondi SOLO con JSON valido:
   }
 
   async function assembleInteractive() {
-    const btn = document.getElementById('intBtn');
+    const btn = document.getElementById('genBtn');
     const log = document.getElementById('intLog');
     const prev = document.getElementById('intPreview');
     const add = m => { log.innerHTML += `<div>${m}</div>`; log.scrollTop = log.scrollHeight; };
