@@ -43,6 +43,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 LAST_RENDER = os.path.join(OUTPUT_DIR, "last_render.mp4")
+REGISTRY = os.path.join(OUTPUT_DIR, "registry.json")
 CLIENT_SECRET = os.path.join(BASE_DIR, "client_secret.json")
 TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
@@ -367,8 +368,27 @@ def yt_make_thumbnail(title):
         return None
 
 
+def registry_load():
+    try:
+        with open(REGISTRY, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def registry_add(record):
+    data = registry_load()
+    data.append(record)
+    try:
+        with open(REGISTRY, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"     registro non salvato: {e}")
+
+
 def yt_upload(data):
     from googleapiclient.http import MediaFileUpload
+    import time as _time
     creds = yt_get_credentials()
     if not creds:
         raise RuntimeError("non autorizzato - clicca prima 'Collega YouTube'")
@@ -408,6 +428,16 @@ def yt_upload(data):
                 thumb_set = True
         except Exception as e:
             print(f"     thumbnail non impostata: {e}")
+
+    # registra le scelte creative per la futura ottimizzazione
+    meta = data.get("meta") or {}
+    registry_add({
+        "id": vid, "title": title, "ts": _time.strftime("%Y-%m-%d %H:%M"),
+        "publishAt": publish_at, "privacy": status.get("privacyStatus"),
+        "nicchia": meta.get("nicchia"), "voice": meta.get("voice"),
+        "music": meta.get("music"), "duration": meta.get("duration"),
+        "hook": meta.get("hook"), "lang": meta.get("lang"),
+    })
     return {"id": vid, "url": f"https://youtu.be/{vid}", "thumbnail": thumb_set,
             "scheduled": bool(publish_at)}
 
