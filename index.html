@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.5.0';
+  const CURRENT_VERSION = 'v2.6.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.5.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.6.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -485,9 +485,27 @@
       { nome: 'luogo abbandonato', ambientazione: 'ospedale, scuola, fabbrica dismessa', video_theme: 'abandoned' },
       { nome: 'sogno lucido maledetto', ambientazione: 'sogno, sonno, paralisi, confine realtà', video_theme: 'dark' },
       { nome: 'bambino inquietante', ambientazione: 'giocattoli, risate, cameretta, buio', video_theme: 'home' },
+      { nome: 'presenza nello specchio', ambientazione: 'specchi, riflessi, bagno, notte', video_theme: 'home' },
+      { nome: 'chiamata maledetta', ambientazione: 'telefono, numero sconosciuto, voce, notte', video_theme: 'tech' },
+      { nome: 'qualcosa sotto il letto', ambientazione: 'camera, buio, respiro, cigolii', video_theme: 'home' },
+      { nome: 'rituale andato storto', ambientazione: 'candele, simboli, cantina, cerchio', video_theme: 'dark' },
+      { nome: 'manicomio abbandonato', ambientazione: 'ospedale psichiatrico, corsie, celle', video_theme: 'abandoned' },
+      { nome: 'autostrada di notte', ambientazione: 'strada deserta, fari, autostop, nebbia', video_theme: 'urban' },
+      { nome: 'segreto di famiglia', ambientazione: 'casa di famiglia, soffitta, vecchie foto', video_theme: 'home' },
+      { nome: 'il mio doppelganger', ambientazione: 'sosia, identità, città, telecamere', video_theme: 'dark' },
     ];
     const sg = sottogeneri[Math.floor(Math.random() * sottogeneri.length)];
     window._videoTheme = sg.video_theme;
+
+    // Angolo narrativo casuale per variare la STRUTTURA (non sembrano tutti uguali)
+    const angoli = [
+      'confessione diretta, come se lo stessi raccontando a un amico alle 3 di notte',
+      'stai ricostruendo cosa è successo, scoprendo i dettagli agghiaccianti mentre racconti',
+      'serie di eventi/messaggi che diventano progressivamente più inquietanti',
+      'testimone che racconta una cosa impossibile che nessuno gli crede',
+      'racconti gli ultimi giorni prima che tutto precipitasse, col senno di poi',
+    ];
+    const angolo = angoli[Math.floor(Math.random() * angoli.length)];
 
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
     const langSystem = lang === 'inglese'
@@ -505,8 +523,14 @@ PARAMETRI:
 - Durata: ${dur} secondi — lo script DEVE contenere ALMENO ${Math.round(parseInt(dur) * 2.6)} parole. Una voce legge ~2.6 parole/sec: meno parole = video muto. NON scrivere meno del minimo.
 - Sottogenere OBBLIGATORIO: ${sg.nome}
 - Ambientazione: ${sg.ambientazione}
+- Angolo narrativo: ${angolo}
 
-LA PRIMA FRASE È TUTTO (HOOK): deve fermare lo scroll in mezzo secondo, uno shock immediato che crea una domanda bruciante. Mai introduzioni lente.
+PROCESSO OBBLIGATORIO PER L'HOOK (la prima frase decide tutto):
+1. Prima inventa MENTALMENTE 5 prime frasi diverse, ognuna uno shock immediato che crea una domanda bruciante a cui è IMPOSSIBILE non voler rispondere.
+2. Scarta i cliché e le frasi già viste mille volte.
+3. Scegli LA PIÙ scioccante e originale — quella che NEMMENO TU riusciresti a scrollare via.
+4. Costruisci tutta la storia a partire da quella.
+La prima frase deve fermare lo scroll in mezzo secondo. Mai introduzioni lente, mai "ti racconto di".
 
 TECNICA (CREEPYPASTA AVVINCENTE):
 - Protagonista ordinario, dettagli mondani specifici (un nome, "le 3:14", un oggetto comune)
@@ -535,13 +559,23 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   "tip_viralita": "consiglio specifico"
 }`;
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k.groq}` },
-      body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'system', content: langSystem }, { role: 'user', content: prompt }], temperature: 0.85, max_tokens: 3000 })
-    });
-    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
-    const dataR = await res.json();
+    // Prova prima il modello più intelligente (70b), fallback all'8b se non disponibile
+    const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+    let dataR = null, lastErr = '';
+    for (const model of models) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k.groq}` },
+          body: JSON.stringify({ model, messages: [{ role: 'system', content: langSystem }, { role: 'user', content: prompt }], temperature: 0.9, max_tokens: 3000 })
+        });
+        if (res.ok) { dataR = await res.json(); window._lastModel = model; break; }
+        const e = await res.json().catch(()=>({}));
+        lastErr = e.error?.message || `HTTP ${res.status}`;
+        // se è rate limit sul 70b, passa direttamente all'8b; altri errori idem
+      } catch(e) { lastErr = e.message || String(e); }
+    }
+    if (!dataR) throw new Error(lastErr || 'generazione fallita');
     let text = dataR.choices?.[0]?.message?.content || '';
     let clean = text.replace(/```json|```/g, '').trim();
     const start = clean.indexOf('{'); const end = clean.lastIndexOf('}');
