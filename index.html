@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.1.0';
+  const CURRENT_VERSION = 'v2.1.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -169,6 +169,13 @@
       <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>pexels.com/api</strong> — illimitato</div>
     </div>
 
+    <div class="input-group">
+      <label class="input-label" style="display:flex;align-items:center;gap:6px">▶️ YouTube (pubblicazione + analisi)</label>
+      <div id="ytStatusModal" style="font-size:0.72em;color:var(--muted);margin:4px 0 8px"></div>
+      <button class="btn btn-ghost" onclick="ytReconnect('ytStatusModal')" style="width:100%;justify-content:center">🔗 Collega / Ricollega YouTube</button>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Richiede <code>client_secret.json</code> nella cartella + server attivo</div>
+    </div>
+
     <button class="btn btn-primary" onclick="closeKeys()" style="width:100%;justify-content:center;margin-top:8px">✅ Salva e chiudi</button>
   </div>
 </div>
@@ -177,7 +184,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.1.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.1.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -240,7 +247,11 @@
     <div class="card" style="margin-top:16px">
       <div class="card-title">📊 Analisi performance</div>
       <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Metriche dei tuoi video pubblicati. La <strong>retention</strong> (% guardata) è la metrica chiave: dice se l'hook funziona. Richiede YouTube collegato.</div>
-      <button class="btn btn-primary" id="analyticsBtn" onclick="loadAnalytics()" style="width:100%;justify-content:center">📊 Carica metriche</button>
+      <div id="ytStatusMain" style="font-size:0.78em;color:var(--muted);margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="ytReconnect('ytStatusMain')" style="flex:1;min-width:150px;justify-content:center">🔗 Collega / Ricollega YouTube</button>
+        <button class="btn btn-primary" id="analyticsBtn" onclick="loadAnalytics()" style="flex:1;min-width:150px;justify-content:center">📊 Carica metriche</button>
+      </div>
       <div id="analyticsResult" style="margin-top:12px"></div>
     </div>
   </div>
@@ -404,6 +415,7 @@
     document.getElementById('keyPexels').value = k.pexels;
     updateKeyDots();
     document.getElementById('keysModal').classList.remove('hidden');
+    ytShowStatus('ytStatusModal');
   }
 
   function closeKeys() {
@@ -1242,6 +1254,32 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     btn.disabled = false; btn.textContent = '🚀 Genera e programma';
   }
 
+  // --- Collega/Ricollega YouTube da qualsiasi punto ---
+  async function ytReconnect(statusId) {
+    const el = statusId ? document.getElementById(statusId) : null;
+    const setMsg = (h) => { if (el) el.innerHTML = h; };
+    try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
+    catch { setMsg('⚠️ Server locale non attivo. Avvia <code>AVVIA_SERVER.bat</code>.'); return; }
+    setMsg('🔄 Apertura consenso Google nel browser... autorizza e torna qui.');
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_auth');
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      setMsg(`✅ Collegato a <strong>${escTxt(j.channel||'canale')}</strong>`);
+    } catch(e) { setMsg('❌ Errore: ' + escTxt(e.message||e)); }
+  }
+
+  async function ytShowStatus(statusId) {
+    const el = document.getElementById(statusId);
+    if (!el) return;
+    try {
+      const s = await (await fetch('http://127.0.0.1:5555/youtube_status')).json();
+      if (!s.configured) el.innerHTML = '⚠️ Manca <code>client_secret.json</code> (setup Google Cloud).';
+      else if (!s.authorized) el.innerHTML = 'Non collegato.';
+      else el.innerHTML = `✅ Collegato a <strong>${escTxt(s.channel||'canale')}</strong>`;
+    } catch { el.innerHTML = '⚠️ Server non attivo.'; }
+  }
+
   // --- Analisi performance YouTube ---
   async function loadAnalytics() {
     const btn = document.getElementById('analyticsBtn');
@@ -1422,6 +1460,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   if (!localStorage.getItem('vos_groq')) localStorage.setItem('vos_groq', _k);
   if (!localStorage.getItem('vos_pexels')) localStorage.setItem('vos_pexels', _p);
   updateKeyDots();
+  setTimeout(() => { try { ytShowStatus('ytStatusMain'); } catch {} }, 600);
 </script>
 </body>
 </html>
