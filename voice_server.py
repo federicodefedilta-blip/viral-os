@@ -110,11 +110,14 @@ def ass_escape(t):
 
 
 def build_ass(timings, total_ms, path):
-    """Crea un file ASS con sottotitoli sincronizzati, stile horror bianco con bordo."""
-    fontsize = 52
+    """Crea un file ASS con sottotitoli KARAOKE animati: ogni parola si illumina
+    a tempo (stile virale Shorts/TikTok). Le parole già pronunciate sono gialle,
+    quelle in arrivo bianche. Timing parola stimato per lunghezza nella frase."""
+    fontsize = 58
+    # Primary (parola attiva/passata) = giallo; Secondary (non ancora) = bianco
     style = (
-        "Style: Def,Arial,%d,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,"
-        "-1,0,0,0,100,100,0,0,1,4,2,2,80,80,300,1" % fontsize
+        "Style: Def,Arial Black,%d,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,"
+        "-1,0,0,0,100,100,0,0,1,5,2,2,70,70,320,1" % fontsize
     )
     header = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nScaledBorderAndShadow: yes\n\n"
@@ -131,11 +134,27 @@ def build_ass(timings, total_ms, path):
         end = timings[i + 1]["t"] if i + 1 < n else total_ms
         if end <= start:
             end = start + 800
-        txt = ass_escape(t.get("w", ""))
+        txt = ass_escape(t.get("w", "")).strip()
         if not txt:
             continue
+        words = txt.split()
+        total_cs = max(1, int(round((end - start) / 10.0)))  # durata frase in centisec
+        weights = [max(1, len(w)) for w in words]
+        wsum = sum(weights)
+        # distribuisce i centisecondi tra le parole, in proporzione alla lunghezza
+        durs, acc = [], 0
+        for j, w in enumerate(words):
+            if j == len(words) - 1:
+                durs.append(max(1, total_cs - acc))
+            else:
+                d = max(1, int(round(total_cs * weights[j] / wsum)))
+                durs.append(d); acc += d
+        # tag karaoke: {\kf<cs>}parola
+        body = "".join("{\\kf%d}%s " % (durs[j], words[j]) for j in range(len(words))).strip()
+        # piccolo pop iniziale (scala) per dare dinamismo
+        body = "{\\fad(120,80)}" + body
         lines.append("Dialogue: 0,%s,%s,Def,,0,0,0,,%s\n" %
-                     (ms_to_ass(start), ms_to_ass(end), txt))
+                     (ms_to_ass(start), ms_to_ass(end), body))
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(lines))
 
