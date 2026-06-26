@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.7.0';
+  const CURRENT_VERSION = 'v2.7.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.7.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.7.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1002,6 +1002,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       <div class="section-label">Trend tags</div>
       <div class="tag-row">${(d.trend_tags||[]).map(t=>`<span class="tag tag-blue">${t}</span>`).join('')}</div>
       <p style="margin-top:14px;font-size:0.76em;color:var(--muted)">⏰ Orario migliore: <strong style="color:var(--text)">${d.orario_pubblicazione}</strong></p>
+      <p style="margin-top:6px;font-size:0.7em;color:var(--muted)">🧠 Modello: <strong style="color:${(window._lastModel||'').includes('70b')?'#10b981':'#f59e0b'}">${window._lastModel||'?'}</strong></p>
     `;
     document.getElementById('contentCard').innerHTML = `
       <div class="card-title">✍️ Script virale</div>
