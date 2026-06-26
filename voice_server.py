@@ -322,18 +322,45 @@ def yt_channel_name(creds):
         return None
 
 
+def _wrap_title(title, per_line=18):
+    """Spezza il titolo in righe da ~per_line caratteri (per la miniatura)."""
+    words = title.split()
+    lines, cur = [], ""
+    for w in words:
+        if len(cur) + len(w) + 1 <= per_line:
+            cur = (cur + " " + w).strip()
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines[:3]
+
+
 def yt_make_thumbnail(title):
-    """Genera una miniatura dall'ultimo render: frame + titolo in sovrimpressione."""
+    """Miniatura d'impatto: frame dinamico + banda scura + titolo grande su più righe."""
     ffmpeg = find_ffmpeg()
     if not ffmpeg or not os.path.exists(LAST_RENDER):
         return None
     thumb = os.path.join(OUTPUT_DIR, "thumb.jpg")
-    safe = title.replace("'", "").replace(":", " ").replace("\\", " ")[:60]
-    # estrae un frame al 25% e scrive il titolo grande in basso
-    vf = (f"scale=720:1280,drawtext=text='{safe}':fontcolor=white:fontsize=54:"
-          f"borderw=4:bordercolor=black:x=(w-text_w)/2:y=h*0.72:line_spacing=8")
+    safe = title.replace("\\", " ").replace("'", "").replace(":", " ").replace("%", " ")
+    lines = _wrap_title(safe)
+    # banda scura in basso per leggibilità + righe di testo grandi gialle/bianche
+    filters = ["scale=720:1280",
+               "drawbox=x=0:y=ih*0.60:w=iw:h=ih*0.40:color=black@0.55:t=fill"]
+    n = len(lines)
+    for i, ln in enumerate(lines):
+        y = f"h*0.66+{i}*86"
+        col = "white" if i else "#FFD400"  # prima riga gialla (accento)
+        filters.append(
+            f"drawtext=text='{ln}':fontfile='C\\:/Windows/Fonts/ariblk.ttf':"
+            f"fontcolor={col}:fontsize=64:borderw=6:bordercolor=black:"
+            f"x=(w-text_w)/2:y={y}")
+    vf = ",".join(filters)
     try:
-        run_ff(ffmpeg, ["-ss", "3", "-i", LAST_RENDER, "-frames:v", "1", "-vf", vf, thumb])
+        # frame al ~20% del video (più in azione del primissimo)
+        run_ff(ffmpeg, ["-ss", "4", "-i", LAST_RENDER, "-frames:v", "1", "-vf", vf, thumb])
         return thumb if os.path.exists(thumb) else None
     except Exception as e:
         print(f"     thumbnail saltata: {e}")
