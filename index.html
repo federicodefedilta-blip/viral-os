@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.1.1';
+  const CURRENT_VERSION = 'v2.1.2';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -184,7 +184,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.1.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.1.2</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1302,7 +1302,11 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       // insight basato sulla retention
       let tip = '';
       if (avgRet == null) {
-        tip = `<div class="alert-warn">Per vedere la <strong>retention</strong> devi ricollegare YouTube (serve il nuovo permesso analytics): step 6 → 🔗 Collega YouTube.</div>`;
+        if (data.analytics_ok === false) {
+          tip = `<div class="alert-warn">📊 Per la <strong>retention</strong> attiva la <strong>YouTube Analytics API</strong> (gratis, separata dalla Data API): <a href="https://console.developers.google.com/apis/api/youtubeanalytics.googleapis.com/overview" target="_blank" style="color:var(--accent)">aprila qui → Abilita</a>, attendi 2 min e ricarica. Intanto sotto vedi views e like.</div>`;
+        } else {
+          tip = `<div class="alert-info">Retention non ancora disponibile: i video sono troppo recenti (servono visualizzazioni). Torna tra qualche giorno. Intanto vedi views e like.</div>`;
+        }
       } else if (avgRet < 30) {
         tip = `<div class="alert-warn">⚠️ Retention media <strong>${avgRet.toFixed(0)}%</strong> — bassa. Il problema è l'<strong>hook</strong>: la gente scrolla via nei primi 2 secondi. Prova prime frasi più shock e accorcia l'intro.</div>`;
       } else if (avgRet < 55) {
