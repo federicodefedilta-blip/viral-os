@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.4.0';
+  const CURRENT_VERSION = 'v2.5.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.4.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.5.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1083,6 +1083,8 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     let publishAt = null;
     const sched = document.getElementById('pubSchedule').value;
     if (sched) publishAt = new Date(sched).toISOString(); // UTC ISO8601
+    const d = gData || {};
+    const hook = (d.script||'').trim().split(/(?<=[.!?])\s+/)[0] || '';
     const body = {
       title: document.getElementById('pubTitle').value,
       description: document.getElementById('pubDesc').value,
@@ -1090,6 +1092,13 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       privacy: document.getElementById('pubPrivacy').value,
       publishAt,
       thumbnail: document.getElementById('pubThumb').checked,
+      meta: {
+        nicchia: d.nicchia, hook,
+        voice: document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : '',
+        music: document.getElementById('bgMusic') ? document.getElementById('bgMusic').value : '',
+        duration: document.getElementById('dur') ? document.getElementById('dur').value : '',
+        lang: document.getElementById('lang') ? document.getElementById('lang').value : '',
+      },
     };
     try {
       const r = await fetch('http://127.0.0.1:5555/youtube_upload', {
@@ -1275,9 +1284,11 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         const desc = (data.descrizione||'') + '\n\n' + (data.hashtags||[]).join(' ');
         const tags = [...(data.hashtags||[]).map(h=>h.replace(/^#/,'')), ...(data.trend_tags||[])].filter(Boolean);
         add(`${dayLabel} carico su YouTube (${when.toLocaleDateString()} ${timeStr})...`);
+        const hook = (data.script||'').trim().split(/(?<=[.!?])\s+/)[0] || '';
         const up = await fetch('http://127.0.0.1:5555/youtube_upload', {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ title: data.titolo, description: desc, tags, privacy, publishAt, thumbnail: true })
+          body: JSON.stringify({ title: data.titolo, description: desc, tags, privacy, publishAt, thumbnail: true,
+            meta: { nicchia: data.nicchia, hook, voice: vVoice, music: vMusic, duration: dur, lang } })
         });
         if (!up.ok) throw new Error(await up.text());
         const uj = await up.json();
