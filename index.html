@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.0.1';
+  const CURRENT_VERSION = 'v2.1.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.0.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.1.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -235,6 +235,13 @@
       </div>
       <button class="btn btn-primary" id="batchBtn" onclick="runWeeklyBatch()" style="width:100%;justify-content:center">🚀 Genera e programma</button>
       <div id="batchLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:200px;overflow-y:auto"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">📊 Analisi performance</div>
+      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Metriche dei tuoi video pubblicati. La <strong>retention</strong> (% guardata) è la metrica chiave: dice se l'hook funziona. Richiede YouTube collegato.</div>
+      <button class="btn btn-primary" id="analyticsBtn" onclick="loadAnalytics()" style="width:100%;justify-content:center">📊 Carica metriche</button>
+      <div id="analyticsResult" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -1233,6 +1240,70 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     }
     add(`🎉 Fatto: ${ok}/${days} video programmati. Pacchetti TikTok/IG nella cartella output/.`);
     btn.disabled = false; btn.textContent = '🚀 Genera e programma';
+  }
+
+  // --- Analisi performance YouTube ---
+  async function loadAnalytics() {
+    const btn = document.getElementById('analyticsBtn');
+    const out = document.getElementById('analyticsResult');
+    btn.disabled = true; btn.textContent = '⏳ Carico...';
+    out.innerHTML = '';
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_analytics');
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      const vids = data.videos || [];
+      if (!vids.length) { out.innerHTML = '<div class="alert-info">Nessun video pubblicato ancora. Pubblica qualche video e torna tra qualche giorno.</div>'; btn.disabled=false; btn.textContent='🔄 Aggiorna'; return; }
+
+      const withRet = vids.filter(v => v.retention != null);
+      const avgRet = withRet.length ? withRet.reduce((a,v)=>a+v.retention,0)/withRet.length : null;
+      const totViews = vids.reduce((a,v)=>a+(v.views||0),0);
+      const avgViews = Math.round(totViews/vids.length);
+      const best = vids.reduce((a,v)=> (v.views||0)>(a.views||0)?v:a, vids[0]);
+
+      // insight basato sulla retention
+      let tip = '';
+      if (avgRet == null) {
+        tip = `<div class="alert-warn">Per vedere la <strong>retention</strong> devi ricollegare YouTube (serve il nuovo permesso analytics): step 6 → 🔗 Collega YouTube.</div>`;
+      } else if (avgRet < 30) {
+        tip = `<div class="alert-warn">⚠️ Retention media <strong>${avgRet.toFixed(0)}%</strong> — bassa. Il problema è l'<strong>hook</strong>: la gente scrolla via nei primi 2 secondi. Prova prime frasi più shock e accorcia l'intro.</div>`;
+      } else if (avgRet < 55) {
+        tip = `<div class="alert-info">Retention media <strong>${avgRet.toFixed(0)}%</strong> — discreta. Migliora il <strong>ritmo</strong>: taglia le frasi deboli a metà storia, mantieni la tensione costante.</div>`;
+      } else {
+        tip = `<div class="alert-info">✅ Retention media <strong>${avgRet.toFixed(0)}%</strong> — ottima! L'hook funziona. Ora è solo questione di <strong>volume e tempo</strong>: pubblica con costanza, l'algoritmo ti troverà il pubblico.</div>`;
+      }
+
+      const rows = vids.map(v => {
+        const ret = v.retention != null ? v.retention.toFixed(0)+'%' : '—';
+        const retCol = v.retention == null ? 'var(--muted)' : v.retention<30?'#ef4444':v.retention<55?'#f59e0b':'#10b981';
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 4px;font-size:0.72em"><a href="https://youtu.be/${v.id}" target="_blank" style="color:var(--text);text-decoration:none">${escTxt(v.title.slice(0,38))}</a></td>
+          <td style="padding:6px 4px;text-align:right;font-weight:600">${v.views}</td>
+          <td style="padding:6px 4px;text-align:right;color:${retCol};font-weight:600">${ret}</td>
+          <td style="padding:6px 4px;text-align:right;color:var(--muted)">${v.likes}</td>
+        </tr>`;
+      }).join('');
+
+      out.innerHTML = `
+        ${tip}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
+          <div class="meta-box" style="flex:1;min-width:90px"><h5>👥 Iscritti</h5><p class="time-big">${data.subs}</p></div>
+          <div class="meta-box" style="flex:1;min-width:90px"><h5>👁 Views tot</h5><p class="time-big">${totViews}</p></div>
+          <div class="meta-box" style="flex:1;min-width:90px"><h5>📊 Media/video</h5><p class="time-big">${avgViews}</p></div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px">
+          <tr style="border-bottom:2px solid var(--border);font-size:0.7em;color:var(--muted)">
+            <th style="text-align:left;padding:6px 4px">Video</th>
+            <th style="text-align:right;padding:6px 4px">Views</th>
+            <th style="text-align:right;padding:6px 4px">Retention</th>
+            <th style="text-align:right;padding:6px 4px">Like</th>
+          </tr>
+          ${rows}
+        </table>`;
+    } catch(e) {
+      out.innerHTML = `<div class="error-box">❌ ${escTxt(e.message||e)}</div>`;
+    }
+    btn.disabled = false; btn.textContent = '🔄 Aggiorna';
   }
 
   async function assembleVideo() {
