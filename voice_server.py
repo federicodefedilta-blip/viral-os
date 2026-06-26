@@ -278,6 +278,206 @@ def render_job(data, work):
         return f.read()
 
 
+# ----------------------------- RENDER INTERATTIVO -----------------------------
+
+def _seg_voice(text, voice, work, idx):
+    audio, words = genera_mp3(text, voice)
+    p = os.path.join(work, f"v{idx}.mp3")
+    with open(p, "wb") as f:
+        f.write(audio)
+    dur = (words[-1]["t"] + words[-1]["d"]) if words else 1500
+    return p, dur, words
+
+
+def _silence_mp3(ffmpeg, dur_ms, out):
+    run_ff(ffmpeg, ["-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
+                    "-t", f"{dur_ms/1000.0:.3f}", "-c:a", "libmp3lame", "-q:a", "9", out])
+
+
+def _ass_header_i(styles):
+    return ("[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nScaledBorderAndShadow: yes\n\n"
+            "[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,"
+            "Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,"
+            "MarginL,MarginR,MarginV,Encoding\n%s\n\n"
+            "[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n"
+            % (W, H, styles))
+
+
+def build_interactive_ass(timeline, path):
+    # N = narrazione karaoke (basso), I = overlay posizionati (scelte/countdown/reveal)
+    styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,2,70,70,310,1"
+    styleI = "Style: I,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,3,5,0,0,0,1"
+    ev = [_ass_header_i(styleN + "\n" + styleI)]
+    for item in timeline:
+        if item["kind"] == "narr":
+            words = item["words"]; base = item["start"]; seg_end = item["start"] + item["dur"]
+            for i, t in enumerate(words):
+                st = base + t["t"]
+                en = base + (words[i+1]["t"] if i + 1 < len(words) else item["dur"])
+                txt = ass_escape(t.get("w", "")).strip()
+                if not txt:
+                    continue
+                ws = txt.split()
+                total_cs = max(1, int(round((en - st) / 10.0)))
+                weights = [max(1, len(w)) for w in ws]; wsum = sum(weights)
+                durs, acc = [], 0
+                for j, w in enumerate(ws):
+                    if j == len(ws) - 1:
+                        durs.append(max(1, total_cs - acc))
+                    else:
+                        d = max(1, int(round(total_cs * weights[j] / wsum))); durs.append(d); acc += d
+                body = "".join("{\\kf%d}%s " % (durs[j], ws[j]) for j in range(len(ws))).strip()
+                ev.append("Dialogue: 0,%s,%s,N,,0,0,0,,%s\n" % (ms_to_ass(st), ms_to_ass(en), body))
+        else:  # choice
+            r = item["round"]; cs = item["start"]; ce = cs + item["dur"]
+            a = ass_escape(r.get("a", "")); b = ass_escape(r.get("b", ""))
+            giusta = (r.get("giusta") or "a").lower().strip()
+            # etichetta SCEGLI + barra a tempo
+            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,300)\\fs74\\c&H00F0FF&\\bord6}SCEGLI!\n"
+                      % (ms_to_ass(cs), ms_to_ass(ce)))
+            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,840)\\fs60\\bord7\\c&HFFFFFF&}A)  %s\n"
+                      % (ms_to_ass(cs), ms_to_ass(ce), a))
+            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,1100)\\fs60\\bord7\\c&HFFFFFF&}B)  %s\n"
+                      % (ms_to_ass(cs), ms_to_ass(ce), b))
+            n = max(1, item["dur"] // 1000)
+            for k in range(n):
+                ns = cs + k * 1000; ne = ns + 1000; num = n - k
+                ev.append("Dialogue: 2,%s,%s,I,,0,0,0,,{\\pos(540,560)\\fs160\\c&H00FFFF&\\bord10}%d\n"
+                          % (ms_to_ass(ns), ms_to_ass(ne), num))
+            # reveal: scelta giusta verde, sbagliata rossa (1.8s, sopra l'inizio dell'esito)
+            re_end = ce + 1800
+            green, red = "&H00FF00&", "&H0000FF&"
+            ca, cb = (green, red) if giusta == "a" else (red, green)
+            ma, mb = ("✓", "✗") if giusta == "a" else ("✗", "✓")
+            ev.append("Dialogue: 3,%s,%s,I,,0,0,0,,{\\pos(540,840)\\fs60\\bord8\\c%s}%s A)  %s\n"
+                      % (ms_to_ass(ce), ms_to_ass(re_end), ca, ma, a))
+            ev.append("Dialogue: 3,%s,%s,I,,0,0,0,,{\\pos(540,1100)\\fs60\\bord8\\c%s}%s B)  %s\n"
+                      % (ms_to_ass(ce), ms_to_ass(re_end), cb, mb, b))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("".join(ev))
+
+
+def build_base_even(ffmpeg, clip_paths, total_ms, work):
+    """Crea base.mp4 di durata total_ms distribuendo le clip equamente."""
+    n = len(clip_paths)
+    seg_dur = (total_ms / 1000.0) / n
+    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+          f"setsar=1,fps=30,format=yuv420p")
+    seg_files = []
+    for i, cp in enumerate(clip_paths):
+        out = os.path.join(work, f"bseg{i}.mp4")
+        run_ff(ffmpeg, ["-stream_loop", "-1", "-i", cp, "-t", f"{seg_dur:.3f}",
+                        "-an", "-vf", vf, "-c:v", "libx264", "-preset", "veryfast",
+                        "-pix_fmt", "yuv420p", out])
+        seg_files.append(out)
+    listf = os.path.join(work, "blist.txt")
+    with open(listf, "w", encoding="utf-8") as f:
+        for sf in seg_files:
+            f.write(f"file '{os.path.basename(sf)}'\n")
+    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "blist.txt",
+                    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
+           cwd=work)
+
+
+def render_interactive_job(data, work):
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg non trovato")
+    voice = data.get("voice") or DEFAULT_VOICE
+    clips = data.get("clips") or []
+    intro = (data.get("intro") or "").strip()
+    rounds = data.get("rounds") or []
+    finale = (data.get("finale") or "").strip()
+    music_vol = float(data.get("music_vol", 1.0))
+    voice_vol = float(data.get("voice_vol", 1.8))
+    choice_ms = int(data.get("choice_ms", 5000))
+    if not rounds:
+        raise RuntimeError("nessun round")
+
+    # clip
+    clip_paths = []
+    for idx, url in enumerate(clips):
+        cp = os.path.join(work, f"c{idx}.mp4")
+        try:
+            download_file(url, cp)
+            if os.path.getsize(cp) > 0:
+                clip_paths.append(cp)
+        except Exception as e:
+            print(f"     clip {idx} ko: {e}")
+    if not clip_paths:
+        raise RuntimeError("nessuna clip scaricabile")
+
+    # voce + musica salvate
+    music_path = None
+    if data.get("music_wav_b64"):
+        music_path = os.path.join(work, "music.wav")
+        with open(music_path, "wb") as f:
+            f.write(base64.b64decode(data["music_wav_b64"]))
+
+    # timeline + segmenti audio
+    timeline, audio_files = [], []
+    t = 0
+
+    def add_narr(text):
+        nonlocal t
+        text = (text or "").strip()
+        if not text:
+            return
+        p, dur, words = _seg_voice(text, voice, work, len(audio_files))
+        audio_files.append(p)
+        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words})
+        t += dur
+
+    def add_choice(r):
+        nonlocal t
+        sil = os.path.join(work, f"sil{len(audio_files)}.mp3")
+        _silence_mp3(ffmpeg, choice_ms, sil)
+        audio_files.append(sil)
+        timeline.append({"kind": "choice", "start": t, "dur": choice_ms, "round": r})
+        t += choice_ms
+
+    add_narr(intro)
+    for r in rounds:
+        add_narr(r.get("situazione", ""))
+        add_choice(r)
+        add_narr(r.get("esito", ""))
+    add_narr(finale)
+    total_ms = t + 600
+
+    # concat audio (mp3 mono 24k) -> aac
+    alist = os.path.join(work, "alist.txt")
+    with open(alist, "w", encoding="utf-8") as f:
+        for af in audio_files:
+            f.write(f"file '{os.path.basename(af)}'\n")
+    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
+                    "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
+
+    # base video + sottotitoli interattivi
+    build_base_even(ffmpeg, clip_paths, total_ms, work)
+    build_interactive_ass(timeline, os.path.join(work, "subs.ass"))
+
+    total_sec = total_ms / 1000.0
+    out = os.path.join(work, "final.mp4")
+    vfilter = "[0:v]subtitles=subs.ass,vignette,eq=brightness=-0.04[v]"
+    if music_path:
+        inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-i", "music.wav"]
+        fc = (vfilter + f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
+              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
+    else:
+        inputs = ["-i", "base.mp4", "-i", "voice.m4a"]
+        fc = vfilter + f";[1:a]volume={voice_vol}[a]"
+    run_ff(ffmpeg, inputs + ["-filter_complex", fc, "-map", "[v]", "-map", "[a]",
+                             "-t", f"{total_sec:.3f}", "-c:v", "libx264", "-preset", "medium",
+                             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "final.mp4"],
+           cwd=work)
+    try:
+        shutil.copyfile(out, LAST_RENDER)
+    except Exception:
+        pass
+    with open(out, "rb") as f:
+        return f.read()
+
+
 # ----------------------------- YOUTUBE -----------------------------
 
 def yt_get_credentials():
@@ -640,6 +840,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, "application/json", json.dumps({"folder": folder}).encode("utf-8"))
             except Exception as e:
                 print(f"     ERRORE save_pack: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/render_interactive":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                print(f"  -> RENDER INTERATTIVO: {len(data.get('rounds', []))} scelte, "
+                      f"{len(data.get('clips', []))} clip")
+                work = tempfile.mkdtemp(prefix="viralosi_")
+                try:
+                    mp4 = render_interactive_job(data, work)
+                    print(f"     OK video {len(mp4)//1024} KB")
+                    self._send(200, "video/mp4", mp4)
+                finally:
+                    shutil.rmtree(work, ignore_errors=True)
+            except Exception as e:
+                print(f"     ERRORE interattivo: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 

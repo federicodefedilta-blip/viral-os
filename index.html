@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.6.0';
+  const CURRENT_VERSION = 'v2.7.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.6.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.7.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -241,6 +241,18 @@
       <button class="btn btn-primary" onclick="startGen()" style="width:100%;justify-content:center;padding:14px">
         🔍 Analizza trend e genera contenuto
       </button>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🎮 Video interattivo "Sopravvivi o Muori"</div>
+      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Storia a bivi: ad ogni scelta hai <strong>5 secondi</strong>, una ti salva e una ti uccide. Format virale ad alta retention. Genera, monta sul server e scarica (poi pubblichi dallo step 6). Richiede server attivo.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="3"></div>
+        <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="3" max="8" value="5"></div>
+      </div>
+      <button class="btn btn-primary" id="intBtn" onclick="assembleInteractive()" style="width:100%;justify-content:center">🎮 Genera video interattivo</button>
+      <div id="intLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:160px;overflow-y:auto"></div>
+      <div id="intPreview" style="margin-top:12px"></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -1436,6 +1448,111 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       out.innerHTML = `<div class="error-box">❌ ${escTxt(e.message||e)}</div>`;
     }
     btn.disabled = false; btn.textContent = '🔄 Aggiorna';
+  }
+
+  // --- Video interattivo "Sopravvivi o Muori" ---
+  async function generateInteractiveData(lang, dur, rounds) {
+    const k = getKeys();
+    const sgPool = ['casa infestata','bosco di notte','ospedale abbandonato','rituale notturno','creatura che insegue','autostrada deserta'];
+    const sg = sgPool[Math.floor(Math.random()*sgPool.length)];
+    const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
+    const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
+    const prompt = `Sei un creatore di horror interattivi virali per ${platform}. Crea una storia "SOPRAVVIVI O MUORI" in seconda persona (TU sei il protagonista) con ${rounds} bivi.
+
+⚠️ Scrivi TUTTI i testi in ${langName}.
+
+REGOLE:
+- Ambientazione: ${sg}
+- Narrazione in seconda persona ("Ti svegli...", "Senti...", "Vedi...") — immersiva, tesa, concreta
+- Ogni bivio ha 2 scelte BREVI (max 5 parole): una salva, una uccide
+- "esito": rivela in modo drammatico quale scelta uccide e perché, poi prosegui la storia verso il bivio successivo
+- Alterna quale è giusta (a volte 'a', a volte 'b')
+- Tensione crescente, finale con twist agghiacciante
+- Frasi brevi e dirette. Niente prodotti/pubblicità.
+
+Rispondi SOLO con JSON valido:
+{
+  "intro": "2-3 frasi che ti mettono nella situazione, con un hook fortissimo nella prima",
+  "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1-2 frasi che portano al bivio","a":"scelta A breve","b":"scelta B breve","giusta":"a o b","esito":"rivela la scelta mortale in modo drammatico e prosegui"}').join(',')}],
+  "finale": "2-3 frasi di chiusura con twist",
+  "titolo": "titolo che terrorizza in ${langName}, max 60 caratteri (es. 'Sopravvivresti a Questa Notte?')",
+  "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
+  "hashtags": ["10 hashtag horror/interattivi in ${langName}, ognuno con #"],
+  "video_theme": "uno tra: home, forest, abandoned, dark, urban, tech",
+  "nicchia": "horror interattivo",
+  "orario_pubblicazione": "orario sera/notte ottimale"
+}`;
+    const models = ['llama-3.3-70b-versatile','llama-3.1-8b-instant'];
+    let dataR=null, lastErr='';
+    for (const model of models) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k.groq}`},
+          body: JSON.stringify({ model, messages:[{role:'system',content:langSystem},{role:'user',content:prompt}], temperature:0.9, max_tokens:3000 })
+        });
+        if (res.ok) { dataR = await res.json(); break; }
+        const e = await res.json().catch(()=>({})); lastErr = e.error?.message || `HTTP ${res.status}`;
+      } catch(e){ lastErr = e.message||String(e); }
+    }
+    if (!dataR) throw new Error(lastErr||'generazione fallita');
+    let clean = (dataR.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+    const s = clean.indexOf('{'), en = clean.lastIndexOf('}');
+    if (s!==-1 && en!==-1) clean = clean.slice(s, en+1);
+    clean = clean.replace(/[\x00-\x1F\x7F]/g,' ').replace(/,\s*([}\]])/g,'$1');
+    const d = JSON.parse(clean);
+    // normalizza campi minimi
+    d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
+    d.rounds = Array.isArray(d.rounds) ? d.rounds : [];
+    d.video_theme = d.video_theme || 'dark';
+    return d;
+  }
+
+  async function assembleInteractive() {
+    const btn = document.getElementById('intBtn');
+    const log = document.getElementById('intLog');
+    const prev = document.getElementById('intPreview');
+    const add = m => { log.innerHTML += `<div>${m}</div>`; log.scrollTop = log.scrollHeight; };
+    log.innerHTML=''; prev.innerHTML='';
+    btn.disabled=true; btn.textContent='⏳ In corso...';
+    try { const p = await fetch('http://127.0.0.1:5555/ping'); if(!p.ok) throw 0; }
+    catch { add('⚠️ Server locale non attivo (AVVIA_SERVER.bat).'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
+    const k = getKeys();
+    if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
+    if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
+    const lang = document.getElementById('lang').value;
+    const dur = document.getElementById('dur').value;
+    const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value)||3));
+    const choiceSec = Math.max(3, Math.min(8, parseInt(document.getElementById('intSeconds').value)||5));
+    const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
+    const bgType = document.getElementById('bgMusic') && document.getElementById('bgMusic').value!=='none' ? document.getElementById('bgMusic').value : 'tension';
+    const voice = voiceForLang(lang);
+    try {
+      add('Genero la storia a bivi...');
+      const d = await generateInteractiveData(lang, dur, rounds);
+      gData = d; window._videoTheme = d.video_theme;
+      add(`«${d.titolo||'storia'}» — ${d.rounds.length} scelte`);
+      add('Cerco le clip...');
+      const clips = (await fetchClipsData({video_theme:d.video_theme, scene_queries:[]}, k.pexels)).results.map(v=>v.url);
+      if (!clips.length) { add('❌ Nessuna clip trovata.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
+      add(`${clips.length} clip pronte. Genero musica...`);
+      // stima durata generosa per la musica: narrazione + scelte
+      const estSec = 20 + d.rounds.length*(choiceSec+6) + 8;
+      let musicB64 = null;
+      try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
+      add('Monto il video interattivo sul server (attendi)...');
+      const body = { voice, clips, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+        choice_ms: choiceSec*1000, intro: d.intro, rounds: d.rounds, finale: d.finale };
+      const r = await fetch('http://127.0.0.1:5555/render_interactive', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const blob = await r.blob(); const url = URL.createObjectURL(blob);
+      const mb = (blob.size/1024/1024).toFixed(1);
+      prev.innerHTML = `<video src="${url}" controls style="width:100%;border-radius:8px;max-height:320px"></video>
+        <div style="margin-top:10px"><a href="${url}" download="viralos-interattivo-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${mb} MB)</a></div>`;
+      add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo su YouTube.`);
+    } catch(e) { add('❌ '+(e.message||e)); }
+    btn.disabled=false; btn.textContent='🎮 Genera video interattivo';
   }
 
   async function assembleVideo() {
