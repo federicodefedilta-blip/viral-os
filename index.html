@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.0.0';
+  const CURRENT_VERSION = 'v2.0.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -177,7 +177,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.0.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.0.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -786,32 +786,51 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   }
 
   // --- Core fetch clip (riusabile da manuale e batch) ---
+  async function pexelsSearch(query, pexelsKey, usedIds) {
+    // niente orientation (più risultati); sceglie un clip vario non già usato
+    const page = Math.floor(Math.random() * 4) + 1;
+    try {
+      const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=12&page=${page}`, { headers: { Authorization: pexelsKey } });
+      if (!res.ok) return null;
+      const d = await res.json();
+      let vids = (d.videos || []).filter(v => !usedIds.has(v.id));
+      if (!vids.length) vids = d.videos || [];
+      if (!vids.length) return null;
+      // privilegia clip verticali/quadrate ma non obbligatorio; varietà tra i primi
+      vids.sort((a,b) => (a.height/a.width >= 1 ? -1 : 1) - (b.height/b.width >= 1 ? -1 : 1));
+      const top = vids.slice(0, 6);
+      const video = top[Math.floor(Math.random() * top.length)];
+      usedIds.add(video.id);
+      const file = video.video_files.filter(f => f.quality === 'hd' || f.quality === 'sd').sort((a, b) => a.width - b.width)[0];
+      return { url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url, query };
+    } catch { return null; }
+  }
+
   async function fetchClipsData(data, pexelsKey) {
     const theme = (data && data.video_theme) || window._videoTheme || 'dark';
     const basePool = themePools[theme] || themePools.dark;
     const sceneQ = (data.scene_queries || []).filter(q => q && q.trim()).slice(0, 16);
     const perSentence = sceneQ.length >= 3;
-    const queries = perSentence ? sceneQ : [...basePool, ...basePool].slice(0, 10);
-    const maxClips = perSentence ? sceneQ.length : 10;
+    const usedIds = new Set();
     const results = [];
-    for (const query of queries) {
-      if (results.length >= maxClips) break;
-      const page = perSentence ? 1 : Math.floor(Math.random() * 3) + 1;
-      let video = null;
-      try {
-        const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=8&page=${page}&orientation=portrait`, { headers: { Authorization: pexelsKey } });
-        if (res.ok) {
-          const d = await res.json();
-          const vids = d.videos || [];
-          video = perSentence ? vids[0] : vids[Math.floor(Math.random() * Math.min(vids.length, 5))];
-        }
-      } catch {}
-      if (video) {
-        const file = video.video_files.filter(f => f.quality === 'hd' || f.quality === 'sd').sort((a, b) => a.width - b.width)[0];
-        results.push({ url: file?.link || video.video_files[0].link, thumbnail: video.image, id: video.id, photographer: video.user.name, pexels_url: video.url, query });
+    if (perSentence) {
+      for (const query of sceneQ) {
+        let v = await pexelsSearch(query, pexelsKey, usedIds);
+        // fallback: se la query specifica non trova nulla, usa una query del tema
+        if (!v) v = await pexelsSearch(basePool[Math.floor(Math.random()*basePool.length)], pexelsKey, usedIds);
+        if (v) results.push(v);
       }
     }
-    return { results, perSentence };
+    // se per-frase ha prodotto poco, riempi col pool tematico
+    if (results.length < 4) {
+      const pool = [...basePool, ...basePool];
+      for (const q of pool) {
+        if (results.length >= 10) break;
+        const v = await pexelsSearch(q, pexelsKey, usedIds);
+        if (v) results.push(v);
+      }
+    }
+    return { results, perSentence: perSentence && results.length >= 3 };
   }
 
   // --- Fetch video stock via Pexels (flusso manuale) ---
@@ -1114,6 +1133,33 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     return v.startsWith('it-') ? v : 'it-IT-DiegoNeural';
   }
 
+  const VOICE_POOL = {
+    italiano: ['it-IT-DiegoNeural','it-IT-IsabellaNeural','it-IT-ElsaNeural','it-IT-GiuseppeMultilingualNeural'],
+    inglese:  ['en-US-GuyNeural','en-US-AriaNeural','en-US-ChristopherNeural','en-US-JennyNeural'],
+    spagnolo: ['es-ES-AlvaroNeural','es-ES-ElviraNeural','es-MX-JorgeNeural'],
+  };
+  const MUSIC_POOL = ['drone','tension','dark','heartbeat'];
+  const rnd = a => a[Math.floor(Math.random()*a.length)];
+  function randomVoice(lang){ return rnd(VOICE_POOL[lang] || VOICE_POOL.italiano); }
+
+  // genera script con retry automatico sul rate limit Groq
+  async function genScriptRetry(lang, dur, add, label) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { return await generateScriptData(lang, dur); }
+      catch(e) {
+        const msg = e.message || String(e);
+        const m = msg.match(/try again in ([\d.]+)s/);
+        if (/rate limit|TPM|429/i.test(msg) && attempt < 2) {
+          const wait = Math.ceil((m ? parseFloat(m[1]) : 30)) + 5;
+          add(`${label} rate limit, attendo ${wait}s e riprovo...`);
+          await sleep(wait*1000);
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
   // --- Batch settimanale: genera N video, monta, programma su YouTube, salva pack TikTok/IG ---
   async function runWeeklyBatch() {
     const log = document.getElementById('batchLog');
@@ -1146,14 +1192,19 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     let ok = 0;
     for (let i = 0; i < days; i++) {
       const dayLabel = `[${i+1}/${days}]`;
+      // spaziatura PRIMA di ogni chiamata Groq (tranne la prima) per il limite TPM
+      if (i > 0) { add(`${dayLabel} attendo 60s (limite API Groq)...`); await sleep(60000); }
       try {
         add(`${dayLabel} genero script...`);
-        const data = await generateScriptData(lang, dur);
+        const data = await genScriptRetry(lang, dur, add, dayLabel);
         add(`${dayLabel} «${data.titolo}»`);
         const clips = (await fetchClipsData(data, k.pexels)).results.map(v=>v.url);
         if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
-        add(`${dayLabel} monto video (${clips.length} clip)...`);
-        await renderVideoData(data, clips, { voice, bgType, bgVol, targetSec: parseInt(dur) });
+        // voce e musica casuali per varietà tra i video
+        const vVoice = randomVoice(lang);
+        const vMusic = rnd(MUSIC_POOL);
+        add(`${dayLabel} monto video (${clips.length} clip · ${vVoice.split('-').pop()} · ${vMusic})...`);
+        await renderVideoData(data, clips, { voice: vVoice, bgType: vMusic, bgVol, targetSec: parseInt(dur) });
         // programma il giorno i
         const when = new Date(base); when.setDate(base.getDate()+i);
         const publishAt = when.toISOString();
@@ -1179,7 +1230,6 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       } catch(e) {
         add(`${dayLabel} ❌ ${e.message||e}`);
       }
-      if (i < days-1) { add(`${dayLabel} attendo 60s (limite API Groq)...`); await sleep(60000); }
     }
     add(`🎉 Fatto: ${ok}/${days} video programmati. Pacchetti TikTok/IG nella cartella output/.`);
     btn.disabled = false; btn.textContent = '🚀 Genera e programma';
