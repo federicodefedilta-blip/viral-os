@@ -46,7 +46,8 @@ LAST_RENDER = os.path.join(OUTPUT_DIR, "last_render.mp4")
 CLIENT_SECRET = os.path.join(BASE_DIR, "client_secret.json")
 TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
-             "https://www.googleapis.com/auth/youtube"]
+             "https://www.googleapis.com/auth/youtube",
+             "https://www.googleapis.com/auth/yt-analytics.readonly"]
 
 
 # ----------------------------- TTS -----------------------------
@@ -364,6 +365,75 @@ def yt_upload(data):
             "scheduled": bool(publish_at)}
 
 
+def yt_analytics(max_videos=25):
+    """Restituisce i video recenti del canale con statistiche e retention."""
+    from datetime import date, timedelta
+    from googleapiclient.discovery import build
+    creds = yt_get_credentials()
+    if not creds:
+        raise RuntimeError("non autorizzato")
+    yt = yt_service(creds)
+
+    ch = yt.channels().list(part="contentDetails,statistics", mine=True).execute()
+    if not ch.get("items"):
+        return {"videos": [], "subs": 0}
+    uploads = ch["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    subs = int(ch["items"][0].get("statistics", {}).get("subscriberCount", 0))
+
+    pl = yt.playlistItems().list(part="snippet,contentDetails",
+                                 playlistId=uploads, maxResults=max_videos).execute()
+    vids = []
+    for it in pl.get("items", []):
+        vids.append((it["contentDetails"]["videoId"],
+                     it["snippet"]["title"],
+                     it["contentDetails"].get("videoPublishedAt", "")))
+    ids = [v[0] for v in vids]
+
+    stats = {}
+    if ids:
+        vr = yt.videos().list(part="statistics", id=",".join(ids)).execute()
+        for it in vr.get("items", []):
+            s = it.get("statistics", {})
+            stats[it["id"]] = {
+                "views": int(s.get("viewCount", 0)),
+                "likes": int(s.get("likeCount", 0)),
+                "comments": int(s.get("commentCount", 0)),
+            }
+
+    retention = {}
+    analytics_ok = True
+    try:
+        ya = build("youtubeAnalytics", "v2", credentials=creds)
+        start = (date.today() - timedelta(days=90)).isoformat()
+        end = date.today().isoformat()
+        rep = ya.reports().query(
+            ids="channel==MINE", startDate=start, endDate=end,
+            metrics="views,averageViewPercentage,averageViewDuration",
+            dimensions="video", sort="-views", maxResults=200).execute()
+        cols = [c["name"] for c in rep.get("columnHeaders", [])]
+        for row in rep.get("rows", []):
+            d = dict(zip(cols, row))
+            retention[d["video"]] = {
+                "retention": d.get("averageViewPercentage"),
+                "avgDur": d.get("averageViewDuration"),
+            }
+    except Exception as e:
+        analytics_ok = False
+        print(f"     analytics API non disponibile: {e}")
+
+    out = []
+    for vid, title, pub in vids:
+        st = stats.get(vid, {})
+        rt = retention.get(vid, {})
+        out.append({
+            "id": vid, "title": title, "published": pub,
+            "views": st.get("views", 0), "likes": st.get("likes", 0),
+            "comments": st.get("comments", 0),
+            "retention": rt.get("retention"), "avgDur": rt.get("avgDur"),
+        })
+    return {"videos": out, "subs": subs, "analytics_ok": analytics_ok}
+
+
 # ----------------------------- HTTP -----------------------------
 
 class Handler(BaseHTTPRequestHandler):
@@ -404,6 +474,17 @@ class Handler(BaseHTTPRequestHandler):
                 }).encode("utf-8")
                 self._send(200, "application/json", payload)
             except Exception as e:
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/youtube_analytics":
+            try:
+                print("  -> analytics YouTube...")
+                res = yt_analytics()
+                print(f"     {len(res['videos'])} video, {res['subs']} iscritti")
+                self._send(200, "application/json", json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE analytics: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
