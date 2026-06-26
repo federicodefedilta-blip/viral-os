@@ -266,7 +266,8 @@ def yt_get_credentials():
     from google.auth.transport.requests import Request
     if not os.path.exists(TOKEN_FILE):
         return None
-    creds = Credentials.from_authorized_user_file(TOKEN_FILE, YT_SCOPES)
+    # carica con gli scope già presenti nel token (evita errori di scope-mismatch al refresh)
+    creds = Credentials.from_authorized_user_file(TOKEN_FILE)
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
         with open(TOKEN_FILE, "w", encoding="utf-8") as f:
