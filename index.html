@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.9.0';
+  const CURRENT_VERSION = 'v3.0.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.9.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.0.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -298,6 +298,16 @@
         <button class="btn btn-primary" id="analyticsBtn" onclick="loadAnalytics()" style="flex:1;min-width:150px;justify-content:center">📊 Carica metriche</button>
       </div>
       <div id="analyticsResult" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🧠 Ottimizza (impara dai dati)</div>
+      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Incrocia le tue scelte creative con la <strong>retention reale</strong> e capisce cosa funziona. Quando attivo, le nuove generazioni puntano sui pattern vincenti. Servono ~5 video con dati.</div>
+      <button class="btn btn-primary" id="optBtn" onclick="loadOptimize()" style="width:100%;justify-content:center">🧠 Calcola ottimizzazioni</button>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.8em;color:var(--muted);margin-top:8px">
+        <input type="checkbox" id="optApply" checked> Applica i pattern vincenti alle nuove generazioni
+      </label>
+      <div id="optResult" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -528,7 +538,14 @@
       { nome: 'segreto di famiglia', ambientazione: 'casa di famiglia, soffitta, vecchie foto', video_theme: 'home' },
       { nome: 'il mio doppelganger', ambientazione: 'sosia, identità, città, telecamere', video_theme: 'dark' },
     ];
-    const sg = sottogeneri[Math.floor(Math.random() * sottogeneri.length)];
+    // OTTIMIZZA: se ci sono dati, 70% delle volte usa il sottogenere vincente
+    const _opt = getOptimize();
+    let sg;
+    if (_opt && _opt.best && _opt.best.nicchia && Math.random() < 0.7) {
+      sg = sottogeneri.find(s => s.nome === _opt.best.nicchia) || sottogeneri[Math.floor(Math.random()*sottogeneri.length)];
+    } else {
+      sg = sottogeneri[Math.floor(Math.random() * sottogeneri.length)];
+    }
     window._videoTheme = sg.video_theme;
 
     // Angolo narrativo casuale per variare la STRUTTURA (non sembrano tutti uguali)
@@ -550,7 +567,7 @@
     const prompt = `Sei uno sceneggiatore horror di fama mondiale specializzato in cortometraggi virali per ${platform}. La tua creepypasta deve fermare lo scroll in 1 secondo e hauntar la mente per giorni.
 
 ⚠️ LINGUA OBBLIGATORIA: scrivi TUTTI i contenuti testuali ESCLUSIVAMENTE in ${langName}. Anche se queste istruzioni sono in italiano, il tuo output DEVE essere interamente in ${langName}.
-
+${_opt && _opt.insight ? '\n📈 OTTIMIZZAZIONE DAI DATI REALI: ' + _opt.insight + '\n' : ''}
 PARAMETRI:
 - Piattaforma: ${platform}
 - Lingua output: ${langName}
@@ -1183,6 +1200,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         music: document.getElementById('bgMusic') ? document.getElementById('bgMusic').value : '',
         duration: document.getElementById('dur') ? document.getElementById('dur').value : '',
         lang: document.getElementById('lang') ? document.getElementById('lang').value : '',
+        format: (d.rounds && d.rounds.length) ? 'interattivo' : 'classica',
       },
     };
     try {
@@ -1515,16 +1533,65 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     btn.disabled = false; btn.textContent = '🔄 Aggiorna';
   }
 
+  // --- Ottimizza: impara dai dati e applica i pattern vincenti ---
+  async function loadOptimize() {
+    const btn = document.getElementById('optBtn');
+    const out = document.getElementById('optResult');
+    btn.disabled = true; btn.textContent = '⏳ Calcolo...';
+    out.innerHTML = '';
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_optimize');
+      if (!r.ok) throw new Error(await r.text());
+      const o = await r.json();
+      // salva per applicarlo alle generazioni
+      localStorage.setItem('vos_optimize', JSON.stringify(o));
+      if (o.count === 0) {
+        out.innerHTML = '<div class="alert-info">Ancora nessun video con dati di retention. Pubblica e torna tra qualche giorno.</div>';
+      } else if (!o.enough) {
+        out.innerHTML = `<div class="alert-info">Raccolgo dati: ${o.count} video con metriche (servono ~5 per pattern affidabili). Retention media ${o.avgRet||'?'}%.</div>`;
+      } else {
+        const rowsFor = (dim,label) => {
+          const arr = (o.dims[dim]||[]).slice(0,3);
+          if (!arr.length) return '';
+          return `<div class="section-label">${label}</div>` + arr.map(x=>`<div style="display:flex;justify-content:space-between;font-size:0.78em"><span>${escTxt(String(x.value))}</span><span style="color:${x.avg<30?'#ef4444':x.avg<55?'#f59e0b':'#10b981'};font-weight:600">${x.avg}% <span style="color:var(--muted)">(${x.n})</span></span></div>`).join('');
+        };
+        out.innerHTML = `
+          <div class="alert-info">✅ ${o.count} video analizzati · retention media <strong>${o.avgRet}%</strong>. I pattern vincenti verranno applicati alle nuove generazioni.</div>
+          ${rowsFor('nicchia','🎭 Sottogenere')}
+          ${rowsFor('format','🎬 Format')}
+          ${rowsFor('duration','⏱ Durata')}
+          ${rowsFor('voice','🎙️ Voce')}
+          ${rowsFor('music','🎵 Musica')}
+          <div style="font-size:0.72em;color:var(--muted);margin-top:10px">${escTxt(o.insight||'')}</div>`;
+      }
+    } catch(e) {
+      out.innerHTML = `<div class="error-box">❌ ${escTxt(e.message||e)}</div>`;
+    }
+    btn.disabled = false; btn.textContent = '🔄 Ricalcola';
+  }
+
+  // restituisce l'ottimizzazione salvata se l'utente l'ha abilitata e c'è abbastanza dato
+  function getOptimize() {
+    try {
+      const apply = !document.getElementById('optApply') || document.getElementById('optApply').checked;
+      if (!apply) return null;
+      const o = JSON.parse(localStorage.getItem('vos_optimize') || 'null');
+      return (o && o.enough) ? o : null;
+    } catch { return null; }
+  }
+
   // --- Video interattivo "Sopravvivi o Muori" ---
   async function generateInteractiveData(lang, dur, rounds) {
     const k = getKeys();
     const sgPool = ['casa infestata','bosco di notte','ospedale abbandonato','rituale notturno','creatura che insegue','autostrada deserta'];
     const sg = sgPool[Math.floor(Math.random()*sgPool.length)];
+    const _opt = getOptimize();
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
     const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
     const prompt = `Sei un creatore di horror interattivi virali per ${platform}. Crea un gioco "SOPRAVVIVI O MUORI" in seconda persona (TU protagonista) con ${rounds} bivi.
 
 ⚠️ Scrivi TUTTI i testi in ${langName}.
+${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
 
 REGOLE FONDAMENTALI:
 - Ambientazione: ${sg}
