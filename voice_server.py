@@ -257,10 +257,11 @@ def render_job(data, work):
     out = os.path.join(work, "final.mp4")
     vfilter = "[0:v]subtitles=subs.ass,vignette,eq=brightness=-0.04[v]"
     if music_path:
-        inputs = ["-i", "base.mp4", "-i", "voice.mp3", "-i", "music.wav"]
+        # musica in LOOP così non finisce prima del video
+        inputs = ["-i", "base.mp4", "-i", "voice.mp3", "-stream_loop", "-1", "-i", "music.wav"]
         fc = (vfilter +
               f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
-              "[a1][a2]amix=inputs=2:duration=longest:dropout_transition=0[a]")
+              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
     else:
         inputs = ["-i", "base.mp4", "-i", "voice.mp3"]
         fc = vfilter + f";[1:a]volume={voice_vol}[a]"
@@ -332,17 +333,17 @@ def build_interactive_ass(timeline, path):
             r = item["round"]; cs = item["start"]; ce = cs + item["dur"]
             a = ass_escape(r.get("a", "")); b = ass_escape(r.get("b", ""))
             giusta = (r.get("giusta") or "a").lower().strip()
-            # etichetta SCEGLI + barra a tempo
-            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,300)\\fs74\\c&H00F0FF&\\bord6}SCEGLI!\n"
+            # etichetta COSA FAI? in rosso sangue + scelte
+            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,290)\\fs78\\c&H2020FF&\\bord7\\shad3}COSA FAI?\n"
                       % (ms_to_ass(cs), ms_to_ass(ce)))
-            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,840)\\fs60\\bord7\\c&HFFFFFF&}A)  %s\n"
+            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,840)\\fs60\\bord8\\3c&H0010A0&\\c&HFFFFFF&}A)  %s\n"
                       % (ms_to_ass(cs), ms_to_ass(ce), a))
-            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,1100)\\fs60\\bord7\\c&HFFFFFF&}B)  %s\n"
+            ev.append("Dialogue: 1,%s,%s,I,,0,0,0,,{\\pos(540,1100)\\fs60\\bord8\\3c&H0010A0&\\c&HFFFFFF&}B)  %s\n"
                       % (ms_to_ass(cs), ms_to_ass(ce), b))
             n = max(1, item["dur"] // 1000)
             for k in range(n):
                 ns = cs + k * 1000; ne = ns + 1000; num = n - k
-                ev.append("Dialogue: 2,%s,%s,I,,0,0,0,,{\\pos(540,560)\\fs160\\c&H00FFFF&\\bord10}%d\n"
+                ev.append("Dialogue: 2,%s,%s,I,,0,0,0,,{\\pos(540,560)\\fs170\\c&H2020FF&\\bord12\\shad4}%d\n"
                           % (ms_to_ass(ns), ms_to_ass(ne), num))
             # reveal: scelta giusta verde, sbagliata rossa (1.8s, sopra l'inizio dell'esito)
             re_end = ce + 1800
@@ -414,6 +415,17 @@ def render_interactive_job(data, work):
         with open(music_path, "wb") as f:
             f.write(base64.b64decode(data["music_wav_b64"]))
 
+    # SFX: ticchettio clessidra (durante la scelta) + stinger spaventoso (sulla morte)
+    tick_path = os.path.join(work, "tick.mp3")
+    run_ff(ffmpeg, ["-f", "lavfi", "-i",
+                    f"aevalsrc=0.28*sin(2*PI*1900*t)*exp(-28*(t-floor(t))):d={choice_ms/1000.0:.3f}:s=24000",
+                    "-c:a", "libmp3lame", "-q:a", "9", tick_path])
+    sting_ms = 1300
+    sting_path = os.path.join(work, "sting.mp3")
+    run_ff(ffmpeg, ["-f", "lavfi", "-i",
+                    "aevalsrc='0.8*(random(0)*2-1)*exp(-6*t)+0.6*sin(2*PI*55*t)*exp(-2.2*t)':d=1.3:s=24000",
+                    "-c:a", "libmp3lame", "-q:a", "9", sting_path])
+
     # timeline + segmenti audio
     timeline, audio_files = [], []
     t = 0
@@ -428,18 +440,20 @@ def render_interactive_job(data, work):
         timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words})
         t += dur
 
-    def add_choice(r):
+    def add_audio(path, dur_ms):
         nonlocal t
-        sil = os.path.join(work, f"sil{len(audio_files)}.mp3")
-        _silence_mp3(ffmpeg, choice_ms, sil)
-        audio_files.append(sil)
-        timeline.append({"kind": "choice", "start": t, "dur": choice_ms, "round": r})
-        t += choice_ms
+        audio_files.append(path)
+        t += dur_ms
 
     add_narr(intro)
     for r in rounds:
         add_narr(r.get("situazione", ""))
-        add_choice(r)
+        # finestra scelta col ticchettio
+        audio_files.append(tick_path)
+        timeline.append({"kind": "choice", "start": t, "dur": choice_ms, "round": r})
+        t += choice_ms
+        # stinger di rivelazione (la morte) — il reveal visivo è allineato qui
+        add_audio(sting_path, sting_ms)
         add_narr(r.get("esito", ""))
     add_narr(finale)
     total_ms = t + 600
@@ -458,9 +472,12 @@ def render_interactive_job(data, work):
 
     total_sec = total_ms / 1000.0
     out = os.path.join(work, "final.mp4")
-    vfilter = "[0:v]subtitles=subs.ass,vignette,eq=brightness=-0.04[v]"
+    # grading horror: desaturato, contrasto, scuro, tinta rossa, vignette forte
+    vfilter = ("[0:v]subtitles=subs.ass,eq=brightness=-0.07:contrast=1.28:saturation=0.55,"
+               "colorbalance=rs=0.10:rm=0.06:rh=0.04,vignette=PI/3[v]")
     if music_path:
-        inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-i", "music.wav"]
+        # musica in LOOP per coprire tutta la durata
+        inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-stream_loop", "-1", "-i", "music.wav"]
         fc = (vfilter + f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
               "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
     else:
