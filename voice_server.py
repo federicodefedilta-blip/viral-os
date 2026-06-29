@@ -728,6 +728,55 @@ def yt_analytics(max_videos=25):
     return {"videos": out, "subs": subs, "analytics_ok": analytics_ok}
 
 
+def yt_optimize():
+    """Incrocia il registro creativo con la retention reale e trova i pattern vincenti."""
+    reg = registry_load()
+    an = yt_analytics()
+    perf = {v["id"]: v for v in an.get("videos", [])}
+    rows = []
+    for r in reg:
+        p = perf.get(r.get("id"))
+        if p and p.get("retention") is not None:
+            rows.append({**r, "retention": float(p["retention"]), "views": p.get("views", 0)})
+
+    MIN = 5  # video con dati minimi per insight affidabili
+    if len(rows) < 1:
+        return {"count": 0, "enough": False, "dims": {}, "best": {},
+                "insight": "", "analytics_ok": an.get("analytics_ok", True)}
+
+    def agg(dim):
+        groups = {}
+        for x in rows:
+            key = x.get(dim) or "?"
+            groups.setdefault(str(key), []).append(x["retention"])
+        out = [{"value": k, "avg": round(sum(v)/len(v), 1), "n": len(v)} for k, v in groups.items()]
+        out.sort(key=lambda o: -o["avg"])
+        return out
+
+    dims = {d: agg(d) for d in ["nicchia", "format", "voice", "music", "duration"]}
+    best = {d: (dims[d][0]["value"] if dims[d] else None) for d in dims}
+    # top hook per retention (esempi che funzionano)
+    top = sorted(rows, key=lambda x: -x["retention"])[:3]
+    top_hooks = [x.get("hook") for x in top if x.get("hook")]
+    avg_ret = round(sum(x["retention"] for x in rows)/len(rows), 1)
+
+    # stringa insight da iniettare nel prompt di generazione
+    parts = []
+    if best.get("nicchia"): parts.append(f"sottogenere '{best['nicchia']}'")
+    if best.get("format"): parts.append(f"format '{best['format']}'")
+    if best.get("duration"): parts.append(f"durata {best['duration']}s")
+    insight = ""
+    if len(rows) >= MIN and parts:
+        insight = ("Dai dati REALI del canale, i contenuti che trattengono di più hanno: "
+                   + ", ".join(parts) + ". Privilegia questo stile.")
+        if top_hooks:
+            insight += " Esempi di hook che hanno funzionato: " + " / ".join(top_hooks[:2])
+
+    return {"count": len(rows), "enough": len(rows) >= MIN, "dims": dims,
+            "best": best, "insight": insight, "avgRet": avg_ret,
+            "analytics_ok": an.get("analytics_ok", True)}
+
+
 # ----------------------------- HTTP -----------------------------
 
 class Handler(BaseHTTPRequestHandler):
@@ -768,6 +817,17 @@ class Handler(BaseHTTPRequestHandler):
                 }).encode("utf-8")
                 self._send(200, "application/json", payload)
             except Exception as e:
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/youtube_optimize":
+            try:
+                print("  -> ottimizzazione (registro x retention)...")
+                res = yt_optimize()
+                print(f"     {res['count']} video con dati, enough={res['enough']}")
+                self._send(200, "application/json", json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE optimize: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
