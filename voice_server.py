@@ -39,6 +39,12 @@ PORT = 5555
 DEFAULT_VOICE = "it-IT-DiegoNeural"
 W, H = 1080, 1920
 
+# Filtro clip: zoom lento cinematografico (Ken Burns) + grana pellicola horror
+ZW, ZH = int(1080 * 1.14), int(1920 * 1.14)
+CLIP_VF = (f"scale={ZW}:{ZH}:force_original_aspect_ratio=increase,crop={ZW}:{ZH},"
+           f"zoompan=z='min(1.0+0.0011*in,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+           f"d=1:s=1080x1920:fps=30,noise=c0s=9:allf=t,setsar=1,format=yuv420p")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -228,9 +234,8 @@ def render_job(data, work):
         segments.append((clip_paths[k], dur))
         i = j
 
-    # 4. crea un segmento normalizzato per gruppo
-    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,"
-          f"crop={W}:{H},setsar=1,fps=30,format=yuv420p")
+    # 4. crea un segmento normalizzato per gruppo (con zoom lento + grana)
+    vf = CLIP_VF
     seg_files = []
     for si, (cp, dur) in enumerate(segments):
         out = os.path.join(work, f"seg{si}.mp4")
@@ -362,8 +367,7 @@ def build_base_even(ffmpeg, clip_paths, total_ms, work):
     """Crea base.mp4 di durata total_ms distribuendo le clip equamente."""
     n = len(clip_paths)
     seg_dur = (total_ms / 1000.0) / n
-    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-          f"setsar=1,fps=30,format=yuv420p")
+    vf = CLIP_VF
     seg_files = []
     for i, cp in enumerate(clip_paths):
         out = os.path.join(work, f"bseg{i}.mp4")
