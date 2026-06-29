@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v2.8.0';
+  const CURRENT_VERSION = 'v2.9.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.8.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v2.9.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -237,8 +237,26 @@
       </div>
       <div id="intParams" style="display:none">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="3"></div>
-          <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="3" max="8" value="5"></div>
+          <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="4"></div>
+          <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="3" max="8" value="5"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="input-group" style="flex:1;min-width:140px"><label class="input-label">🎙️ Voce</label>
+            <select class="input-field" id="intVoice">
+              <option value="it-IT-DiegoNeural">Diego (M, horror)</option>
+              <option value="it-IT-IsabellaNeural">Isabella (F)</option>
+              <option value="it-IT-ElsaNeural">Elsa (F)</option>
+              <option value="it-IT-GiuseppeMultilingualNeural">Giuseppe (M)</option>
+            </select>
+          </div>
+          <div class="input-group" style="flex:1;min-width:140px"><label class="input-label">🎵 Musica</label>
+            <select class="input-field" id="intMusic">
+              <option value="tension" selected>Tensione</option>
+              <option value="drone">Drone cupo</option>
+              <option value="dark">Dark ambient</option>
+              <option value="heartbeat">Battito</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="input-group">
@@ -1504,24 +1522,26 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const sg = sgPool[Math.floor(Math.random()*sgPool.length)];
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
     const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
-    const prompt = `Sei un creatore di horror interattivi virali per ${platform}. Crea una storia "SOPRAVVIVI O MUORI" in seconda persona (TU sei il protagonista) con ${rounds} bivi.
+    const prompt = `Sei un creatore di horror interattivi virali per ${platform}. Crea un gioco "SOPRAVVIVI O MUORI" in seconda persona (TU protagonista) con ${rounds} bivi.
 
 ⚠️ Scrivi TUTTI i testi in ${langName}.
 
-REGOLE:
+REGOLE FONDAMENTALI:
 - Ambientazione: ${sg}
-- Narrazione in seconda persona ("Ti svegli...", "Senti...", "Vedi...") — immersiva, tesa, concreta
-- Ogni bivio ha 2 scelte BREVI (max 5 parole): una salva, una uccide
-- "esito": rivela in modo drammatico quale scelta uccide e perché, poi prosegui la storia verso il bivio successivo
-- Alterna quale è giusta (a volte 'a', a volte 'b')
-- Tensione crescente, finale con twist agghiacciante
-- Frasi brevi e dirette. Niente prodotti/pubblicità.
+- L'INTRO deve dire CHIARO dalla prima frase che è un gioco a scelte dove puoi morire. Esempio tono: "Sopravvivresti a questa notte? Una scelta sbagliata e sei morto. Iniziamo." Massimo 2 frasi, dritte e adrenaliniche.
+- POCA storia, MOLTA azione: le scelte arrivano una dietro l'altra. Niente parti prolisse.
+- "situazione": UNA sola frase breve che crea il pericolo immediato, poi SEMPRE finisce con la domanda "Cosa fai: [scelta A] o [scelta B]?" (riprendi le due scelte nella domanda).
+- "a" e "b": scelte BREVISSIME (2-4 parole), una salva e una uccide.
+- "esito": MAX 2 frasi. Rivela drammaticamente la scelta mortale ("Se avessi scelto X... [morte breve e cruda]") e prosegui di slancio al bivio dopo.
+- Alterna quale è giusta (a volte 'a', a volte 'b').
+- Tensione che sale ad ogni bivio, finale con twist agghiacciante in 1-2 frasi.
+- Frasi corte, concrete, sensoriali. Zero pubblicità.
 
 Rispondi SOLO con JSON valido:
 {
-  "intro": "2-3 frasi che ti mettono nella situazione, con un hook fortissimo nella prima",
-  "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1-2 frasi che portano al bivio","a":"scelta A breve","b":"scelta B breve","giusta":"a o b","esito":"rivela la scelta mortale in modo drammatico e prosegui"}').join(',')}],
-  "finale": "2-3 frasi di chiusura con twist",
+  "intro": "max 2 frasi: annuncia il gioco a scelte mortali + ti catapulta nella scena",
+  "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1 frase di pericolo + Cosa fai: A o B?","a":"scelta brevissima","b":"scelta brevissima","giusta":"a o b","esito":"max 2 frasi: rivela la morte e prosegui"}').join(',')}],
+  "finale": "1-2 frasi di chiusura con twist",
   "titolo": "titolo che terrorizza in ${langName}, max 60 caratteri (es. 'Sopravvivresti a Questa Notte?')",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
   "hashtags": ["10 hashtag horror/interattivi in ${langName}, ognuno con #"],
@@ -1568,11 +1588,14 @@ Rispondi SOLO con JSON valido:
     if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
     const lang = document.getElementById('lang').value;
     const dur = document.getElementById('dur').value;
-    const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value)||3));
+    const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value)||4));
     const choiceSec = Math.max(3, Math.min(8, parseInt(document.getElementById('intSeconds').value)||5));
     const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
-    const bgType = document.getElementById('bgMusic') && document.getElementById('bgMusic').value!=='none' ? document.getElementById('bgMusic').value : 'tension';
-    const voice = voiceForLang(lang);
+    const bgType = document.getElementById('intMusic') ? document.getElementById('intMusic').value : 'tension';
+    // voce scelta, adattata alla lingua
+    let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : 'it-IT-DiegoNeural';
+    if (lang==='inglese') voice = 'en-US-GuyNeural';
+    else if (lang==='spagnolo') voice = 'es-ES-AlvaroNeural';
     try {
       add('Genero la storia a bivi...');
       const d = await generateInteractiveData(lang, dur, rounds);
