@@ -544,7 +544,10 @@ def render_ranking_job(data, work):
     if not ffmpeg:
         raise RuntimeError("ffmpeg non trovato")
     voice = data.get("voice") or DEFAULT_VOICE
-    clips = data.get("clips") or []
+    # media = lista di {url, kind:'image'|'video'}; compat: clips = lista url (video)
+    media = data.get("media")
+    if not media:
+        media = [{"url": u, "kind": "video"} for u in (data.get("clips") or [])]
     intro = (data.get("intro") or "").strip()
     items = data.get("items") or []
     outro = (data.get("outro") or "").strip()
@@ -553,17 +556,22 @@ def render_ranking_job(data, work):
     if not items:
         raise RuntimeError("nessun elemento in classifica")
 
-    clip_paths = []
-    for idx, url in enumerate(clips):
-        cp = os.path.join(work, f"c{idx}.mp4")
+    # scarica i media (immagini o video), conservando il tipo
+    sources = []  # (path, kind)
+    for idx, m in enumerate(media):
+        url = m.get("url") if isinstance(m, dict) else m
+        kind = (m.get("kind") if isinstance(m, dict) else "video") or "video"
+        ext = "jpg" if kind == "image" else "mp4"
+        cp = os.path.join(work, f"m{idx}.{ext}")
         try:
             download_file(url, cp)
             if os.path.getsize(cp) > 0:
-                clip_paths.append(cp)
+                sources.append((cp, kind))
         except Exception as e:
-            print(f"     clip {idx} ko: {e}")
-    if not clip_paths:
-        raise RuntimeError("nessuna clip scaricabile")
+            print(f"     media {idx} ko: {e}")
+    if not sources:
+        raise RuntimeError("nessun media scaricabile")
+    clip_paths = sources  # ora è lista di (path, kind)
 
     music_path = None
     if data.get("music_wav_b64"):
@@ -601,13 +609,14 @@ def render_ranking_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
                     "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
 
-    # base video: una clip a tema per ogni segmento (allineata all'elemento)
+    # base video: una foto/clip a tema per ogni segmento (allineata all'elemento)
     seg_files = []
     for si, item in enumerate(timeline):
-        cp = clip_paths[item.get("clip_idx", 0)]
+        cp, kind = clip_paths[item.get("clip_idx", 0)]
         dur = max(0.4, item["dur"] / 1000.0)
         outc = os.path.join(work, f"rseg{si}.mp4")
-        run_ff(ffmpeg, ["-stream_loop", "-1", "-i", cp, "-t", f"{dur:.3f}",
+        loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
+        run_ff(ffmpeg, loop_args + ["-i", cp, "-t", f"{dur:.3f}",
                         "-an", "-vf", CLIP_VF, "-c:v", "libx264", "-preset", "veryfast",
                         "-pix_fmt", "yuv420p", outc])
         seg_files.append(outc)
