@@ -499,6 +499,132 @@ def render_interactive_job(data, work):
         return f.read()
 
 
+# ----------------------------- RENDER CLASSIFICA (Top N) -----------------------------
+
+def _karaoke_dialogue(ev, base, seg_dur, words):
+    """Aggiunge righe Dialogue karaoke (stile N) per un segmento di narrazione."""
+    for i, t in enumerate(words):
+        st = base + t["t"]
+        en = base + (words[i + 1]["t"] if i + 1 < len(words) else seg_dur)
+        txt = ass_escape(t.get("w", "")).strip()
+        if not txt:
+            continue
+        ws = txt.split()
+        total_cs = max(1, int(round((en - st) / 10.0)))
+        weights = [max(1, len(w)) for w in ws]; wsum = sum(weights)
+        durs, acc = [], 0
+        for j, w in enumerate(ws):
+            if j == len(ws) - 1:
+                durs.append(max(1, total_cs - acc))
+            else:
+                d = max(1, int(round(total_cs * weights[j] / wsum))); durs.append(d); acc += d
+        body = "".join("{\\kf%d}%s " % (durs[j], ws[j]) for j in range(len(ws))).strip()
+        ev.append("Dialogue: 0,%s,%s,N,,0,0,0,,%s\n" % (ms_to_ass(st), ms_to_ass(en), body))
+
+
+def build_ranking_ass(timeline, path):
+    styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,2,70,70,300,1"
+    styleB = "Style: B,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
+    ev = [_ass_header_i(styleN + "\n" + styleB)]
+    for item in timeline:
+        base = item["start"]; dur = item["dur"]
+        _karaoke_dialogue(ev, base, dur, item.get("words", []))
+        rank = item.get("rank")
+        if rank is not None:
+            st = ms_to_ass(base); en = ms_to_ass(base + dur)
+            # numero gigante in alto (rosso sangue) con pop iniziale
+            ev.append("Dialogue: 2,%s,%s,B,,0,0,0,,{\\pos(540,430)\\fs300\\c&H2020FF&\\bord14\\shad6\\fad(180,0)}#%s\n"
+                      % (st, en, rank))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("".join(ev))
+
+
+def render_ranking_job(data, work):
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg non trovato")
+    voice = data.get("voice") or DEFAULT_VOICE
+    clips = data.get("clips") or []
+    intro = (data.get("intro") or "").strip()
+    items = data.get("items") or []
+    outro = (data.get("outro") or "").strip()
+    music_vol = float(data.get("music_vol", 1.0))
+    voice_vol = float(data.get("voice_vol", 1.8))
+    if not items:
+        raise RuntimeError("nessun elemento in classifica")
+
+    clip_paths = []
+    for idx, url in enumerate(clips):
+        cp = os.path.join(work, f"c{idx}.mp4")
+        try:
+            download_file(url, cp)
+            if os.path.getsize(cp) > 0:
+                clip_paths.append(cp)
+        except Exception as e:
+            print(f"     clip {idx} ko: {e}")
+    if not clip_paths:
+        raise RuntimeError("nessuna clip scaricabile")
+
+    music_path = None
+    if data.get("music_wav_b64"):
+        music_path = os.path.join(work, "music.wav")
+        with open(music_path, "wb") as f:
+            f.write(base64.b64decode(data["music_wav_b64"]))
+
+    timeline, audio_files = [], []
+    t = 0
+
+    def add_narr(text, rank=None):
+        nonlocal t
+        text = (text or "").strip()
+        if not text:
+            return
+        p, dur, words = _seg_voice(text, voice, work, len(audio_files))
+        audio_files.append(p)
+        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words, "rank": rank})
+        t += dur
+
+    add_narr(intro)
+    for it in items:
+        rank = it.get("rank")
+        text = f"Numero {rank}. {it.get('titolo','')}. {it.get('descrizione','')}"
+        add_narr(text, rank=rank)
+    add_narr(outro)
+    total_ms = t + 600
+
+    alist = os.path.join(work, "alist.txt")
+    with open(alist, "w", encoding="utf-8") as f:
+        for af in audio_files:
+            f.write(f"file '{os.path.basename(af)}'\n")
+    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
+                    "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
+
+    build_base_even(ffmpeg, clip_paths, total_ms, work)
+    build_ranking_ass(timeline, os.path.join(work, "subs.ass"))
+
+    total_sec = total_ms / 1000.0
+    out = os.path.join(work, "final.mp4")
+    vfilter = ("[0:v]subtitles=subs.ass,eq=brightness=-0.07:contrast=1.28:saturation=0.55,"
+               "colorbalance=rs=0.10:rm=0.06:rh=0.04,vignette=PI/3[v]")
+    if music_path:
+        inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-stream_loop", "-1", "-i", "music.wav"]
+        fc = (vfilter + f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
+              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
+    else:
+        inputs = ["-i", "base.mp4", "-i", "voice.m4a"]
+        fc = vfilter + f";[1:a]volume={voice_vol}[a]"
+    run_ff(ffmpeg, inputs + ["-filter_complex", fc, "-map", "[v]", "-map", "[a]",
+                             "-t", f"{total_sec:.3f}", "-c:v", "libx264", "-preset", "medium",
+                             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "final.mp4"],
+           cwd=work)
+    try:
+        shutil.copyfile(out, LAST_RENDER)
+    except Exception:
+        pass
+    with open(out, "rb") as f:
+        return f.read()
+
+
 # ----------------------------- YOUTUBE -----------------------------
 
 def yt_get_credentials():
@@ -938,6 +1064,23 @@ class Handler(BaseHTTPRequestHandler):
                     shutil.rmtree(work, ignore_errors=True)
             except Exception as e:
                 print(f"     ERRORE interattivo: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/render_ranking":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                print(f"  -> RENDER CLASSIFICA: {len(data.get('items', []))} elementi, "
+                      f"{len(data.get('clips', []))} clip")
+                work = tempfile.mkdtemp(prefix="viralosr_")
+                try:
+                    mp4 = render_ranking_job(data, work)
+                    print(f"     OK video {len(mp4)//1024} KB")
+                    self._send(200, "video/mp4", mp4)
+                finally:
+                    shutil.rmtree(work, ignore_errors=True)
+            except Exception as e:
+                print(f"     ERRORE classifica: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
