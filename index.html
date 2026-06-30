@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.2.1';
+  const CURRENT_VERSION = 'v3.3.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.2.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.3.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -981,6 +981,25 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       if (v) return v;
     }
     return null;
+  }
+
+  // Cerca su Wikipedia un'immagine del SOGGETTO (per le classifiche di luoghi/cose reali)
+  async function wikiImage(subject, lang) {
+    if (!subject) return null;
+    const wl = lang === 'inglese' ? 'en' : lang === 'spagnolo' ? 'es' : 'it';
+    const tryHost = async (host) => {
+      try {
+        const u = `https://${host}/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(subject)}&gsrlimit=1&prop=pageimages&piprop=thumbnail&pithumbsize=1280&format=json&origin=*`;
+        const r = await fetch(u);
+        if (!r.ok) return null;
+        const j = await r.json();
+        const pages = j.query && j.query.pages;
+        if (!pages) return null;
+        for (const kk in pages) { const th = pages[kk].thumbnail; if (th && th.source) return th.source; }
+      } catch {}
+      return null;
+    };
+    return (await tryHost(wl + '.wikipedia.org')) || (await tryHost('en.wikipedia.org'));
   }
 
   async function fetchClipsData(data, pexelsKey) {
@@ -1803,16 +1822,25 @@ Rispondi SOLO con JSON valido:
       const d = await generateRankingData(lang, n);
       gData = d; window._videoTheme = d.video_theme;
       add(`«${d.titolo||'classifica'}» — ${d.items.length} elementi`);
-      add('Cerco le clip a tema per ogni elemento...');
-      // una query per elemento (in ordine countdown) → clip tematizzate allineate
-      const itemQueries = d.items.map(it => (it.query || it.titolo || d.video_theme));
-      const clips = (await fetchClipsData({video_theme:d.video_theme, scene_queries:itemQueries}, k.pexels)).results.map(v=>v.url);
-      if (!clips.length) { add('❌ Nessuna clip trovata.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
-      add(`${clips.length} clip pronte. Genero musica...`);
+      add('Cerco foto dei soggetti (Wikipedia) + clip...');
+      // per ogni elemento: prima la FOTO del soggetto da Wikipedia, poi fallback clip a tema
+      const usedIds = new Set();
+      const media = [];
+      for (const it of d.items) {
+        const img = await wikiImage(it.titolo, lang);
+        if (img) { media.push({ url: img, kind: 'image' }); continue; }
+        const c = await searchClip(it.query || it.titolo || d.video_theme, k, usedIds)
+               || await searchClip(d.video_theme, k, usedIds);
+        if (c) media.push({ url: c.url, kind: 'video' });
+        else if (media.length) media.push(media[media.length-1]); // mai vuoto: riusa l'ultimo
+      }
+      if (!media.length) { add('❌ Nessuna immagine/clip trovata.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
+      const nImg = media.filter(m=>m.kind==='image').length;
+      add(`${media.length} media pronti (${nImg} foto soggetto, ${media.length-nImg} clip). Genero musica...`);
       const estSec = 12 + d.items.length*9 + 8;
       let musicB64=null; try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
       add('Monto la classifica sul server (attendi)...');
-      const body = { voice, clips, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+      const body = { voice, media, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
         intro: d.intro, items: d.items, outro: d.outro };
       const r = await fetch('http://127.0.0.1:5555/render_ranking', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
@@ -1936,11 +1964,12 @@ Rispondi SOLO con JSON valido:
   function cp(id) { const el=document.getElementById(id); if(el) navigator.clipboard.writeText(el.textContent).catch(()=>{}); }
   function cpText(txt) { navigator.clipboard.writeText(txt).catch(()=>{}); }
 
-  // Init — pre-load keys if not already set
-  const _k = atob('Z3NrX2VjNEZrdG9lYm1sSXUySERQQkJlV0dkeWIzRllZbVJrVm5UeVhyRzBqZUQ4RUtEUUVoMWE=');
-  const _p = atob('UGU1aXhlZzJSVnpYZ25rMG9nV3lGN1lrZ2NhQTA3VHZjSTd1Y2FvWllCVFJ3UzNNeGNUN1QxRA==');
-  if (!localStorage.getItem('vos_groq')) localStorage.setItem('vos_groq', _k);
-  if (!localStorage.getItem('vos_pexels')) localStorage.setItem('vos_pexels', _p);
+  // Init — niente chiavi incorporate (erano revocate). Usa solo le tue chiavi (menu 🔑).
+  // Pulisce eventuali vecchie chiavi condivise morte ancora salvate
+  const _deadGroq = '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';
+  const _deadPexels = 'Pe5ixeg2RVzXgnk0ogWyF7YkgcaA07TvcI7ucaoZYBTRwS3MxcT7T1D';
+  if (localStorage.getItem('vos_groq') === _deadGroq) localStorage.removeItem('vos_groq');
+  if (localStorage.getItem('vos_pexels') === _deadPexels) localStorage.removeItem('vos_pexels');
   updateKeyDots();
   setTimeout(() => { try { ytShowStatus('ytStatusMain'); } catch {} }, 600);
 </script>
