@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.2.0';
+  const CURRENT_VERSION = 'v3.2.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.2.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.2.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1397,7 +1397,8 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
               if (/rate limit|TPM|429/i.test(msg) && a < 2) { const w = Math.ceil(m?parseFloat(m[1]):30)+5; add(`${dayLabel} rate limit, attendo ${w}s...`); await sleep(w*1000); continue; }
               throw e; } }
           add(`${dayLabel} «${data.titolo}» — Top ${(data.items||[]).length}`);
-          const clips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:[]}, k.pexels)).results.map(v=>v.url);
+          const itemQueries = (data.items||[]).map(it => (it.query || it.titolo || data.video_theme));
+          const clips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:itemQueries}, k.pexels)).results.map(v=>v.url);
           if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
           const estSec = 12 + (data.items||[]).length*9 + 8;
           let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
@@ -1746,7 +1747,7 @@ REGOLE FONDAMENTALI:
 Rispondi SOLO con JSON valido:
 {
   "intro": "max 2 frasi: open loop + promessa sul #1",
-  "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"titolo breve","descrizione":"1-2 frasi inquietanti"}`).join(',')}],
+  "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"titolo breve","descrizione":"1-2 frasi inquietanti","query":"2-4 parole INGLESI per una clip che mostra visivamente questo elemento, es. dark abandoned hospital"}`).join(',')}],
   "outro": "1-2 frasi di chiusura + invito al commento",
   "titolo": "titolo YouTube che terrorizza in ${langName}, max 60 caratteri",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
@@ -1802,8 +1803,10 @@ Rispondi SOLO con JSON valido:
       const d = await generateRankingData(lang, n);
       gData = d; window._videoTheme = d.video_theme;
       add(`«${d.titolo||'classifica'}» — ${d.items.length} elementi`);
-      add('Cerco le clip...');
-      const clips = (await fetchClipsData({video_theme:d.video_theme, scene_queries:[]}, k.pexels)).results.map(v=>v.url);
+      add('Cerco le clip a tema per ogni elemento...');
+      // una query per elemento (in ordine countdown) → clip tematizzate allineate
+      const itemQueries = d.items.map(it => (it.query || it.titolo || d.video_theme));
+      const clips = (await fetchClipsData({video_theme:d.video_theme, scene_queries:itemQueries}, k.pexels)).results.map(v=>v.url);
       if (!clips.length) { add('❌ Nessuna clip trovata.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
       add(`${clips.length} clip pronte. Genero musica...`);
       const estSec = 12 + d.items.length*9 + 8;

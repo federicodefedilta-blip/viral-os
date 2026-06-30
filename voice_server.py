@@ -573,23 +573,25 @@ def render_ranking_job(data, work):
 
     timeline, audio_files = [], []
     t = 0
+    nc = len(clip_paths)
 
-    def add_narr(text, rank=None):
+    def add_narr(text, rank=None, clip_idx=0):
         nonlocal t
         text = (text or "").strip()
         if not text:
             return
         p, dur, words = _seg_voice(text, voice, work, len(audio_files))
         audio_files.append(p)
-        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words, "rank": rank})
+        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words,
+                         "rank": rank, "clip_idx": min(clip_idx, nc - 1)})
         t += dur
 
-    add_narr(intro)
-    for it in items:
+    add_narr(intro, clip_idx=0)
+    for pos, it in enumerate(items):
         rank = it.get("rank")
         text = f"Numero {rank}. {it.get('titolo','')}. {it.get('descrizione','')}"
-        add_narr(text, rank=rank)
-    add_narr(outro)
+        add_narr(text, rank=rank, clip_idx=pos)
+    add_narr(outro, clip_idx=nc - 1)
     total_ms = t + 600
 
     alist = os.path.join(work, "alist.txt")
@@ -599,7 +601,22 @@ def render_ranking_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
                     "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
 
-    build_base_even(ffmpeg, clip_paths, total_ms, work)
+    # base video: una clip a tema per ogni segmento (allineata all'elemento)
+    seg_files = []
+    for si, item in enumerate(timeline):
+        cp = clip_paths[item.get("clip_idx", 0)]
+        dur = max(0.4, item["dur"] / 1000.0)
+        outc = os.path.join(work, f"rseg{si}.mp4")
+        run_ff(ffmpeg, ["-stream_loop", "-1", "-i", cp, "-t", f"{dur:.3f}",
+                        "-an", "-vf", CLIP_VF, "-c:v", "libx264", "-preset", "veryfast",
+                        "-pix_fmt", "yuv420p", outc])
+        seg_files.append(outc)
+    with open(os.path.join(work, "rlist.txt"), "w", encoding="utf-8") as f:
+        for sf in seg_files:
+            f.write(f"file '{os.path.basename(sf)}'\n")
+    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "rlist.txt",
+                    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
+           cwd=work)
     build_ranking_ass(timeline, os.path.join(work, "subs.ass"))
 
     total_sec = total_ms / 1000.0
