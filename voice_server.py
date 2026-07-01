@@ -60,8 +60,14 @@ YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
 # ----------------------------- TTS -----------------------------
 
 # Preset "narratore horror": più lento e più cupo = più espressivo/drammatico
-TTS_RATE = "-7%"
-TTS_PITCH = "-10Hz"
+# Prosodia per contesto: (rate, pitch)
+PROSODY = {
+    "classica":    ("-9%", "-13Hz"),   # lenta, cupa, sospesa (massima tensione)
+    "interattivo": ("-1%", "-6Hz"),    # incalzante e presente (è un gioco)
+    "classifica":  ("-4%", "-8Hz"),    # ritmata, in crescendo
+}
+# default (usato dal flusso classico via /tts_json)
+TTS_RATE, TTS_PITCH = PROSODY["classica"]
 
 
 def genera_mp3(testo, voce, rate=None, pitch=None):
@@ -293,8 +299,8 @@ def render_job(data, work):
 
 # ----------------------------- RENDER INTERATTIVO -----------------------------
 
-def _seg_voice(text, voice, work, idx):
-    audio, words = genera_mp3(text, voice)
+def _seg_voice(text, voice, work, idx, rate=None, pitch=None):
+    audio, words = genera_mp3(text, voice, rate=rate, pitch=pitch)
     p = os.path.join(work, f"v{idx}.mp3")
     with open(p, "wb") as f:
         f.write(audio)
@@ -441,12 +447,14 @@ def render_interactive_job(data, work):
     timeline, audio_files = [], []
     t = 0
 
+    _r, _p = PROSODY["interattivo"]
+
     def add_narr(text):
         nonlocal t
         text = (text or "").strip()
         if not text:
             return
-        p, dur, words = _seg_voice(text, voice, work, len(audio_files))
+        p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
         audio_files.append(p)
         timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words})
         t += dur
@@ -589,13 +597,14 @@ def render_ranking_job(data, work):
     timeline, audio_files = [], []
     t = 0
     nc = len(clip_paths)
+    _r, _p = PROSODY["classifica"]
 
     def add_narr(text, rank=None, clip_idx=0):
         nonlocal t
         text = (text or "").strip()
         if not text:
             return
-        p, dur, words = _seg_voice(text, voice, work, len(audio_files))
+        p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
         audio_files.append(p)
         timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words,
                          "rank": rank, "clip_idx": min(clip_idx, nc - 1)})
