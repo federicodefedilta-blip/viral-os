@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.4.2';
+  const CURRENT_VERSION = 'v3.4.3';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.4.2</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.4.3</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1749,9 +1749,20 @@ Rispondi SOLO con JSON valido:
     const k = getKeys();
     const _lang0 = lang;
     // aree geografiche coerenti con la lingua (luoghi reali che Wikipedia conosce)
-    const areaMap = { italiano: 'in Italia', inglese: 'in the world (famous internationally)', spagnolo: 'en el mundo hispano y global' };
+    const areaMap = { italiano: 'in Italia', inglese: 'in the world (famous internationally)', spagnolo: 'del mundo hispano y global' };
     const area = areaMap[_lang0] || 'in Italia';
-    const temaPool = [`luoghi realmente infestati ${area}`, `ospedali/manicomi abbandonati reali ${area}`, `castelli maledetti reali ${area}`, `isole o paesi fantasma reali ${area}`, `foreste e strade maledette reali ${area}`, `leggende e misteri reali documentati ${area}`];
+    const temaPool = [
+      `luoghi realmente infestati ${area}`,
+      `manicomi/ospedali abbandonati reali ${area}`,
+      `castelli o ville maledette reali ${area}`,
+      `isole o paesi fantasma reali ${area}`,
+      `oggetti maledetti realmente documentati (dipinti, reperti, gioielli)`,
+      `bambole e giocattoli infestati reali e famosi`,
+      `creature e criptidi realmente avvistati e documentati`,
+      `film o registrazioni "maledetti" realmente esistiti`,
+      `casi paranormali reali e famosi`,
+      `misteri e sparizioni reali irrisolti ${area}`,
+    ];
     const tema = temaPool[Math.floor(Math.random()*temaPool.length)];
     const _opt = getOptimize();
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
@@ -1762,9 +1773,9 @@ Rispondi SOLO con JSON valido:
 ${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
 
 REGOLE FONDAMENTALI:
-- USA SOLO LUOGHI/SOGGETTI REALI ED ESISTENTI, con il loro NOME PROPRIO esatto (es. "Isola di Poveglia", "Castello di Bardi", "Ospedale psichiatrico di Volterra", "Villa De Vecchi"). VIETATO inventare nomi o usare descrizioni generiche tipo "un vecchio castello".
-- Il campo "titolo" DEVE essere il nome reale del luogo (serve a trovarne la foto vera). Nella "query" metti il nome reale in inglese + una parola tipo "abandoned/haunted".
-- Devono essere luoghi davvero famosi/documentati per il fattore inquietante, così esistono foto e informazioni vere.
+- USA SOLO SOGGETTI REALI ED ESISTENTI (luoghi, oggetti maledetti, bambole infestate, creature/criptidi, film maledetti, casi paranormali...), con il loro NOME PROPRIO esatto (es. "Isola di Poveglia", "Bambola Annabelle", "Robert the Doll", "Mothman", "Dipinto The Anguished Man"). VIETATO inventare nomi o usare descrizioni generiche tipo "un vecchio castello" o "una bambola".
+- Il campo "titolo" DEVE essere il nome reale del soggetto (serve a trovarne la foto vera su Wikipedia). Nella "query" metti il nome reale in inglese + una parola tipo "haunted/cursed/abandoned".
+- Devono essere soggetti davvero famosi/documentati, così esistono foto e informazioni vere.
 - L'INTRO deve creare un open loop fortissimo e promettere che il #1 è terrificante. Max 2 frasi.
 - Gli elementi vanno in ordine di COUNTDOWN: dal ${n} fino all'1, con intensità CRESCENTE (l'1 è il più agghiacciante).
 - Ogni elemento: titolo breve + descrizione di 1-2 frasi concrete, sensoriali, inquietanti. Niente prolissità.
