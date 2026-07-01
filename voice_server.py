@@ -59,12 +59,19 @@ YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
 
 # ----------------------------- TTS -----------------------------
 
-def genera_mp3(testo, voce):
-    """Genera l'MP3 della voce e restituisce (bytes_audio, lista_frasi)."""
+# Preset "narratore horror": più lento e più cupo = più espressivo/drammatico
+TTS_RATE = "-7%"
+TTS_PITCH = "-10Hz"
+
+
+def genera_mp3(testo, voce, rate=None, pitch=None):
+    """Genera l'MP3 della voce (prosodia horror) e restituisce (bytes_audio, lista_frasi)."""
+    rate = rate or TTS_RATE
+    pitch = pitch or TTS_PITCH
     async def _run():
         chunks = bytearray()
         words = []
-        communicate = edge_tts.Communicate(testo, voce)
+        communicate = edge_tts.Communicate(testo, voce, rate=rate, pitch=pitch)
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 chunks.extend(chunk["data"])

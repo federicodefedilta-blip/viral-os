@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.3.0';
+  const CURRENT_VERSION = 'v3.4.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.3.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.4.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -597,6 +597,7 @@ TECNICA (CREEPYPASTA AVVINCENTE):
 - FINALE A TWIST che ribalta tutto e fa rileggere da capo
 
 REGOLE: SOLO una storia (zero prodotti/pubblicità), prima persona, frasi brevi ma numerose, mostra non dire, mini-rivelazione ogni 2-3 frasi.
+PUNTEGGIATURA ESPRESSIVA (per un'intonazione drammatica della voce): usa i puntini di sospensione "..." per creare tensione e pause, il trattino "—" per gli stacchi improvvisi, e "?" / "!" con parsimonia nei momenti chiave. Non frasi tutte piatte con solo il punto.
 
 Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, prima degli altri campi.
 
@@ -1653,7 +1654,7 @@ REGOLE FONDAMENTALI:
 - "esito": MAX 2 frasi. Rivela drammaticamente la scelta mortale ("Se avessi scelto X... [morte breve e cruda]") e prosegui di slancio al bivio dopo.
 - Alterna quale è giusta (a volte 'a', a volte 'b').
 - Tensione che sale ad ogni bivio, finale con twist agghiacciante in 1-2 frasi.
-- Frasi corte, concrete, sensoriali. Zero pubblicità.
+- Frasi corte, concrete, sensoriali. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave (voce più drammatica).
 
 Rispondi SOLO con JSON valido:
 {
@@ -1761,7 +1762,7 @@ REGOLE FONDAMENTALI:
 - Gli elementi vanno in ordine di COUNTDOWN: dal ${n} fino all'1, con intensità CRESCENTE (l'1 è il più agghiacciante).
 - Ogni elemento: titolo breve + descrizione di 1-2 frasi concrete, sensoriali, inquietanti. Niente prolissità.
 - L'outro chiede un commento/engagement con un'ultima frase da brivido.
-- Frasi corte e dirette. Zero pubblicità.
+- Frasi corte e dirette. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave (intonazione più drammatica).
 
 Rispondi SOLO con JSON valido:
 {
