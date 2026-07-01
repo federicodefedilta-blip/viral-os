@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.4.1';
+  const CURRENT_VERSION = 'v3.4.2';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.4.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.4.2</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1747,7 +1747,11 @@ Rispondi SOLO con JSON valido:
   // --- Classifica del terrore (Top N) ---
   async function generateRankingData(lang, n) {
     const k = getKeys();
-    const temaPool = ['luoghi maledetti','creature leggendarie','storie vere agghiaccianti','fenomeni inspiegabili','case infestate','misteri irrisolti'];
+    const _lang0 = lang;
+    // aree geografiche coerenti con la lingua (luoghi reali che Wikipedia conosce)
+    const areaMap = { italiano: 'in Italia', inglese: 'in the world (famous internationally)', spagnolo: 'en el mundo hispano y global' };
+    const area = areaMap[_lang0] || 'in Italia';
+    const temaPool = [`luoghi realmente infestati ${area}`, `ospedali/manicomi abbandonati reali ${area}`, `castelli maledetti reali ${area}`, `isole o paesi fantasma reali ${area}`, `foreste e strade maledette reali ${area}`, `leggende e misteri reali documentati ${area}`];
     const tema = temaPool[Math.floor(Math.random()*temaPool.length)];
     const _opt = getOptimize();
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
@@ -1758,7 +1762,10 @@ Rispondi SOLO con JSON valido:
 ${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
 
 REGOLE FONDAMENTALI:
-- L'INTRO deve creare un open loop fortissimo e promettere che il #1 è terrificante. Esempio: "I ${n} [tema] più spaventosi mai documentati. Il numero 1 ti farà dormire con la luce accesa." Max 2 frasi.
+- USA SOLO LUOGHI/SOGGETTI REALI ED ESISTENTI, con il loro NOME PROPRIO esatto (es. "Isola di Poveglia", "Castello di Bardi", "Ospedale psichiatrico di Volterra", "Villa De Vecchi"). VIETATO inventare nomi o usare descrizioni generiche tipo "un vecchio castello".
+- Il campo "titolo" DEVE essere il nome reale del luogo (serve a trovarne la foto vera). Nella "query" metti il nome reale in inglese + una parola tipo "abandoned/haunted".
+- Devono essere luoghi davvero famosi/documentati per il fattore inquietante, così esistono foto e informazioni vere.
+- L'INTRO deve creare un open loop fortissimo e promettere che il #1 è terrificante. Max 2 frasi.
 - Gli elementi vanno in ordine di COUNTDOWN: dal ${n} fino all'1, con intensità CRESCENTE (l'1 è il più agghiacciante).
 - Ogni elemento: titolo breve + descrizione di 1-2 frasi concrete, sensoriali, inquietanti. Niente prolissità.
 - L'outro chiede un commento/engagement con un'ultima frase da brivido.
@@ -1767,7 +1774,7 @@ REGOLE FONDAMENTALI:
 Rispondi SOLO con JSON valido:
 {
   "intro": "max 2 frasi: open loop + promessa sul #1",
-  "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"titolo breve","descrizione":"1-2 frasi inquietanti","query":"2-4 parole INGLESI per una clip che mostra visivamente questo elemento, es. dark abandoned hospital"}`).join(',')}],
+  "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"NOME REALE ESATTO del luogo","descrizione":"1-2 frasi inquietanti su cosa è successo lì","query":"nome reale del luogo in inglese + haunted/abandoned"}`).join(',')}],
   "outro": "1-2 frasi di chiusura + invito al commento",
   "titolo": "titolo YouTube che terrorizza in ${langName}, max 60 caratteri",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
