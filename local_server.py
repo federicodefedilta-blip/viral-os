@@ -724,6 +724,10 @@ def render_ranking_job(data, work):
         add_narr(text, rank=rank, srclist=item_srcs[pos] or [intro_src])
     add_narr(outro, srclist=[intro_src])
     total_ms = t + 600
+    target_ms = float(data.get("target_ms") or 0)
+    # se il copione è più corto della durata scelta, allunga l'outro (la musica in loop copre il resto)
+    pad_ms = max(0.0, target_ms - total_ms)
+    total_ms += pad_ms
 
     alist = os.path.join(work, "alist.txt")
     with open(alist, "w", encoding="utf-8") as f:
@@ -737,7 +741,8 @@ def render_ranking_job(data, work):
     for si, item in enumerate(timeline):
         srcs = item.get("srclist") or [intro_src]
         srcs = [s for s in srcs if s] or [intro_src]
-        sub = max(0.4, (item["dur"] / 1000.0) / len(srcs))
+        extra_ms = pad_ms if si == len(timeline) - 1 else 0.0
+        sub = max(0.4, ((item["dur"] + extra_ms) / 1000.0) / len(srcs))
         for k, (cp, kind) in enumerate(srcs):
             outc = os.path.join(work, f"rseg{si}_{k}.mp4")
             loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
