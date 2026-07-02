@@ -1014,15 +1014,21 @@ def yt_optimize():
     reg = registry_load()
     an = yt_analytics()
     perf = {v["id"]: v for v in an.get("videos", [])}
+    MIN_VIEWS = 100  # sotto questa soglia la retention non è statisticamente affidabile
+    MIN = 5          # video affidabili minimi per insight
     rows = []
+    total_with_ret = 0
     for r in reg:
         p = perf.get(r.get("id"))
         if p and p.get("retention") is not None:
-            rows.append({**r, "retention": float(p["retention"]), "views": p.get("views", 0)})
+            total_with_ret += 1
+            # SCARTA i video con troppe poche views (1 view al 100% non è un dato)
+            if int(p.get("views", 0)) >= MIN_VIEWS:
+                rows.append({**r, "retention": float(p["retention"]), "views": int(p.get("views", 0))})
 
-    MIN = 5  # video con dati minimi per insight affidabili
     if len(rows) < 1:
-        return {"count": 0, "enough": False, "dims": {}, "best": {},
+        return {"count": 0, "total": total_with_ret, "min_views": MIN_VIEWS,
+                "enough": False, "dims": {}, "best": {},
                 "insight": "", "analytics_ok": an.get("analytics_ok", True)}
 
     def agg(dim):
@@ -1053,7 +1059,8 @@ def yt_optimize():
         if top_hooks:
             insight += " Esempi di hook che hanno funzionato: " + " / ".join(top_hooks[:2])
 
-    return {"count": len(rows), "enough": len(rows) >= MIN, "dims": dims,
+    return {"count": len(rows), "total": total_with_ret, "min_views": MIN_VIEWS,
+            "enough": len(rows) >= MIN, "dims": dims,
             "best": best, "insight": insight, "avgRet": avg_ret,
             "analytics_ok": an.get("analytics_ok", True)}
 

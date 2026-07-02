@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.7.0';
+  const CURRENT_VERSION = 'v3.7.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.7.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.7.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1626,9 +1626,10 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       // salva per applicarlo alle generazioni
       localStorage.setItem('vos_optimize', JSON.stringify(o));
       if (o.count === 0) {
-        out.innerHTML = '<div class="alert-info">Ancora nessun video con dati di retention. Pubblica e torna tra qualche giorno.</div>';
+        const tot = o.total || 0;
+        out.innerHTML = `<div class="alert-info">Nessun video <strong>affidabile</strong> ancora (servono ≥${o.min_views||100} views per contare). ${tot>0?`Hai ${tot} video con retention ma con troppe poche views per fidarsi.`:''} I video con 1-10 views vengono <strong>ignorati</strong> (1 persona al 100% non è un dato). Continua a pubblicare.</div>`;
       } else if (!o.enough) {
-        out.innerHTML = `<div class="alert-info">Raccolgo dati: ${o.count} video con metriche (servono ~5 per pattern affidabili). Retention media ${o.avgRet||'?'}%.</div>`;
+        out.innerHTML = `<div class="alert-info">Raccolgo dati affidabili: <strong>${o.count}</strong> video con ≥${o.min_views||100} views (servono ~5 per pattern solidi). Retention media ${o.avgRet||'?'}%. I video con pochissime views sono esclusi.</div>`;
       } else {
         const rowsFor = (dim,label) => {
           const arr = (o.dims[dim]||[]).slice(0,3);
