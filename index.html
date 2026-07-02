@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.7.1';
+  const CURRENT_VERSION = 'v3.7.2';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.7.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.7.2</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -237,7 +237,7 @@
         </select>
       </div>
       <div id="rankParams" style="display:none">
-        <div class="input-group"><label class="input-label">Quanti elementi (Top N)</label><input class="input-field" id="rankN" type="number" min="3" max="7" value="5"></div>
+        <div class="input-group"><label class="input-label">Quanti elementi (Top N)</label><input class="input-field" id="rankN" type="number" min="3" max="7" value="3"></div>
       </div>
       <div id="intParams" style="display:none">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -1805,16 +1805,16 @@ REGOLE FONDAMENTALI:
 - USA SOLO SOGGETTI REALI ED ESISTENTI (luoghi, oggetti maledetti, bambole infestate, creature/criptidi, film maledetti, casi paranormali...), con il loro NOME PROPRIO esatto (es. "Isola di Poveglia", "Bambola Annabelle", "Robert the Doll", "Mothman", "Dipinto The Anguished Man"). VIETATO inventare nomi o usare descrizioni generiche tipo "un vecchio castello" o "una bambola".
 - Il campo "titolo" DEVE essere il nome reale del soggetto (serve a trovarne la foto vera su Wikipedia). Nella "query" metti il nome reale in inglese + una parola tipo "haunted/cursed/abandoned".
 - Devono essere soggetti davvero famosi/documentati, così esistono foto e informazioni vere.
-- L'INTRO deve creare un open loop fortissimo e promettere che il #1 è terrificante. Max 2 frasi.
-- Gli elementi vanno in ordine di COUNTDOWN: dal ${n} fino all'1, con intensità CRESCENTE (l'1 è il più agghiacciante).
-- Ogni elemento: titolo breve + descrizione di 1-2 frasi concrete, sensoriali, inquietanti. Niente prolissità.
-- L'outro chiede un commento/engagement con un'ultima frase da brivido.
-- Frasi corte e dirette. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave (intonazione più drammatica).
+- INTRO FULMINANTE (max 1 frase, ~2 secondi): niente preamboli, entra subito. Deve promettere che il #1 è scioccante E anticipare che vale l'attesa (es. "I 3 [tema] più spaventosi mai documentati — e il numero 1 è ancora là fuori."). Poi via SUBITO al primo elemento.
+- Gli elementi vanno in COUNTDOWN dal ${n} all'1, intensità CRESCENTE (l'1 è il più agghiacciante).
+- Ogni elemento: titolo (nome reale) + descrizione di UNA SOLA frase secca, concreta e inquietante. RITMO VELOCE, zero prolissità — la gente deve arrivare al #1.
+- L'outro (1 frase) rilancia sul #1 e chiede un commento con una domanda diretta.
+- Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
 
 Rispondi SOLO con JSON valido:
 {
-  "intro": "max 2 frasi: open loop + promessa sul #1",
-  "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"NOME REALE ESATTO del luogo","descrizione":"1-2 frasi inquietanti su cosa è successo lì","query":"nome reale del luogo in inglese + haunted/abandoned"}`).join(',')}],
+  "intro": "1 frase fulminante (~2 sec): entra subito + promessa che il #1 è scioccante e vale l'attesa",
+  "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"NOME REALE ESATTO del soggetto","descrizione":"UNA sola frase secca, concreta e inquietante","query":"nome reale in inglese + haunted/cursed/abandoned"}`).join(',')}],
   "outro": "1 frase da brivido sul #1 + una domanda diretta che invita a commentare (es. 'Ci andresti mai? Scrivilo nei commenti.')",
   "titolo": "titolo YouTube che terrorizza in ${langName}, max 60 caratteri",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
