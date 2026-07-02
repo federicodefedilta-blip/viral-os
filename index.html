@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.4.3';
+  const CURRENT_VERSION = 'v3.5.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.4.3</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.5.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -1418,14 +1418,14 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
               throw e; } }
           add(`${dayLabel} «${data.titolo}» — Top ${(data.items||[]).length}`);
           const itemQueries = (data.items||[]).map(it => (it.query || it.titolo || data.video_theme));
-          const clips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:itemQueries}, k.pexels)).results.map(v=>v.url);
-          if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
+          const rClips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:itemQueries}, k.pexels)).results.map(v=>v.url);
+          if (!rClips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
           const estSec = 12 + (data.items||[]).length*9 + 8;
           let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
-          add(`${dayLabel} monto classifica (${clips.length} clip · ${vVoice.split('-').pop()})...`);
+          add(`${dayLabel} monto classifica (foto Wikipedia + ${rClips.length} clip fallback)...`);
           const rr = await fetch('http://127.0.0.1:5555/render_ranking', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ voice: vVoice, clips, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+            body: JSON.stringify({ voice: vVoice, fallback: rClips, lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
               intro: data.intro, items: data.items, outro: data.outro }) });
           if (!rr.ok) throw new Error(await rr.text());
           await rr.blob();
@@ -1841,25 +1841,20 @@ Rispondi SOLO con JSON valido:
       const d = await generateRankingData(lang, n);
       gData = d; window._videoTheme = d.video_theme;
       add(`«${d.titolo||'classifica'}» — ${d.items.length} elementi`);
-      add('Cerco foto dei soggetti (Wikipedia) + clip...');
-      // per ogni elemento: prima la FOTO del soggetto da Wikipedia, poi fallback clip a tema
+      add('Cerco clip di fallback (le foto le prende il server da Wikipedia)...');
+      // clip di fallback: una per elemento (usata solo se manca la foto Wikipedia del soggetto)
       const usedIds = new Set();
-      const media = [];
+      const fallback = [];
       for (const it of d.items) {
-        const img = await wikiImage(it.titolo, lang);
-        if (img) { media.push({ url: img, kind: 'image' }); continue; }
         const c = await searchClip(it.query || it.titolo || d.video_theme, k, usedIds)
                || await searchClip(d.video_theme, k, usedIds);
-        if (c) media.push({ url: c.url, kind: 'video' });
-        else if (media.length) media.push(media[media.length-1]); // mai vuoto: riusa l'ultimo
+        fallback.push(c ? c.url : (fallback.length ? fallback[fallback.length-1] : null));
       }
-      if (!media.length) { add('❌ Nessuna immagine/clip trovata.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
-      const nImg = media.filter(m=>m.kind==='image').length;
-      add(`${media.length} media pronti (${nImg} foto soggetto, ${media.length-nImg} clip). Genero musica...`);
+      add('Genero musica...');
       const estSec = 12 + d.items.length*9 + 8;
       let musicB64=null; try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
-      add('Monto la classifica sul server (attendi)...');
-      const body = { voice, media, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+      add('Monto la classifica sul server (foto Wikipedia + numeri, attendi)...');
+      const body = { voice, fallback, lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
         intro: d.intro, items: d.items, outro: d.outro };
       const r = await fetch('http://127.0.0.1:5555/render_ranking', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
