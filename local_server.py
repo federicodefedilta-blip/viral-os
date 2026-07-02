@@ -723,11 +723,12 @@ def render_ranking_job(data, work):
         text = f"Numero {rank}. {it.get('titolo','')}. {it.get('descrizione','')}"
         add_narr(text, rank=rank, srclist=item_srcs[pos] or [intro_src])
     add_narr(outro, srclist=[intro_src])
-    total_ms = t + 600
     target_ms = float(data.get("target_ms") or 0)
     # se il copione è più corto della durata scelta, allunga l'outro (la musica in loop copre il resto)
-    pad_ms = max(0.0, target_ms - total_ms)
-    total_ms += pad_ms
+    # il pad va calcolato su "t" (durata video reale), non su t+600: quel buffer è solo
+    # margine per il trim finale e non produce frame video aggiuntivi da solo.
+    pad_ms = max(0.0, target_ms - t)
+    total_ms = t + pad_ms + 600
 
     alist = os.path.join(work, "alist.txt")
     with open(alist, "w", encoding="utf-8") as f:
