@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.6.0';
+  const CURRENT_VERSION = 'v3.7.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.6.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.7.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -952,7 +952,9 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       const top = vids.slice(0, 6);
       const video = top[Math.floor(Math.random() * top.length)];
       usedIds.add('px'+video.id);
-      const file = video.video_files.filter(f => f.quality === 'hd' || f.quality === 'sd').sort((a, b) => a.width - b.width)[0];
+      // preferisci alta risoluzione: il file più piccolo con larghezza >= 1080, altrimenti il più grande
+      const files = video.video_files.slice().sort((a, b) => a.width - b.width);
+      const file = files.find(f => f.width >= 1080) || files[files.length - 1];
       return { url: file?.link || video.video_files[0].link, thumbnail: video.image, id: 'px'+video.id, photographer: video.user.name, pexels_url: video.url, query };
     } catch { return null; }
   }
@@ -969,7 +971,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       const hit = hits[Math.floor(Math.random() * Math.min(hits.length, 6))];
       usedIds.add('pb'+hit.id);
       const v = hit.videos || {};
-      const url = (v.medium && v.medium.url) || (v.small && v.small.url) || (v.large && v.large.url) || (v.tiny && v.tiny.url);
+      const url = (v.large && v.large.url) || (v.medium && v.medium.url) || (v.small && v.small.url) || (v.tiny && v.tiny.url);
       if (!url) return null;
       return { url, thumbnail: '', id: 'pb'+hit.id, photographer: hit.user || 'Pixabay', pexels_url: hit.pageURL || 'https://pixabay.com', query };
     } catch { return null; }
@@ -1444,12 +1446,14 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           const itemQueries = (data.items||[]).map(it => (it.query || it.titolo || data.video_theme));
           const rClips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:itemQueries}, k.pexels)).results.map(v=>v.url);
           if (!rClips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
+          const rUsed = new Set();
+          const rIntro = (await searchClip('dark horror fog atmosphere', k, rUsed) || await searchClip(data.video_theme, k, rUsed));
           const estSec = 12 + (data.items||[]).length*9 + 8;
           let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
-          add(`${dayLabel} monto classifica (foto Wikipedia + ${rClips.length} clip fallback)...`);
+          add(`${dayLabel} monto classifica (foto Wikipedia dinamiche)...`);
           const rr = await fetch('http://127.0.0.1:5555/render_ranking', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ voice: vVoice, fallback: rClips, lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+            body: JSON.stringify({ voice: vVoice, fallback: rClips, intro_clip: (rIntro?rIntro.url:rClips[0]), lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
               intro: data.intro, items: data.items, outro: data.outro }) });
           if (!rr.ok) throw new Error(await rr.text());
           await rr.blob();
@@ -1874,11 +1878,14 @@ Rispondi SOLO con JSON valido:
                || await searchClip(d.video_theme, k, usedIds);
         fallback.push(c ? c.url : (fallback.length ? fallback[fallback.length-1] : null));
       }
+      // clip atmosferica per l'intro (così non si vede subito il #5)
+      const ic = await searchClip('dark horror fog atmosphere', k, usedIds) || await searchClip(d.video_theme, k, usedIds);
+      const intro_clip = ic ? ic.url : (fallback[0] || null);
       add('Genero musica...');
       const estSec = 12 + d.items.length*9 + 8;
       let musicB64=null; try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
-      add('Monto la classifica sul server (foto Wikipedia + numeri, attendi)...');
-      const body = { voice, fallback, lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+      add('Monto la classifica (foto Wikipedia dinamiche + numeri, attendi)...');
+      const body = { voice, fallback, intro_clip, lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
         intro: d.intro, items: d.items, outro: d.outro };
       const r = await fetch('http://127.0.0.1:5555/render_ranking', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
