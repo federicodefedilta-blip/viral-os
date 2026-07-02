@@ -1664,8 +1664,12 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   // --- Video interattivo "Sopravvivi o Muori" ---
   async function generateInteractiveData(lang, dur, rounds) {
     const k = getKeys();
-    const sgPool = ['casa infestata','bosco di notte','ospedale abbandonato','rituale notturno','creatura che insegue','autostrada deserta'];
+    const sgPool = ['casa infestata','bosco di notte','ospedale psichiatrico abbandonato','metropolitana deserta di notte','nave da crociera abbandonata','scuola abbandonata','baita isolata in montagna','miniera abbandonata','parco divertimenti chiuso di notte','cimitero antico','bunker sotterraneo','faro isolato su una scogliera','aereo precipitato nella giungla','centro commerciale abbandonato di notte'];
+    const threatPool = ['una presenza invisibile che sussurra il tuo nome','un culto che ti dà la caccia','una creatura che imita le voci delle persone che ami','un fantasma legato a un omicidio mai risolto','qualcosa che si muove solo quando chiudi gli occhi','un branco di creature che cacciano nel buio','un\'entità che si nutre della tua paura','uno sconosciuto identico a te che ripete ogni tua mossa'];
+    const goalPool = ['raggiungere l\'uscita prima dell\'alba','trovare tuo fratello scomparso','arrivare all\'auto prima che ti trovi','resistere fino all\'arrivo dei soccorsi','trovare la chiave per scappare','nascondere la prova che ti scagiona'];
     const sg = sgPool[Math.floor(Math.random()*sgPool.length)];
+    const threat = threatPool[Math.floor(Math.random()*threatPool.length)];
+    const goal = goalPool[Math.floor(Math.random()*goalPool.length)];
     const _opt = getOptimize();
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
     const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
@@ -1676,13 +1680,16 @@ ${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
 
 REGOLE FONDAMENTALI:
 - Ambientazione: ${sg}
-- L'INTRO deve dire CHIARO dalla prima frase che è un gioco a scelte dove puoi morire. Esempio tono: "Sopravvivresti a questa notte? Una scelta sbagliata e sei morto. Iniziamo." Massimo 2 frasi, dritte e adrenaliniche.
+- Minaccia: ${threat}
+- Il TUO obiettivo per tutta la storia: ${goal}. Ogni bivio deve servire concretamente questo obiettivo (ci si avvicina o ci si allontana), non sono eventi a caso.
+- COERENZA A CATENA: ogni bivio è la conseguenza DIRETTA e immediata dell'esito del bivio precedente. Stesso luogo che si evolve o luogo attiguo raggiunto scappando/muovendosi dal precedente (es. dalla stanza al corridoio, dal bosco al fiume) — MAI un salto di scena scollegato dal contesto. La "situazione" di ogni bivio (tranne il primo) deve ripartire esattamente da dove ti ha lasciato l'"esito" del bivio prima.
+- L'INTRO deve dire CHIARO dalla prima frase che è un gioco a scelte dove puoi morire, e piazzarti subito dentro l'ambientazione con la minaccia già presente. Esempio tono: "Sopravvivresti a questa notte? Una scelta sbagliata e sei morto. Iniziamo." Massimo 2 frasi, dritte e adrenaliniche.
 - POCA storia, MOLTA azione: le scelte arrivano una dietro l'altra. Niente parti prolisse.
-- "situazione": UNA sola frase breve che crea il pericolo immediato, poi SEMPRE finisce con la domanda "Cosa fai: [scelta A] o [scelta B]?" (riprendi le due scelte nella domanda).
-- "a" e "b": scelte BREVISSIME (2-4 parole), una salva e una uccide.
-- "esito": MAX 2 frasi. Rivela drammaticamente la scelta mortale ("Se avessi scelto X... [morte breve e cruda]") e prosegui di slancio al bivio dopo.
+- "situazione": UNA sola frase breve che crea il pericolo immediato (conseguenza del bivio precedente, vedi COERENZA A CATENA), poi SEMPRE finisce con la domanda "Cosa fai: [scelta A] o [scelta B]?" (riprendi le due scelte nella domanda).
+- "a" e "b": scelte BREVISSIME (2-4 parole), concrete e diverse tra loro (non varianti della stessa azione), una salva e una uccide — e la scelta sbagliata deve essere una trappola logica legata alla minaccia specifica, non un pericolo generico.
+- "esito": MAX 2 frasi. Rivela drammaticamente la scelta mortale ("Se avessi scelto X... [morte breve e cruda, coerente con la minaccia]") e prosegui di slancio verso il bivio dopo, lasciando la scena in un punto preciso da cui ripartire.
 - Alterna quale è giusta (a volte 'a', a volte 'b').
-- Tensione che sale ad ogni bivio, finale con twist agghiacciante in 1-2 frasi.
+- Tensione che sale ad ogni bivio (la minaccia si fa più vicina/più scoperta), finale con twist agghiacciante in 1-2 frasi legato all'obiettivo e alla minaccia.
 - Frasi corte, concrete, sensoriali. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave (voce più drammatica).
 
 Rispondi SOLO con JSON valido:
