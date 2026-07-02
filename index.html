@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.5.0';
+  const CURRENT_VERSION = 'v3.5.1';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.5.0</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.5.1</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -242,7 +242,7 @@
       <div id="intParams" style="display:none">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="4"></div>
-          <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="3" max="8" value="5"></div>
+          <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="2" max="8" value="3"></div>
         </div>
       </div>
       <div id="mediaParams" style="display:none">
@@ -1660,7 +1660,7 @@ Rispondi SOLO con JSON valido:
 {
   "intro": "max 2 frasi: annuncia il gioco a scelte mortali + ti catapulta nella scena",
   "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1 frase di pericolo + Cosa fai: A o B?","a":"scelta brevissima","b":"scelta brevissima","giusta":"a o b","esito":"max 2 frasi: rivela la morte e prosegui"}').join(',')}],
-  "finale": "1-2 frasi di chiusura con twist",
+  "finale": "1 frase di twist agghiacciante + una domanda diretta che invita a commentare (es. 'Quante volte saresti sopravvissuto? Scrivilo nei commenti.')",
   "titolo": "titolo che terrorizza in ${langName}, max 60 caratteri (es. 'Sopravvivresti a Questa Notte?')",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
   "hashtags": ["10 hashtag horror/interattivi in ${langName}, ognuno con #"],
@@ -1786,7 +1786,7 @@ Rispondi SOLO con JSON valido:
 {
   "intro": "max 2 frasi: open loop + promessa sul #1",
   "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"NOME REALE ESATTO del luogo","descrizione":"1-2 frasi inquietanti su cosa è successo lì","query":"nome reale del luogo in inglese + haunted/abandoned"}`).join(',')}],
-  "outro": "1-2 frasi di chiusura + invito al commento",
+  "outro": "1 frase da brivido sul #1 + una domanda diretta che invita a commentare (es. 'Ci andresti mai? Scrivilo nei commenti.')",
   "titolo": "titolo YouTube che terrorizza in ${langName}, max 60 caratteri",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
   "hashtags": ["10 hashtag horror in ${langName}, ognuno con #"],
