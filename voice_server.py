@@ -137,7 +137,7 @@ def build_ass(timings, total_ms, path):
     # Primary (parola attiva/passata) = giallo; Secondary (non ancora) = bianco
     style = (
         "Style: Def,Arial Black,%d,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,"
-        "-1,0,0,0,100,100,0,0,1,5,2,2,70,70,320,1" % fontsize
+        "-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1" % fontsize
     )
     header = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nScaledBorderAndShadow: yes\n\n"
@@ -324,7 +324,7 @@ def _ass_header_i(styles):
 
 def build_interactive_ass(timeline, path):
     # N = narrazione karaoke (basso), I = overlay posizionati (scelte/countdown/reveal)
-    styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,2,70,70,310,1"
+    styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleI = "Style: I,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,3,5,0,0,0,1"
     ev = [_ass_header_i(styleN + "\n" + styleI)]
     for item in timeline:
@@ -538,7 +538,7 @@ def _karaoke_dialogue(ev, base, seg_dur, words):
 
 
 def build_ranking_ass(timeline, path):
-    styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,2,70,70,300,1"
+    styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleB = "Style: B,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
     ev = [_ass_header_i(styleN + "\n" + styleB)]
     for item in timeline:
@@ -547,8 +547,8 @@ def build_ranking_ass(timeline, path):
         rank = item.get("rank")
         if rank is not None:
             st = ms_to_ass(base); en = ms_to_ass(base + dur)
-            # numero gigante in alto (rosso sangue) con pop iniziale
-            ev.append("Dialogue: 2,%s,%s,B,,0,0,0,,{\\pos(540,430)\\fs300\\c&H2020FF&\\bord14\\shad6\\fad(180,0)}#%s\n"
+            # numero gigante al centro (rosso sangue) con pop iniziale
+            ev.append("Dialogue: 2,%s,%s,B,,0,0,0,,{\\pos(540,960)\\fs320\\c&H2020FF&\\bord14\\shad6\\fad(180,0)}#%s\n"
                       % (st, en, rank))
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(ev))

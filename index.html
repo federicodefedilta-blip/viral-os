@@ -131,7 +131,7 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.5.1';
+  const CURRENT_VERSION = 'v3.6.0';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -195,7 +195,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.5.1</div>
+    <div style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.6.0</div>
   </div>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
 </div>
@@ -261,6 +261,9 @@
               <option value="drone">Drone cupo</option>
               <option value="dark">Dark ambient</option>
               <option value="heartbeat">Battito</option>
+              <option value="pulse">Pulsazione (adrenalina)</option>
+              <option value="choir">Coro spettrale</option>
+              <option value="musicbox">Carillon inquietante</option>
             </select>
           </div>
         </div>
@@ -350,6 +353,9 @@
           <option value="tension">😱 Tensione crescente</option>
           <option value="dark">🌑 Dark ambient</option>
           <option value="heartbeat">💀 Heartbeat sinistro</option>
+          <option value="pulse">⚡ Pulsazione adrenalinica</option>
+          <option value="choir">👥 Coro spettrale</option>
+          <option value="musicbox">🎼 Carillon inquietante</option>
         </select>
       </div>
       <div class="input-group" style="display:flex;align-items:center;gap:12px">
@@ -1289,10 +1295,28 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     } else if (bgType==='dark'){
       [55,82.4,110].forEach((f,i)=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=f+i*0.15;const lfo=ctx.createOscillator();lfo.frequency.value=0.05+i*0.02;const lg=ctx.createGain();lg.gain.value=f*0.003;lfo.connect(lg);lg.connect(o.frequency);const g=ctx.createGain();g.gain.value=0.2;o.connect(g);g.connect(dry);g.connect(rev);o.start();lfo.start();mnodes.push(o,lfo);});
       scheduleMelody(ctx,darkN,dry,rev,mnodes,4.8);
-    } else {
+    } else if (bgType==='heartbeat'){
       const bo=ctx.createOscillator();bo.type='sine';bo.frequency.value=55;const bg=ctx.createGain();bg.gain.value=0;bo.connect(bg);bg.connect(dry);bg.connect(rev);bo.start();mnodes.push(bo);
       let t=ctx.currentTime+0.3;for(let i=0;i<200;i++){bg.gain.setValueAtTime(0.65,t);bg.gain.exponentialRampToValueAtTime(0.001,t+0.13);bg.gain.setValueAtTime(0.4,t+0.19);bg.gain.exponentialRampToValueAtTime(0.001,t+0.3);t+=1.25;}
       scheduleMelody(ctx,ghost,dry,rev,mnodes,4.2);
+    } else if (bgType==='pulse'){
+      // basso pulsante ritmico + sweep di rumore (adrenalinico, ottimo per interattivo)
+      const bo=ctx.createOscillator();bo.type='sine';bo.frequency.value=48;const bg=ctx.createGain();bg.gain.value=0;bo.connect(bg);bg.connect(dry);bg.connect(rev);bo.start();mnodes.push(bo);
+      let t=ctx.currentTime+0.2;for(let i=0;i<300;i++){bg.gain.setValueAtTime(0.6,t);bg.gain.exponentialRampToValueAtTime(0.001,t+0.32);t+=0.68;}
+      const bsz=ctx.sampleRate*3;const nb=ctx.createBuffer(1,bsz,ctx.sampleRate);const nd=nb.getChannelData(0);for(let i=0;i<bsz;i++)nd[i]=Math.random()*2-1;const ns=ctx.createBufferSource();ns.buffer=nb;ns.loop=true;const nf=ctx.createBiquadFilter();nf.type='bandpass';nf.frequency.setValueAtTime(200,ctx.currentTime);nf.frequency.linearRampToValueAtTime(1300,ctx.currentTime+35);const ng=ctx.createGain();ng.gain.value=0.05;ns.connect(nf);nf.connect(ng);ng.connect(dry);ns.start();mnodes.push(ns);
+      scheduleMelody(ctx,tens,dry,rev,mnodes,2.0);
+    } else if (bgType==='choir'){
+      // coro spettrale: accordo minore detunato con swell lento (etereo, angosciante)
+      [220,261.6,329.6,164.8].forEach((f,i)=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=f;const o2=ctx.createOscillator();o2.type='triangle';o2.frequency.value=f*1.007;const g=ctx.createGain();g.gain.value=0.02;const lfo=ctx.createOscillator();lfo.frequency.value=0.05+i*0.012;const lg=ctx.createGain();lg.gain.value=0.07;lfo.connect(lg);lg.connect(g.gain);o.connect(g);o2.connect(g);g.connect(dry);g.connect(rev);o.start();o2.start();lfo.start();mnodes.push(o,o2,lfo);});
+      scheduleMelody(ctx,ghost,dry,rev,mnodes,5.5);
+    } else if (bgType==='musicbox'){
+      // carillon inquietante: melodia acuta minore + drone basso (perfetto per bambini/bambole)
+      const bo=ctx.createOscillator();bo.type='sine';bo.frequency.value=55;const bgn=ctx.createGain();bgn.gain.value=0.18;bo.connect(bgn);bgn.connect(dry);bgn.connect(rev);bo.start();mnodes.push(bo);
+      const box=[523.3,587.3,622.3,698.5,784,830.6,932.3,1046.5];
+      let t=ctx.currentTime+0.5;for(let i=0;i<70;i++){const o=ctx.createOscillator();o.type='triangle';o.frequency.value=box[Math.floor(Math.random()*box.length)];const g=ctx.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.12,t+0.02);g.gain.exponentialRampToValueAtTime(0.001,t+0.9);o.connect(g);g.connect(dry);g.connect(rev);o.start(t);o.stop(t+1.0);mnodes.push(o);t+=0.5+Math.random()*0.28;}
+    } else {
+      [55,110,164.8].forEach((f,i)=>{const o=ctx.createOscillator();o.type=i===0?'sine':'triangle';o.frequency.value=f;const g=ctx.createGain();g.gain.value=i===0?0.3:0.1;o.connect(g);g.connect(dry);g.connect(rev);o.start();mnodes.push(o);});
+      scheduleMelody(ctx,laMin,dry,rev,mnodes,3.2);
     }
     return mnodes;
   }
@@ -1345,7 +1369,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     inglese:  ['en-US-GuyNeural','en-US-AriaNeural','en-US-ChristopherNeural','en-US-JennyNeural'],
     spagnolo: ['es-ES-AlvaroNeural','es-ES-ElviraNeural','es-MX-JorgeNeural'],
   };
-  const MUSIC_POOL = ['drone','tension','dark','heartbeat'];
+  const MUSIC_POOL = ['drone','tension','dark','heartbeat','pulse','choir','musicbox'];
   const rnd = a => a[Math.floor(Math.random()*a.length)];
   function randomVoice(lang){ return rnd(VOICE_POOL[lang] || VOICE_POOL.italiano); }
 
