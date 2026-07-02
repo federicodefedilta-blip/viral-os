@@ -541,7 +541,8 @@ def build_ranking_ass(timeline, path):
     styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleB = "Style: B,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
     ev = [_ass_header_i(styleN + "\n" + styleB)]
-    for item in timeline:
+    last = len(timeline) - 1
+    for idx, item in enumerate(timeline):
         base = item["start"]; dur = item["dur"]
         _karaoke_dialogue(ev, base, dur, item.get("words", []))
         rank = item.get("rank")
@@ -550,6 +551,11 @@ def build_ranking_ass(timeline, path):
             # numero gigante al centro (rosso sangue) con pop iniziale
             ev.append("Dialogue: 2,%s,%s,B,,0,0,0,,{\\pos(540,960)\\fs320\\c&H2020FF&\\bord14\\shad6\\fad(180,0)}#%s\n"
                       % (st, en, rank))
+        # CTA engagement sull'ultimo segmento (outro): spinge commenti e like
+        if idx == last:
+            st = ms_to_ass(base); en = ms_to_ass(base + dur)
+            ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs64\\c&H00F0FF&\\bord7\\shad3}COMMENTA E METTI LIKE\n"
+                      % (st, en))
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(ev))
 
@@ -578,6 +584,51 @@ def wiki_image(subject, lang):
     return try_host(wl + ".wikipedia.org") or try_host("en.wikipedia.org")
 
 
+def _wiki_json(url):
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ViralOS"})
+        return json.load(urllib.request.urlopen(req, timeout=15))
+    except Exception:
+        return None
+
+
+def wiki_images(subject, lang, n=3):
+    """Restituisce fino a n foto ad alta risoluzione del soggetto (pagina + Commons)."""
+    if not subject:
+        return []
+    import urllib.parse
+    wl = "en" if lang == "inglese" else "es" if lang == "spagnolo" else "it"
+    q = urllib.parse.quote(subject)
+    urls = []
+
+    def add(u):
+        if u and u not in urls and u.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png")):
+            urls.append(u)
+
+    # 1) immagine principale della pagina (alta risoluzione)
+    for host in (wl + ".wikipedia.org", "en.wikipedia.org"):
+        j = _wiki_json(f"https://{host}/w/api.php?action=query&generator=search&gsrsearch={q}"
+                       f"&gsrlimit=1&prop=pageimages&piprop=original|thumbnail&pithumbsize=1800&format=json&origin=*")
+        if j:
+            for pg in j.get("query", {}).get("pages", {}).values():
+                orig = pg.get("original", {}).get("source")
+                th = pg.get("thumbnail", {}).get("source")
+                add(orig or th)
+        if urls:
+            break
+
+    # 2) altre immagini da Wikimedia Commons (per dinamicità)
+    if len(urls) < n:
+        j = _wiki_json(f"https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch={q}"
+                       f"&gsrnamespace=6&gsrlimit={n+3}&prop=imageinfo&iiprop=url&iiurlwidth=1600&format=json&origin=*")
+        if j:
+            for pg in j.get("query", {}).get("pages", {}).values():
+                ii = pg.get("imageinfo")
+                if ii:
+                    add(ii[0].get("thumburl") or ii[0].get("url"))
+    return urls[:n]
+
+
 def render_ranking_job(data, work):
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
@@ -594,35 +645,56 @@ def render_ranking_job(data, work):
     if not items:
         raise RuntimeError("nessun elemento in classifica")
 
-    # una sorgente per elemento: PRIMA la foto Wikipedia del soggetto, poi la clip di fallback
-    sources = []  # (path, kind)
+    import re as _re
+    def clean_narr(s):
+        # la voce NON deve leggere "#" (cancelletto): lo rimuoviamo dal testo narrato
+        return _re.sub(r"#\s*", "", (s or "")).replace("№", "").strip()
+
+    # clip atmosferica per intro/outro (così l'inizio NON spoilera il #5)
+    intro_src = None
+    ic = data.get("intro_clip")
+    if ic:
+        cp = os.path.join(work, "introclip.mp4")
+        try:
+            download_file(ic, cp)
+            if os.path.getsize(cp) > 0:
+                intro_src = (cp, "video")
+        except Exception:
+            pass
+
+    # per ogni elemento: fino a 3 foto del soggetto (dinamiche), altrimenti clip di fallback
+    item_srcs = []  # lista per elemento di lista di (path, kind)
     for i, it in enumerate(items):
-        got = False
-        img = wiki_image(it.get("titolo"), lang)
-        if img:
-            cp = os.path.join(work, f"m{i}.jpg")
+        srcs = []
+        for j, img in enumerate(wiki_images(it.get("titolo"), lang, 3)):
+            cp = os.path.join(work, f"m{i}_{j}.jpg")
             try:
                 download_file(img, cp)
                 if os.path.getsize(cp) > 0:
-                    sources.append((cp, "image")); got = True
-                    print(f"     foto Wikipedia: {it.get('titolo')}")
-            except Exception as e:
-                print(f"     wiki img ko ({it.get('titolo')}): {e}")
-        if not got:
+                    srcs.append((cp, "image"))
+            except Exception:
+                pass
+        if srcs:
+            print(f"     {len(srcs)} foto Wikipedia: {it.get('titolo')}")
+        if not srcs:
             url = fallback[i] if i < len(fallback) else (fallback[-1] if fallback else None)
             if url:
                 cp = os.path.join(work, f"m{i}.mp4")
                 try:
                     download_file(url, cp)
                     if os.path.getsize(cp) > 0:
-                        sources.append((cp, "video")); got = True
-                except Exception as e:
-                    print(f"     clip fallback ko: {e}")
-        if not got and sources:
-            sources.append(sources[-1])  # non lasciare buchi
-    if not sources:
+                        srcs.append((cp, "video"))
+                except Exception:
+                    pass
+        if not srcs and item_srcs:
+            srcs = item_srcs[-1]
+        item_srcs.append(srcs)
+    if not any(item_srcs):
         raise RuntimeError("nessun media disponibile")
-    clip_paths = sources  # lista di (path, kind)
+    if not intro_src:
+        for s in item_srcs:
+            if s:
+                intro_src = s[0]; break
 
     music_path = None
     if data.get("music_wav_b64"):
@@ -632,26 +704,25 @@ def render_ranking_job(data, work):
 
     timeline, audio_files = [], []
     t = 0
-    nc = len(clip_paths)
     _r, _p = PROSODY["classifica"]
 
-    def add_narr(text, rank=None, clip_idx=0):
+    def add_narr(text, rank=None, srclist=None):
         nonlocal t
-        text = (text or "").strip()
+        text = clean_narr(text)
         if not text:
             return
         p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
         audio_files.append(p)
         timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words,
-                         "rank": rank, "clip_idx": min(clip_idx, nc - 1)})
+                         "rank": rank, "srclist": [s for s in (srclist or [intro_src]) if s]})
         t += dur
 
-    add_narr(intro, clip_idx=0)
+    add_narr(intro, srclist=[intro_src])
     for pos, it in enumerate(items):
         rank = it.get("rank")
         text = f"Numero {rank}. {it.get('titolo','')}. {it.get('descrizione','')}"
-        add_narr(text, rank=rank, clip_idx=pos)
-    add_narr(outro, clip_idx=nc - 1)
+        add_narr(text, rank=rank, srclist=item_srcs[pos] or [intro_src])
+    add_narr(outro, srclist=[intro_src])
     total_ms = t + 600
 
     alist = os.path.join(work, "alist.txt")
@@ -661,17 +732,19 @@ def render_ranking_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
                     "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
 
-    # base video: una foto/clip a tema per ogni segmento (allineata all'elemento)
+    # base video: per ogni segmento, alterna le foto del soggetto (dinamico)
     seg_files = []
     for si, item in enumerate(timeline):
-        cp, kind = clip_paths[item.get("clip_idx", 0)]
-        dur = max(0.4, item["dur"] / 1000.0)
-        outc = os.path.join(work, f"rseg{si}.mp4")
-        loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
-        run_ff(ffmpeg, loop_args + ["-i", cp, "-t", f"{dur:.3f}",
-                        "-an", "-vf", CLIP_VF, "-c:v", "libx264", "-preset", "veryfast",
-                        "-pix_fmt", "yuv420p", outc])
-        seg_files.append(outc)
+        srcs = item.get("srclist") or [intro_src]
+        srcs = [s for s in srcs if s] or [intro_src]
+        sub = max(0.4, (item["dur"] / 1000.0) / len(srcs))
+        for k, (cp, kind) in enumerate(srcs):
+            outc = os.path.join(work, f"rseg{si}_{k}.mp4")
+            loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
+            run_ff(ffmpeg, loop_args + ["-i", cp, "-t", f"{sub:.3f}",
+                            "-an", "-vf", CLIP_VF, "-c:v", "libx264", "-preset", "veryfast",
+                            "-pix_fmt", "yuv420p", outc])
+            seg_files.append(outc)
     with open(os.path.join(work, "rlist.txt"), "w", encoding="utf-8") as f:
         for sf in seg_files:
             f.write(f"file '{os.path.basename(sf)}'\n")
