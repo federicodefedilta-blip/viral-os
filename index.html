@@ -401,7 +401,7 @@
       <div class="card-title">🎬 Montaggio automatico</div>
       <div class="step-card">
         <div class="step-card-title">⚙️ Assembla il video finale <span class="badge-pending" id="assembleBadge">In attesa</span></div>
-        <div class="step-card-desc">Monta il video finale (MP4) sul server locale con ffmpeg: clip a tema per frase + musica + voce neurale + sottotitoli sincronizzati. Deterministico — puoi cambiare scheda liberamente. Richiede <code>py voice_server.py</code> attivo.</div>
+        <div class="step-card-desc">Monta il video finale (MP4) sul server locale con ffmpeg: clip a tema per frase + musica + voce neurale + sottotitoli sincronizzati. Deterministico — puoi cambiare scheda liberamente. Richiede <code>py local_server.py</code> attivo.</div>
         <div style="margin-top:10px">
           <label class="input-label" style="font-size:0.75em">🎙️ Voce</label>
           <select class="input-field" id="ttsVoice">
@@ -1200,7 +1200,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         if (btn) btn.disabled = false;
       }
     } catch {
-      el.innerHTML = '⚠️ Server locale non attivo. Avvia <code>py voice_server.py</code>.';
+      el.innerHTML = '⚠️ Server locale non attivo. Avvia <code>py local_server.py</code>.';
       if (btn) btn.disabled = true;
     }
   }
@@ -1413,7 +1413,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     btn.disabled = true; btn.textContent = '⏳ In corso...';
     // verifiche
     try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
-    catch { add('⚠️ Server locale non attivo (py voice_server.py).'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+    catch { add('⚠️ Server locale non attivo (py local_server.py).'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
     try { const s = await (await fetch('http://127.0.0.1:5555/youtube_status')).json(); if (!s.authorized) { add('⚠️ YouTube non collegato. Vai allo step 6 e collega prima.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; } add('✅ YouTube: ' + (s.channel||'collegato')); }
     catch { add('⚠️ Impossibile verificare YouTube.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
     if (!k.pexels) { add('⚠️ Chiave Pexels mancante.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
@@ -1524,7 +1524,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const el = statusId ? document.getElementById(statusId) : null;
     const setMsg = (h) => { if (el) el.innerHTML = h; };
     try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
-    catch { setMsg('⚠️ Server locale non attivo. Avvia <code>AVVIA_SERVER.bat</code>.'); return; }
+    catch { setMsg('⚠️ Server locale non attivo. Avvia <code>START_LOCAL_SERVER.bat</code>.'); return; }
     setMsg('🔄 Apertura consenso Google nel browser... autorizza e torna qui.');
     try {
       const r = await fetch('http://127.0.0.1:5555/youtube_auth');
@@ -1730,7 +1730,7 @@ Rispondi SOLO con JSON valido:
     log.innerHTML=''; prev.innerHTML='';
     btn.disabled=true; btn.textContent='⏳ In corso...';
     try { const p = await fetch('http://127.0.0.1:5555/ping'); if(!p.ok) throw 0; }
-    catch { add('⚠️ Server locale non attivo (AVVIA_SERVER.bat).'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
+    catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
     const k = getKeys();
     if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
     if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
@@ -1855,7 +1855,7 @@ Rispondi SOLO con JSON valido:
     log.innerHTML=''; prev.innerHTML='';
     btn.disabled=true; btn.textContent='⏳ In corso...';
     try { const p = await fetch('http://127.0.0.1:5555/ping'); if(!p.ok) throw 0; }
-    catch { add('⚠️ Server locale non attivo (AVVIA_SERVER.bat).'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
+    catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
     const k = getKeys();
     if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
     if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
@@ -1910,7 +1910,7 @@ Rispondi SOLO con JSON valido:
     if (!gData) { addLog('Genera prima lo script.'); btn.disabled=false; return; }
 
     try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
-    catch { addLog('⚠️ Server locale non attivo. Avvia "py voice_server.py" e riprova.'); badge.textContent='Errore'; badge.className='badge-pending'; btn.disabled=false; return; }
+    catch { addLog('⚠️ Server locale non attivo. Avvia "py local_server.py" e riprova.'); badge.textContent='Errore'; badge.className='badge-pending'; btn.disabled=false; return; }
 
     const targetSec = parseInt(document.getElementById('dur').value) || 61;
     const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
