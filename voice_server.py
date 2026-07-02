@@ -554,39 +554,75 @@ def build_ranking_ass(timeline, path):
         f.write("".join(ev))
 
 
+def wiki_image(subject, lang):
+    """Cerca su Wikipedia la foto del soggetto (lato server, rete affidabile)."""
+    if not subject:
+        return None
+    import urllib.parse
+    wl = "en" if lang == "inglese" else "es" if lang == "spagnolo" else "it"
+    def try_host(host):
+        u = (f"https://{host}/w/api.php?action=query&generator=search&"
+             f"gsrsearch={urllib.parse.quote(subject)}&gsrlimit=1&prop=pageimages&"
+             f"piprop=thumbnail&pithumbsize=1280&format=json&origin=*")
+        try:
+            req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 ViralOS"})
+            j = json.load(urllib.request.urlopen(req, timeout=15))
+            pages = j.get("query", {}).get("pages", {})
+            for k in pages:
+                th = pages[k].get("thumbnail")
+                if th and th.get("source"):
+                    return th["source"]
+        except Exception:
+            return None
+        return None
+    return try_host(wl + ".wikipedia.org") or try_host("en.wikipedia.org")
+
+
 def render_ranking_job(data, work):
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
         raise RuntimeError("ffmpeg non trovato")
     voice = data.get("voice") or DEFAULT_VOICE
-    # media = lista di {url, kind:'image'|'video'}; compat: clips = lista url (video)
-    media = data.get("media")
-    if not media:
-        media = [{"url": u, "kind": "video"} for u in (data.get("clips") or [])]
     intro = (data.get("intro") or "").strip()
     items = data.get("items") or []
     outro = (data.get("outro") or "").strip()
+    lang = data.get("lang") or "italiano"
+    # clip di fallback (una per elemento, stesso ordine) — usate se manca la foto Wikipedia
+    fallback = data.get("fallback") or data.get("clips") or []
     music_vol = float(data.get("music_vol", 1.0))
     voice_vol = float(data.get("voice_vol", 1.8))
     if not items:
         raise RuntimeError("nessun elemento in classifica")
 
-    # scarica i media (immagini o video), conservando il tipo
+    # una sorgente per elemento: PRIMA la foto Wikipedia del soggetto, poi la clip di fallback
     sources = []  # (path, kind)
-    for idx, m in enumerate(media):
-        url = m.get("url") if isinstance(m, dict) else m
-        kind = (m.get("kind") if isinstance(m, dict) else "video") or "video"
-        ext = "jpg" if kind == "image" else "mp4"
-        cp = os.path.join(work, f"m{idx}.{ext}")
-        try:
-            download_file(url, cp)
-            if os.path.getsize(cp) > 0:
-                sources.append((cp, kind))
-        except Exception as e:
-            print(f"     media {idx} ko: {e}")
+    for i, it in enumerate(items):
+        got = False
+        img = wiki_image(it.get("titolo"), lang)
+        if img:
+            cp = os.path.join(work, f"m{i}.jpg")
+            try:
+                download_file(img, cp)
+                if os.path.getsize(cp) > 0:
+                    sources.append((cp, "image")); got = True
+                    print(f"     foto Wikipedia: {it.get('titolo')}")
+            except Exception as e:
+                print(f"     wiki img ko ({it.get('titolo')}): {e}")
+        if not got:
+            url = fallback[i] if i < len(fallback) else (fallback[-1] if fallback else None)
+            if url:
+                cp = os.path.join(work, f"m{i}.mp4")
+                try:
+                    download_file(url, cp)
+                    if os.path.getsize(cp) > 0:
+                        sources.append((cp, "video")); got = True
+                except Exception as e:
+                    print(f"     clip fallback ko: {e}")
+        if not got and sources:
+            sources.append(sources[-1])  # non lasciare buchi
     if not sources:
-        raise RuntimeError("nessun media scaricabile")
-    clip_paths = sources  # ora è lista di (path, kind)
+        raise RuntimeError("nessun media disponibile")
+    clip_paths = sources  # lista di (path, kind)
 
     music_path = None
     if data.get("music_wav_b64"):
