@@ -7,7 +7,7 @@ echo   Per fermare: chiudi la finestra.
 echo ============================================
 echo.
 cd /d "%~dp0"
-py voice_server.py
+py local_server.py
 echo.
 echo Il server si e' fermato. Premi un tasto per chiudere.
 pause >nul

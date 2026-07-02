@@ -5,7 +5,7 @@ Viral OS - Server locale (voce + render video)
 - ffmpeg: monta il video finale in modo deterministico (no scatti, no browser)
 
 Avvio:
-  py voice_server.py
+  py local_server.py
 
 Lascia questa finestra aperta mentre usi ViralOS.
 

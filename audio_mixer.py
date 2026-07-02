@@ -4,11 +4,11 @@ Viral OS Voice Automation - edge-tts edition
 Genera voce neurale italiana (Microsoft Edge TTS) e la mixa con video + musica.
 
 Uso:
-  py viral_voice.py <input.webm> "<script>" <output.mp4> [voce]
+  py audio_mixer.py <input.webm> "<script>" <output.mp4> [voce]
 
 Esempio:
-  py viral_voice.py video.webm "Quella notte sentii dei passi..." finale.mp4
-  py viral_voice.py video.webm "..." finale.mp4 it-IT-IsabellaNeural
+  py audio_mixer.py video.webm "Quella notte sentii dei passi..." finale.mp4
+  py audio_mixer.py video.webm "..." finale.mp4 it-IT-IsabellaNeural
 
 Voci italiane disponibili:
   it-IT-DiegoNeural      (maschile, default - ottimo per horror)

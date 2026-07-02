@@ -31,12 +31,12 @@ winget install Gyan.FFmpeg
 Apri PowerShell nella cartella `viral-os` e lancia:
 
 ```powershell
-py viral_voice.py "percorso\al\video.webm" "il testo dello script qui" finale.mp4
+py audio_mixer.py "percorso\al\video.webm" "il testo dello script qui" finale.mp4
 ```
 
 **Esempio reale:**
 ```powershell
-py viral_voice.py "$env:USERPROFILE\Downloads\viral-os-123.webm" "Quella notte sentii dei passi nella soffitta. Ma in casa ero solo. Mi alzai, e quello che vidi mi gela ancora il sangue." finale.mp4
+py audio_mixer.py "$env:USERPROFILE\Downloads\viral-os-123.webm" "Quella notte sentii dei passi nella soffitta. Ma in casa ero solo. Mi alzai, e quello che vidi mi gela ancora il sangue." finale.mp4
 ```
 
 ### 3. Carica `finale.mp4` su YouTube / TikTok / Instagram 🚀
@@ -48,7 +48,7 @@ py viral_voice.py "$env:USERPROFILE\Downloads\viral-os-123.webm" "Quella notte s
 Aggiungi il nome della voce come **quarto parametro**:
 
 ```powershell
-py viral_voice.py video.webm "testo" finale.mp4 it-IT-IsabellaNeural
+py audio_mixer.py video.webm "testo" finale.mp4 it-IT-IsabellaNeural
 ```
 
 | Voce | Tipo | Note |
@@ -76,7 +76,7 @@ Voce + musica + sottotitoli (già nel video) = video completo pronto da pubblica
 
 **Errore SSL / certificato** → verifica che `pip-system-certs` sia installato: `py -m pip show pip-system-certs`
 
-**La voce copre troppo la musica (o viceversa)** → modifica i valori `volume=1.6` (voce) e `volume=0.25` (musica) in `viral_voice.py`, riga ~120.
+**La voce copre troppo la musica (o viceversa)** → modifica i valori `volume=1.6` (voce) e `volume=0.25` (musica) in `audio_mixer.py`, riga ~120.
 
 ---
 
