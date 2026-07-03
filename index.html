@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.8.1';
-  const LAST_UPDATED = '2026-07-03 11:11';
+  const CURRENT_VERSION = 'v3.8.2';
+  const LAST_UPDATED = '2026-07-03 11:27';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -196,7 +196,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.8.1</div>
+    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.8.2</div>
   </div>
   <script>document.getElementById('verInfo').textContent = CURRENT_VERSION + ' · ' + LAST_UPDATED;</script>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
@@ -1367,7 +1367,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const totalMs = Math.max(targetSec*1000, voiceDurMs + 1200);
     let musicB64 = null;
     if (bgType !== 'none') { try { musicB64 = await renderMusicWavBase64(bgType, bgVol, totalMs/1000); } catch {} }
-    const rr = await fetch('http://127.0.0.1:5555/render', {
+    const rr = await fetchRetry('http://127.0.0.1:5555/render', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ voice_mp3_b64: voiceB64, timings, music_wav_b64: musicB64, clips, total_ms: totalMs, voice_vol: 1.8, music_vol: bgVol,
         lang: opts.lang || 'italiano', soggetto_reale: data.soggetto_reale || '' })
@@ -1377,6 +1377,16 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   }
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // fetch con retry per intoppi di rete transitori verso il server locale (es. "Failed to fetch")
+  async function fetchRetry(url, opts, tries = 3, delayMs = 5000) {
+    let lastErr;
+    for (let i = 0; i < tries; i++) {
+      try { return await fetch(url, opts); }
+      catch (e) { lastErr = e; if (i < tries - 1) await sleep(delayMs); }
+    }
+    throw lastErr;
+  }
 
   function voiceForLang(lang) {
     const v = document.getElementById('ttsVoice') ? document.getElementById('ttsVoice').value : 'it-IT-DiegoNeural';
@@ -1482,7 +1492,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           const estSec = 12 + (data.items||[]).length*9 + 8;
           let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
           add(`${dayLabel} monto classifica (foto Wikipedia dinamiche)...`);
-          const rr = await fetch('http://127.0.0.1:5555/render_ranking', {
+          const rr = await fetchRetry('http://127.0.0.1:5555/render_ranking', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ voice: vVoice, fallback: rClips, intro_clip: (rIntro?rIntro.url:rClips[0]), lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
               intro: data.intro, items: data.items, outro: data.outro }) });
@@ -1503,7 +1513,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           const estSec = 20 + (data.rounds||[]).length*(choiceSec+6) + 8;
           let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
           add(`${dayLabel} monto interattivo (${clips.length} clip · ${vVoice.split('-').pop()})...`);
-          const rr = await fetch('http://127.0.0.1:5555/render_interactive', {
+          const rr = await fetchRetry('http://127.0.0.1:5555/render_interactive', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ voice: vVoice, clips, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
               choice_ms: choiceSec*1000, intro: data.intro, rounds: data.rounds, finale: data.finale }) });
@@ -1529,7 +1539,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           const wEstSec = 15 + (data.sospetti||[]).length*8 + 12;
           let wMusicB64 = null; try { wMusicB64 = await renderMusicWavBase64(vMusic, bgVol, wEstSec); } catch {}
           add(`${dayLabel} monto giallo (${(data.sospetti||[]).length} sospetti)...`);
-          const wr = await fetch('http://127.0.0.1:5555/render_whodunit', {
+          const wr = await fetchRetry('http://127.0.0.1:5555/render_whodunit', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ voice: vVoice, fallback: wFallback, atmosphere_clip: wAtmo?wAtmo.url:wFallback.find(Boolean), music_wav_b64: wMusicB64, music_vol: bgVol, voice_vol: 1.8,
               scenario: data.scenario, sospetti: data.sospetti, cta: data.cta, colpevole: data.colpevole, motivazione: data.motivazione, chiusura: data.chiusura,
