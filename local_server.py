@@ -65,9 +65,9 @@ PROSODY = {
     "classica":    ("-9%", "-13Hz"),   # lenta, cupa, sospesa (massima tensione)
     "interattivo": ("-1%", "-6Hz"),    # incalzante e presente (è un gioco)
     "classifica":  ("-4%", "-8Hz"),    # ritmata, in crescendo
-    "indovina":    ("-4%", "-8Hz"),    # ritmata come la classifica, indizio dopo indizio
+    "whodunit":    ("-4%", "-8Hz"),    # ritmata come la classifica, sospetto dopo sospetto
 }
-CTA_PAUSE_MS = 4000  # pausa dopo la CTA "indovina" prima del reveal, per dare tempo di commentare
+CTA_PAUSE_MS = 4000  # pausa dopo la CTA prima del reveal, per dare tempo di commentare
 # default (usato dal flusso classico via /tts_json)
 TTS_RATE, TTS_PITCH = PROSODY["classica"]
 
@@ -805,9 +805,9 @@ def render_ranking_job(data, work):
         return f.read()
 
 
-# ----------------------------- RENDER INDOVINA PRIMA DEL REVEAL -----------------------------
+# ----------------------------- RENDER CHI E' STATO (giallo inventato) -----------------------------
 
-def build_guess_ass(timeline, cta_idx, path):
+def build_whodunit_ass(timeline, cta_idx, path):
     styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleB = "Style: B,Arial Black,54,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
     ev = [_ass_header_i(styleN + "\n" + styleB)]
@@ -816,57 +816,57 @@ def build_guess_ass(timeline, cta_idx, path):
         _karaoke_dialogue(ev, base, dur, item.get("words", []))
         if idx == cta_idx:
             st = ms_to_ass(base); en = ms_to_ass(base + dur)
-            ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs60\\c&H00F0FF&\\bord7\\shad3}🤔 INDOVINA PRIMA DI CONTINUARE\n"
+            ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs56\\c&H00F0FF&\\bord7\\shad3}👍 METTI LIKE E COMMENTA CHI E' STATO\n"
                       % (st, en))
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(ev))
 
 
-def render_guess_job(data, work):
+def render_whodunit_job(data, work):
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
         raise RuntimeError("ffmpeg non trovato")
     voice = data.get("voice") or DEFAULT_VOICE
-    hook = (data.get("hook") or "").strip()
-    indizi = data.get("indizi") or []
-    cta = (data.get("cta_indovina") or "").strip()
-    reveal = (data.get("reveal") or "").strip()
+    scenario = (data.get("scenario") or "").strip()
+    sospetti = data.get("sospetti") or []
+    cta = (data.get("cta") or "").strip()
+    colpevole = (data.get("colpevole") or "").strip()
+    motivazione = (data.get("motivazione") or "").strip()
     chiusura = (data.get("chiusura") or "").strip()
-    lang = data.get("lang") or "italiano"
-    soggetto_reale = (data.get("soggetto_reale") or "").strip()
-    fallback = data.get("fallback")
-    atmosphere = data.get("atmosphere_clip") or fallback
+    fallback = data.get("fallback") or []  # una clip per sospetto, stesso ordine
+    atmosphere = data.get("atmosphere_clip") or (fallback[0] if fallback else None)
     music_vol = float(data.get("music_vol", 1.0))
     voice_vol = float(data.get("voice_vol", 1.8))
-    if not indizi:
-        raise RuntimeError("nessun indizio")
+    if not sospetti:
+        raise RuntimeError("nessun sospetto")
 
-    # foto reali del soggetto (una sola ricerca, valide per tutta la timeline)
-    srcs = []
-    if soggetto_reale:
-        for j, img in enumerate(wiki_images(soggetto_reale, lang, 3)):
-            cp = os.path.join(work, f"g{j}.jpg")
-            try:
-                download_file(img, cp)
-                if os.path.getsize(cp) > 0:
-                    srcs.append((cp, "image"))
-            except Exception:
-                pass
-        if srcs:
-            print(f"     {len(srcs)} foto Wikipedia: {soggetto_reale}")
-    if not srcs:
-        for url, name in ((atmosphere, "atmo.mp4"), (fallback, "fb.mp4")):
-            if not url:
-                continue
-            cp = os.path.join(work, name)
+    # clip atmosferica per intro/CTA/reveal/chiusura (storia inventata: solo stock, niente Wikipedia)
+    atmo_src = None
+    if atmosphere:
+        cp = os.path.join(work, "atmo.mp4")
+        try:
+            download_file(atmosphere, cp)
+            if os.path.getsize(cp) > 0:
+                atmo_src = (cp, "video")
+        except Exception:
+            pass
+
+    # una clip diversa per sospetto, per distinguerli visivamente
+    suspect_srcs = []
+    for i, url in enumerate(fallback):
+        src = None
+        if url:
+            cp = os.path.join(work, f"s{i}.mp4")
             try:
                 download_file(url, cp)
                 if os.path.getsize(cp) > 0:
-                    srcs.append((cp, "video"))
-                    break
+                    src = (cp, "video")
             except Exception:
                 pass
-    if not srcs:
+        suspect_srcs.append(src)
+    if not atmo_src:
+        atmo_src = next((s for s in suspect_srcs if s), None)
+    if not atmo_src:
         raise RuntimeError("nessun media disponibile")
 
     music_path = None
@@ -877,9 +877,9 @@ def render_guess_job(data, work):
 
     timeline, audio_files = [], []
     t = 0
-    _r, _p = PROSODY["indovina"]
+    _r, _p = PROSODY["whodunit"]
 
-    def add_narr(text):
+    def add_narr(text, src=None):
         nonlocal t
         text = (text or "").strip()
         if not text:
@@ -887,16 +887,17 @@ def render_guess_job(data, work):
         p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
         audio_files.append(p)
         idx = len(timeline)
-        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words})
+        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words, "src": src or atmo_src})
         t += dur
         return idx
 
-    add_narr(hook)
-    for it in indizi:
-        add_narr(it.get("testo", ""))
-    cta_idx = add_narr(cta)
-    add_narr(reveal)
-    add_narr(chiusura)
+    add_narr(scenario, src=atmo_src)
+    for i, s in enumerate(sospetti):
+        text = f"{s.get('nome','')}. {s.get('alibi','')} {s.get('movente','')} {s.get('indizio','')}"
+        add_narr(text, src=suspect_srcs[i] if i < len(suspect_srcs) else None)
+    cta_idx = add_narr(cta, src=atmo_src)
+    add_narr(f"Il colpevole è {colpevole}. {motivazione}", src=atmo_src)
+    add_narr(chiusura, src=atmo_src)
 
     # il budget di durata conta la pausa dopo la CTA come parte del target, non in aggiunta
     target_ms = float(data.get("target_ms") or 0)
@@ -910,26 +911,26 @@ def render_guess_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
                     "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
 
-    # base video: alterna le foto del soggetto lungo tutta la timeline; la pausa e l'eventuale
+    # base video: ogni sospetto ha la sua clip, il resto usa l'atmosferica; la pausa e l'eventuale
     # padding per raggiungere la durata target vanno entrambi sul segmento della CTA
     seg_files = []
     for si, item in enumerate(timeline):
-        cp, kind = srcs[si % len(srcs)]
+        cp, kind = item.get("src") or atmo_src
         extra_ms = (pad_ms + CTA_PAUSE_MS) if si == cta_idx else 0.0
         sub = max(0.4, (item["dur"] + extra_ms) / 1000.0)
-        outc = os.path.join(work, f"gseg{si}.mp4")
+        outc = os.path.join(work, f"wseg{si}.mp4")
         loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
         run_ff(ffmpeg, loop_args + ["-i", cp, "-t", f"{sub:.3f}",
                         "-an", "-vf", CLIP_VF, "-c:v", "libx264", "-preset", "veryfast",
                         "-pix_fmt", "yuv420p", outc])
         seg_files.append(outc)
-    with open(os.path.join(work, "glist.txt"), "w", encoding="utf-8") as f:
+    with open(os.path.join(work, "wlist.txt"), "w", encoding="utf-8") as f:
         for sf in seg_files:
             f.write(f"file '{os.path.basename(sf)}'\n")
-    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "glist.txt",
+    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "wlist.txt",
                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
            cwd=work)
-    build_guess_ass(timeline, cta_idx, os.path.join(work, "subs.ass"))
+    build_whodunit_ass(timeline, cta_idx, os.path.join(work, "subs.ass"))
 
     total_sec = total_ms / 1000.0
     out = os.path.join(work, "final.mp4")
@@ -1420,20 +1421,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
-        if parsed.path == "/render_guess":
+        if parsed.path == "/render_whodunit":
             try:
                 data = json.loads(raw.decode("utf-8"))
-                print(f"  -> RENDER INDOVINA: {len(data.get('indizi', []))} indizi, "
-                      f"soggetto: {data.get('soggetto_reale', '')[:50]}")
-                work = tempfile.mkdtemp(prefix="viralosg_")
+                print(f"  -> RENDER CHI E' STATO: {len(data.get('sospetti', []))} sospetti, "
+                      f"colpevole: {data.get('colpevole', '')[:50]}")
+                work = tempfile.mkdtemp(prefix="viralosw_")
                 try:
-                    mp4 = render_guess_job(data, work)
+                    mp4 = render_whodunit_job(data, work)
                     print(f"     OK video {len(mp4)//1024} KB")
                     self._send(200, "video/mp4", mp4)
                 finally:
                     shutil.rmtree(work, ignore_errors=True)
             except Exception as e:
-                print(f"     ERRORE indovina: {e}")
+                print(f"     ERRORE chi e' stato: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
