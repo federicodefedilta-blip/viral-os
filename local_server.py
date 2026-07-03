@@ -475,7 +475,11 @@ def render_interactive_job(data, work):
         add_audio(sting_path, sting_ms)
         add_narr(r.get("esito", ""))
     add_narr(finale)
-    total_ms = t + 600
+    target_ms = float(data.get("target_ms") or 0)
+    # se il copione e' piu' corto della durata scelta, allunga il video: build_base_even
+    # distribuisce le clip su tutto total_ms, quindi basta passargli il target
+    pad_ms = max(0.0, target_ms - t)
+    total_ms = t + pad_ms + 600
 
     # concat audio (mp3 mono 24k) -> aac
     alist = os.path.join(work, "alist.txt")

@@ -1662,8 +1662,12 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   }
 
   // --- Video interattivo "Sopravvivi o Muori" ---
-  async function generateInteractiveData(lang, dur, rounds) {
+  async function generateInteractiveData(lang, dur, rounds, choiceSec) {
     const k = getKeys();
+    const targetMs = (parseInt(dur)||61) * 1000;
+    const fixedMsPerRound = (choiceSec||3) * 1000 + 1300; // finestra scelta + stinger di rivelazione
+    const narrationBudgetMs = Math.max(8000, targetMs - fixedMsPerRound * rounds);
+    const narrationWords = Math.round(narrationBudgetMs / 1000 * 2.6);
     const sgPool = ['casa infestata','bosco di notte','ospedale psichiatrico abbandonato','metropolitana deserta di notte','nave da crociera abbandonata','scuola abbandonata','baita isolata in montagna','miniera abbandonata','parco divertimenti chiuso di notte','cimitero antico','bunker sotterraneo','faro isolato su una scogliera','aereo precipitato nella giungla','centro commerciale abbandonato di notte'];
     const threatPool = ['una presenza invisibile che sussurra il tuo nome','un culto che ti dà la caccia','una creatura che imita le voci delle persone che ami','un fantasma legato a un omicidio mai risolto','qualcosa che si muove solo quando chiudi gli occhi','un branco di creature che cacciano nel buio','un\'entità che si nutre della tua paura','uno sconosciuto identico a te che ripete ogni tua mossa'];
     const goalPool = ['raggiungere l\'uscita prima dell\'alba','trovare tuo fratello scomparso','arrivare all\'auto prima che ti trovi','resistere fino all\'arrivo dei soccorsi','trovare la chiave per scappare','nascondere la prova che ti scagiona'];
@@ -1693,6 +1697,7 @@ REGOLE FONDAMENTALI:
 - Alterna quale è giusta (a volte 'a', a volte 'b').
 - Tensione che sale ad ogni bivio (la minaccia si fa più vicina/più scoperta), finale con twist agghiacciante in 1-2 frasi legato all'obiettivo e alla minaccia.
 - Frasi corte, concrete, sensoriali. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave (voce più drammatica).
+- BUDGET DI DURATA: il testo narrato TOTALE (intro + tutte le "situazione" + tutti gli "esito" + finale — NON le finestre di scelta, quelle sono gestite a parte) deve stare in circa ${narrationWords} parole complessive (una voce legge ~2.6 parole/sec), per rispettare la durata target di ${Math.round(targetMs/1000)}s con ${rounds} bivi. Meglio restare leggermente sotto il budget che sforarlo: se sfori il video dura troppo e la % di visualizzazione crolla.
 - VARIETÀ LESSICALE: non ripetere mai lo stesso verbo/azione in più punti della storia. Evita i soliti verbi horror abusati ("senti", "vedi", "scappa", "urla", "trema") come unica scelta — alternali con verbi più vividi e diversi tra loro. Spunti (solo esempi, non vanno usati tutti né tutti letteralmente): ${verbSample.join(', ')}.
 
 Rispondi SOLO con JSON valido:
@@ -1756,20 +1761,21 @@ Rispondi SOLO con JSON valido:
     else if (lang==='spagnolo') voice = 'es-ES-AlvaroNeural';
     try {
       add('Genero la storia a bivi...');
-      const d = await generateInteractiveData(lang, dur, rounds);
+      const d = await generateInteractiveData(lang, dur, rounds, choiceSec);
       gData = d; window._videoTheme = d.video_theme;
       add(`«${d.titolo||'storia'}» — ${d.rounds.length} scelte`);
       add('Cerco le clip...');
       const clips = (await fetchClipsData({video_theme:d.video_theme, scene_queries:[]}, k.pexels)).results.map(v=>v.url);
       if (!clips.length) { add('❌ Nessuna clip trovata.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
       add(`${clips.length} clip pronte. Genero musica...`);
+      const targetSec = parseInt(dur) || 61;
       // stima durata generosa per la musica: narrazione + scelte
-      const estSec = 20 + d.rounds.length*(choiceSec+6) + 8;
+      const estSec = Math.max(targetSec, 20 + d.rounds.length*(choiceSec+6) + 8);
       let musicB64 = null;
       try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
       add('Monto il video interattivo sul server (attendi)...');
       const body = { voice, clips, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
-        choice_ms: choiceSec*1000, intro: d.intro, rounds: d.rounds, finale: d.finale };
+        choice_ms: choiceSec*1000, intro: d.intro, rounds: d.rounds, finale: d.finale, target_ms: targetSec*1000 };
       const r = await fetch('http://127.0.0.1:5555/render_interactive', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
       });
