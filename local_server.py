@@ -67,7 +67,7 @@ PROSODY = {
     "classifica":  ("-4%", "-8Hz"),    # ritmata, in crescendo
     "whodunit":    ("-4%", "-8Hz"),    # ritmata come la classifica, sospetto dopo sospetto
 }
-CTA_PAUSE_MS = 4000  # pausa dopo la CTA prima del reveal, per dare tempo di commentare
+COUNTDOWN_MS = 5000  # countdown con ticchettio dopo la CTA, prima del reveal del colpevole
 # default (usato dal flusso classico via /tts_json)
 TTS_RATE, TTS_PITCH = PROSODY["classica"]
 
@@ -306,7 +306,7 @@ def render_job(data, work):
         inputs = ["-i", "base.mp4", "-i", "voice.mp3", "-stream_loop", "-1", "-i", "music.wav"]
         fc = (vfilter +
               f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
-              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
+              "[a1][a2]amix=inputs=2:duration=longest:dropout_transition=0[a]")
     else:
         inputs = ["-i", "base.mp4", "-i", "voice.mp3"]
         fc = vfilter + f";[1:a]volume={voice_vol}[a]"
@@ -529,7 +529,7 @@ def render_interactive_job(data, work):
         # musica in LOOP per coprire tutta la durata
         inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-stream_loop", "-1", "-i", "music.wav"]
         fc = (vfilter + f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
-              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
+              "[a1][a2]amix=inputs=2:duration=longest:dropout_transition=0[a]")
     else:
         inputs = ["-i", "base.mp4", "-i", "voice.m4a"]
         fc = vfilter + f";[1:a]volume={voice_vol}[a]"
@@ -797,7 +797,7 @@ def render_ranking_job(data, work):
     if music_path:
         inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-stream_loop", "-1", "-i", "music.wav"]
         fc = (vfilter + f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
-              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
+              "[a1][a2]amix=inputs=2:duration=longest:dropout_transition=0[a]")
     else:
         inputs = ["-i", "base.mp4", "-i", "voice.m4a"]
         fc = vfilter + f";[1:a]volume={voice_vol}[a]"
@@ -818,10 +818,30 @@ def render_ranking_job(data, work):
 def build_whodunit_ass(timeline, cta_idx, path):
     styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleB = "Style: B,Arial Black,54,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
-    ev = [_ass_header_i(styleN + "\n" + styleB)]
+    styleC = "Style: C,Arial Black,220,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,10,5,5,0,0,0,1"
+    styleL = "Style: L,Arial,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,2,60,60,240,1"
+    ev = [_ass_header_i(styleN + "\n" + styleB + "\n" + styleC + "\n" + styleL)]
     for idx, item in enumerate(timeline):
         base = item["start"]; dur = item["dur"]
-        _karaoke_dialogue(ev, base, dur, item.get("words", []))
+        if item.get("kind") == "countdown":
+            n = max(1, round(dur / 1000.0))
+            for i in range(n):
+                st = ms_to_ass(base + i * 1000)
+                en = ms_to_ass(base + min((i + 1) * 1000, dur))
+                ev.append("Dialogue: 2,%s,%s,C,,0,0,0,,{\\pos(540,960)\\fad(80,80)}%d\n" % (st, en, n - i))
+            continue
+        s = item.get("suspect")
+        if s:
+            # elenco fisso (nome + alibi/movente/indizio) al posto dei sottotitoli scorrevoli,
+            # cosi' chi guarda vede tutte le informazioni del sospetto mentre se ne parla
+            st = ms_to_ass(base); en = ms_to_ass(base + dur)
+            lines = [ass_escape(s.get('nome',''))]
+            if s.get('alibi'): lines.append(f"📍 {ass_escape(s['alibi'])}")
+            if s.get('movente'): lines.append(f"💰 {ass_escape(s['movente'])}")
+            if s.get('indizio'): lines.append(f"🔍 {ass_escape(s['indizio'])}")
+            ev.append("Dialogue: 1,%s,%s,L,,0,0,0,,{\\fad(150,150)}%s\n" % (st, en, "\\N".join(lines)))
+        else:
+            _karaoke_dialogue(ev, base, dur, item.get("words", []))
         if idx == cta_idx:
             st = ms_to_ass(base); en = ms_to_ass(base + dur)
             ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs56\\c&H00F0FF&\\bord7\\shad3}👍 METTI LIKE E COMMENTA CHI E' STATO\n"
@@ -887,7 +907,7 @@ def render_whodunit_job(data, work):
     t = 0
     _r, _p = PROSODY["whodunit"]
 
-    def add_narr(text, src=None):
+    def add_narr(text, src=None, suspect=None):
         nonlocal t
         text = (text or "").strip()
         if not text:
@@ -895,8 +915,16 @@ def render_whodunit_job(data, work):
         p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
         audio_files.append(p)
         idx = len(timeline)
-        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words, "src": src or atmo_src})
+        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words, "src": src or atmo_src, "suspect": suspect})
         t += dur
+        return idx
+
+    def add_countdown(path, dur_ms, src=None):
+        nonlocal t
+        audio_files.append(path)
+        idx = len(timeline)
+        timeline.append({"kind": "countdown", "start": t, "dur": dur_ms, "words": [], "src": src or atmo_src})
+        t += dur_ms
         return idx
 
     add_narr(ensure_punct(hook), src=atmo_src)
@@ -904,15 +932,24 @@ def render_whodunit_job(data, work):
         text = " ".join(ensure_punct(x) for x in (
             s.get('nome',''), s.get('alibi',''), s.get('movente',''), s.get('indizio','')
         ) if x)
-        add_narr(text, src=suspect_srcs[i] if i < len(suspect_srcs) else None)
+        add_narr(text, src=suspect_srcs[i] if i < len(suspect_srcs) else None, suspect=s)
     cta_idx = add_narr(ensure_punct(cta), src=atmo_src)
+
+    # countdown con ticchettio prima del reveal (stesso tipo di tono usato per le scelte interattive)
+    tick_path = os.path.join(work, "tick.mp3")
+    run_ff(ffmpeg, ["-f", "lavfi", "-i",
+                    f"aevalsrc=0.28*sin(2*PI*1900*t)*exp(-28*(t-floor(t))):d={COUNTDOWN_MS/1000.0:.3f}:s=24000",
+                    "-c:a", "libmp3lame", "-q:a", "9", tick_path])
+    add_countdown(tick_path, COUNTDOWN_MS, src=atmo_src)
+
     add_narr(f"{ensure_punct('Il colpevole è ' + colpevole)} {ensure_punct(motivazione)}", src=atmo_src)
     add_narr(ensure_punct(chiusura), src=atmo_src)
 
-    # il budget di durata conta la pausa dopo la CTA come parte del target, non in aggiunta
+    # padding sull'ultimo segmento (chiusura) se il copione e' piu' corto della durata target,
+    # stesso meccanismo di classifica/interattivo — il countdown resta sempre fisso a 5s
     target_ms = float(data.get("target_ms") or 0)
-    pad_ms = max(0.0, (target_ms - CTA_PAUSE_MS) - t) if target_ms > 0 else 0.0
-    total_ms = t + pad_ms + CTA_PAUSE_MS + 600
+    pad_ms = max(0.0, target_ms - t) if target_ms > 0 else 0.0
+    total_ms = t + pad_ms + 600
 
     alist = os.path.join(work, "alist.txt")
     with open(alist, "w", encoding="utf-8") as f:
@@ -921,12 +958,13 @@ def render_whodunit_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
                     "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
 
-    # base video: ogni sospetto ha la sua clip, il resto usa l'atmosferica; la pausa e l'eventuale
-    # padding per raggiungere la durata target vanno entrambi sul segmento della CTA
+    # base video: ogni sospetto ha la sua clip, il resto usa l'atmosferica; l'eventuale padding
+    # per raggiungere la durata target va sull'ultimo segmento (chiusura), il countdown resta fisso
     seg_files = []
+    last_idx = len(timeline) - 1
     for si, item in enumerate(timeline):
         cp, kind = item.get("src") or atmo_src
-        extra_ms = (pad_ms + CTA_PAUSE_MS) if si == cta_idx else 0.0
+        extra_ms = pad_ms if si == last_idx else 0.0
         sub = max(0.4, (item["dur"] + extra_ms) / 1000.0)
         outc = os.path.join(work, f"wseg{si}.mp4")
         loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
@@ -949,7 +987,7 @@ def render_whodunit_job(data, work):
     if music_path:
         inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-stream_loop", "-1", "-i", "music.wav"]
         fc = (vfilter + f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
-              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
+              "[a1][a2]amix=inputs=2:duration=longest:dropout_transition=0[a]")
     else:
         inputs = ["-i", "base.mp4", "-i", "voice.m4a"]
         fc = vfilter + f";[1:a]volume={voice_vol}[a]"

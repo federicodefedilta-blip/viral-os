@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.8.5';
-  const LAST_UPDATED = '2026-07-03 14:32';
+  const CURRENT_VERSION = 'v3.9.0';
+  const LAST_UPDATED = '2026-07-03 15:08';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -196,7 +196,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.8.5</div>
+    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.9.0</div>
   </div>
   <script>document.getElementById('verInfo').textContent = CURRENT_VERSION + ' · ' + LAST_UPDATED;</script>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
@@ -2013,8 +2013,8 @@ Rispondi SOLO con JSON valido:
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
     const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
     const targetMs = (parseInt(dur)||61) * 1000;
-    const ctaPauseMs = 4000; // pausa fissa dopo la CTA, vedi CTA_PAUSE_MS in local_server.py
-    const narrationBudgetMs = Math.max(10000, targetMs - ctaPauseMs);
+    const countdownMs = 5000; // countdown fisso con ticchettio dopo la CTA, vedi COUNTDOWN_MS in local_server.py
+    const narrationBudgetMs = Math.max(10000, targetMs - countdownMs);
     const narrationWords = Math.round(narrationBudgetMs / 1000 * 2.6);
     const prompt = `Sei un creatore di gialli interattivi virali per ${platform}. Inventa DA ZERO un omicidio fittizio (per intrattenimento) ambientato in ${scenarioSetting}, con ${nSuspetti} sospetti, e sfida chi guarda a indovinare il colpevole PRIMA del reveal.
 
