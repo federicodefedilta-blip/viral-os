@@ -836,7 +836,6 @@ def render_whodunit_job(data, work):
         raise RuntimeError("ffmpeg non trovato")
     voice = data.get("voice") or DEFAULT_VOICE
     hook = (data.get("hook") or "").strip()
-    scenario = (data.get("scenario") or "").strip()
     sospetti = data.get("sospetti") or []
     cta = (data.get("cta") or "").strip()
     colpevole = (data.get("colpevole") or "").strip()
@@ -901,7 +900,6 @@ def render_whodunit_job(data, work):
         return idx
 
     add_narr(ensure_punct(hook), src=atmo_src)
-    add_narr(ensure_punct(scenario), src=atmo_src)
     for i, s in enumerate(sospetti):
         text = " ".join(ensure_punct(x) for x in (
             s.get('nome',''), s.get('alibi',''), s.get('movente',''), s.get('indizio','')
