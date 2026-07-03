@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.8.3';
-  const LAST_UPDATED = '2026-07-03 14:07';
+  const CURRENT_VERSION = 'v3.8.4';
+  const LAST_UPDATED = '2026-07-03 14:27';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -196,7 +196,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.8.3</div>
+    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.8.4</div>
   </div>
   <script>document.getElementById('verInfo').textContent = CURRENT_VERSION + ' · ' + LAST_UPDATED;</script>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
@@ -1542,7 +1542,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           const wr = await fetchRetry('http://127.0.0.1:5555/render_whodunit', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ voice: vVoice, fallback: wFallback, atmosphere_clip: wAtmo?wAtmo.url:wFallback.find(Boolean), music_wav_b64: wMusicB64, music_vol: bgVol, voice_vol: 1.8,
-              hook: data.hook, scenario: data.scenario, sospetti: data.sospetti, cta: data.cta, colpevole: data.colpevole, motivazione: data.motivazione, chiusura: data.chiusura,
+              hook: data.hook, sospetti: data.sospetti, cta: data.cta, colpevole: data.colpevole, motivazione: data.motivazione, chiusura: data.chiusura,
               target_ms: (parseInt(dur)||61)*1000 }) });
           if (!wr.ok) throw new Error(await wr.text());
           await wr.blob();
@@ -2024,22 +2024,22 @@ ${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
 REGOLE FONDAMENTALI:
 - E' TUTTO INVENTATO: vittima, sospetti e ambientazione sono fittizi al 100% per intrattenimento. USA SOLO NOMI DI FANTASIA, MAI persone reali o esistenti (vive o morte, famose o meno) — evita ogni ambiguità con fatti veri.
 - Causa della morte per QUESTA storia: ${causa}.
-- "hook": LA PRIMISSIMA FRASE del video, OBBLIGATORIA — una domanda diretta e accattivante nel formato "Chi è stato a [verbo del crimine coerente con la causa] [nome vittima]?" (es. "Chi ha avvelenato Marta durante la cena?", "Chi ha spinto Luca giù dalle scale?"). Deve essere la primissima cosa detta, prima di ogni altro dettaglio — non anticipare altro.
-- "scenario": SUBITO dopo l'hook, 1-2 frasi di contesto (dove, quando, l'ambientazione) — non ripetere la domanda dell'hook, aggiungi solo dettagli nuovi.
+- "vittima": nome di fantasia della vittima.
+- "verbo_crimine": azione breve coerente con la causa scelta (es. "ucciso", "avvelenato", "spinto giù dalle scale", "soffocato") — verrà usata così com'è per costruire in automatico la domanda di apertura "Riesci a indovinare chi ha [verbo_crimine] [vittima]?", quindi deve incastrarsi grammaticalmente in quella frase esatta.
 - "sospetti": esattamente ${nSuspetti} sospetti, ciascuno con "nome" (di fantasia), "alibi" (dove dice di essere/cosa dice di aver fatto, 1 frase), "movente" (perché avrebbe potuto volerlo morto, 1 frase) e "indizio" (un dettaglio sospetto in più su di lui/lei, 1 frase). Il giallo deve essere RISOLVIBILE IN MODO EQUO: UN SOLO sospetto ha un alibi che non regge o un movente+indizio che lo incastrano chiaramente una volta rivelato; gli altri hanno alibi solidi o mancano di un vero movente. Non renderlo troppo ovvio, ma nemmeno impossibile da dedurre. Varia i moventi tra i sospetti — spunti (non usarli tutti né alla lettera, solo ispirazione): ${moventeSample.join(', ')}.
 - VARIETÀ: usa nomi di fantasia SEMPRE diversi e poco scontati — evita di ripetere gli stessi nomi comuni di sempre (es. non sempre Elena/Marco/Giulia/Paolo), mescola nomi e provenienze diverse pur restando naturali nella lingua scelta.
 - "cta": 1 frase che invita esplicitamente a mettere like e scrivere nei commenti chi si pensa sia il colpevole, PRIMA di continuare (es. "Metti like e scrivi nei commenti chi pensi sia stato prima di scoprirlo...").
 - "colpevole": il nome ESATTO di uno dei sospetti elencati in "sospetti" (deve corrispondere esattamente).
 - "motivazione": spiega perché è stato lui/lei, ricollegando alibi/movente/indizio dati — deve risultare logico e coerente con quanto raccontato prima.
 - "chiusura": 1 frase che rilancia sul commento/rewatch (es. "Avevi indovinato? Dillo nei commenti.").
-- PUNTEGGIATURA OBBLIGATORIA: OGNI campo di testo (hook, scenario, alibi, movente, indizio, cta, motivazione, chiusura) è una frase compiuta e DEVE terminare con un punto, un punto interrogativo o un punto esclamativo — MAI un campo senza punteggiatura finale, altrimenti la voce non fa pause naturali e sembra tutto attaccato.
-- BUDGET DI DURATA: il testo narrato TOTALE (hook + scenario + tutti i sospetti + cta + rivelazione del colpevole con motivazione + chiusura) deve stare in circa ${narrationWords} parole complessive (una voce legge ~2.6 parole/sec), per rispettare la durata target di ${Math.round(targetMs/1000)}s. Meglio restare leggermente sotto il budget che sforarlo.
+- PUNTEGGIATURA OBBLIGATORIA: OGNI campo di testo (alibi, movente, indizio, cta, motivazione, chiusura) è una frase compiuta e DEVE terminare con un punto, un punto interrogativo o un punto esclamativo — MAI un campo senza punteggiatura finale, altrimenti la voce non fa pause naturali e sembra tutto attaccato.
+- BUDGET DI DURATA: il testo narrato TOTALE (tutti i sospetti + cta + rivelazione del colpevole con motivazione + chiusura) deve stare in circa ${narrationWords} parole complessive (una voce legge ~2.6 parole/sec), per rispettare la durata target di ${Math.round(targetMs/1000)}s. Meglio restare leggermente sotto il budget che sforarlo.
 - Frasi corte, concrete, un po' cupe/thriller ma senza dettagli splatter gratuiti. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave.
 
 Rispondi SOLO con JSON valido:
 {
-  "hook": "domanda diretta 'Chi è stato a [verbo] [vittima]?', la primissima frase del video",
-  "scenario": "1-2 frasi di contesto subito dopo l'hook, senza ripeterlo",
+  "vittima": "nome di fantasia della vittima",
+  "verbo_crimine": "breve azione, es. ucciso/avvelenato/spinto giù dalle scale, coerente con la causa",
   "sospetti": [${Array.from({length:nSuspetti},()=>'{"nome":"nome di fantasia","alibi":"1 frase","movente":"1 frase","indizio":"1 frase","visual":"breve query in inglese per una clip visiva legata a questo sospetto, es. nervous man office night"}').join(',')}],
   "cta": "invito a mettere like e commentare chi si pensa sia il colpevole",
   "colpevole": "nome ESATTO di uno dei sospetti sopra",
@@ -2073,6 +2073,8 @@ Rispondi SOLO con JSON valido:
     d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
     d.sospetti = Array.isArray(d.sospetti) ? d.sospetti : [];
     d.video_theme = d.video_theme || 'dark';
+    // hook costruito qui, non lasciato al modello: garantisce SEMPRE la frase esatta richiesta
+    d.hook = `Riesci a indovinare chi ha ${d.verbo_crimine || 'ucciso'} ${d.vittima || 'la vittima'}? Ecco i sospettati:`;
     return d;
   }
 
@@ -2113,7 +2115,7 @@ Rispondi SOLO con JSON valido:
       let musicB64=null; try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
       add('Monto il giallo (attendi)...');
       const body = { voice, fallback, atmosphere_clip, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
-        hook: d.hook, scenario: d.scenario, sospetti: d.sospetti, cta: d.cta, colpevole: d.colpevole, motivazione: d.motivazione, chiusura: d.chiusura,
+        hook: d.hook, sospetti: d.sospetti, cta: d.cta, colpevole: d.colpevole, motivazione: d.motivazione, chiusura: d.chiusura,
         target_ms: targetSec*1000 };
       const r = await fetch('http://127.0.0.1:5555/render_whodunit', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
