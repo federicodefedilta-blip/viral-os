@@ -65,7 +65,9 @@ PROSODY = {
     "classica":    ("-9%", "-13Hz"),   # lenta, cupa, sospesa (massima tensione)
     "interattivo": ("-1%", "-6Hz"),    # incalzante e presente (è un gioco)
     "classifica":  ("-4%", "-8Hz"),    # ritmata, in crescendo
+    "indovina":    ("-4%", "-8Hz"),    # ritmata come la classifica, indizio dopo indizio
 }
+CTA_PAUSE_MS = 4000  # pausa dopo la CTA "indovina" prima del reveal, per dare tempo di commentare
 # default (usato dal flusso classico via /tts_json)
 TTS_RATE, TTS_PITCH = PROSODY["classica"]
 
@@ -200,6 +202,8 @@ def render_job(data, work):
     total_ms = float(data.get("total_ms") or 0)
     voice_vol = float(data.get("voice_vol", 1.8))
     music_vol = float(data.get("music_vol", 1.0))
+    lang = data.get("lang") or "italiano"
+    soggetto_reale = (data.get("soggetto_reale") or "").strip()
 
     if not timings:
         raise RuntimeError("timings mancanti")
@@ -218,14 +222,27 @@ def render_job(data, work):
         with open(music_path, "wb") as f:
             f.write(base64.b64decode(data["music_wav_b64"]))
 
-    # 2. scarica clip
-    clip_paths = []
+    # 2. per le storie su un soggetto reale, apri con le sue foto vere da Wikipedia
+    clip_paths = []  # lista di (path, kind)
+    if soggetto_reale:
+        for j, img in enumerate(wiki_images(soggetto_reale, lang, 3)):
+            wp = os.path.join(work, f"wimg{j}.jpg")
+            try:
+                download_file(img, wp)
+                if os.path.getsize(wp) > 0:
+                    clip_paths.append((wp, "image"))
+            except Exception:
+                pass
+        if clip_paths:
+            print(f"     {len(clip_paths)} foto Wikipedia per: {soggetto_reale}")
+
+    # 3. scarica le clip stock (usate per il resto del video, o come unica fonte se fiction/niente foto)
     for idx, url in enumerate(clips):
         cp = os.path.join(work, f"clip{idx}.mp4")
         try:
             download_file(url, cp)
             if os.path.getsize(cp) > 0:
-                clip_paths.append(cp)
+                clip_paths.append((cp, "video"))
         except Exception as e:
             print(f"     clip {idx} non scaricata: {e}")
     if not clip_paths:
@@ -233,8 +250,8 @@ def render_job(data, work):
     n_clips = len(clip_paths)
     n_sent = len(timings)
 
-    # 3. raggruppa le frasi per clip (clip in ordine, allineate alle frasi)
-    segments = []  # (clip_path, dur_sec)
+    # 4. raggruppa le frasi per clip (clip in ordine, allineate alle frasi)
+    segments = []  # (clip_path, kind, dur_sec)
     i = 0
     while i < n_sent:
         k = clip_index(i, n_sent, n_clips)
@@ -244,20 +261,22 @@ def render_job(data, work):
             j += 1
         seg_end = timings[j]["t"] if j < n_sent else total_ms
         dur = max(0.4, (seg_end - seg_start) / 1000.0)
-        segments.append((clip_paths[k], dur))
+        cp, kind = clip_paths[k]
+        segments.append((cp, kind, dur))
         i = j
 
-    # 4. crea un segmento normalizzato per gruppo (con zoom lento + grana)
+    # 5. crea un segmento normalizzato per gruppo (con zoom lento + grana)
     vf = CLIP_VF
     seg_files = []
-    for si, (cp, dur) in enumerate(segments):
+    for si, (cp, kind, dur) in enumerate(segments):
         out = os.path.join(work, f"seg{si}.mp4")
-        run_ff(ffmpeg, ["-stream_loop", "-1", "-i", cp, "-t", f"{dur:.3f}",
+        loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
+        run_ff(ffmpeg, loop_args + ["-i", cp, "-t", f"{dur:.3f}",
                         "-an", "-vf", vf, "-c:v", "libx264", "-preset", "veryfast",
                         "-pix_fmt", "yuv420p", out])
         seg_files.append(out)
 
-    # 5. concat dei segmenti
+    # 6. concat dei segmenti
     listf = os.path.join(work, "list.txt")
     with open(listf, "w", encoding="utf-8") as f:
         for sf in seg_files:
@@ -267,10 +286,10 @@ def render_job(data, work):
                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
            cwd=work)
 
-    # 6. sottotitoli ASS
+    # 7. sottotitoli ASS
     build_ass(timings, total_ms, os.path.join(work, "subs.ass"))
 
-    # 7. mux finale: video + sottotitoli + vignette + voce (+ musica)
+    # 8. mux finale: video + sottotitoli + vignette + voce (+ musica)
     total_sec = total_ms / 1000.0
     out = os.path.join(work, "final.mp4")
     vfilter = "[0:v]subtitles=subs.ass,vignette,eq=brightness=-0.04[v]"
@@ -786,6 +805,155 @@ def render_ranking_job(data, work):
         return f.read()
 
 
+# ----------------------------- RENDER INDOVINA PRIMA DEL REVEAL -----------------------------
+
+def build_guess_ass(timeline, cta_idx, path):
+    styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
+    styleB = "Style: B,Arial Black,54,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
+    ev = [_ass_header_i(styleN + "\n" + styleB)]
+    for idx, item in enumerate(timeline):
+        base = item["start"]; dur = item["dur"]
+        _karaoke_dialogue(ev, base, dur, item.get("words", []))
+        if idx == cta_idx:
+            st = ms_to_ass(base); en = ms_to_ass(base + dur)
+            ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs60\\c&H00F0FF&\\bord7\\shad3}🤔 INDOVINA PRIMA DI CONTINUARE\n"
+                      % (st, en))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("".join(ev))
+
+
+def render_guess_job(data, work):
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg non trovato")
+    voice = data.get("voice") or DEFAULT_VOICE
+    hook = (data.get("hook") or "").strip()
+    indizi = data.get("indizi") or []
+    cta = (data.get("cta_indovina") or "").strip()
+    reveal = (data.get("reveal") or "").strip()
+    chiusura = (data.get("chiusura") or "").strip()
+    lang = data.get("lang") or "italiano"
+    soggetto_reale = (data.get("soggetto_reale") or "").strip()
+    fallback = data.get("fallback")
+    atmosphere = data.get("atmosphere_clip") or fallback
+    music_vol = float(data.get("music_vol", 1.0))
+    voice_vol = float(data.get("voice_vol", 1.8))
+    if not indizi:
+        raise RuntimeError("nessun indizio")
+
+    # foto reali del soggetto (una sola ricerca, valide per tutta la timeline)
+    srcs = []
+    if soggetto_reale:
+        for j, img in enumerate(wiki_images(soggetto_reale, lang, 3)):
+            cp = os.path.join(work, f"g{j}.jpg")
+            try:
+                download_file(img, cp)
+                if os.path.getsize(cp) > 0:
+                    srcs.append((cp, "image"))
+            except Exception:
+                pass
+        if srcs:
+            print(f"     {len(srcs)} foto Wikipedia: {soggetto_reale}")
+    if not srcs:
+        for url, name in ((atmosphere, "atmo.mp4"), (fallback, "fb.mp4")):
+            if not url:
+                continue
+            cp = os.path.join(work, name)
+            try:
+                download_file(url, cp)
+                if os.path.getsize(cp) > 0:
+                    srcs.append((cp, "video"))
+                    break
+            except Exception:
+                pass
+    if not srcs:
+        raise RuntimeError("nessun media disponibile")
+
+    music_path = None
+    if data.get("music_wav_b64"):
+        music_path = os.path.join(work, "music.wav")
+        with open(music_path, "wb") as f:
+            f.write(base64.b64decode(data["music_wav_b64"]))
+
+    timeline, audio_files = [], []
+    t = 0
+    _r, _p = PROSODY["indovina"]
+
+    def add_narr(text):
+        nonlocal t
+        text = (text or "").strip()
+        if not text:
+            return None
+        p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
+        audio_files.append(p)
+        idx = len(timeline)
+        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words})
+        t += dur
+        return idx
+
+    add_narr(hook)
+    for it in indizi:
+        add_narr(it.get("testo", ""))
+    cta_idx = add_narr(cta)
+    add_narr(reveal)
+    add_narr(chiusura)
+
+    # il budget di durata conta la pausa dopo la CTA come parte del target, non in aggiunta
+    target_ms = float(data.get("target_ms") or 0)
+    pad_ms = max(0.0, (target_ms - CTA_PAUSE_MS) - t) if target_ms > 0 else 0.0
+    total_ms = t + pad_ms + CTA_PAUSE_MS + 600
+
+    alist = os.path.join(work, "alist.txt")
+    with open(alist, "w", encoding="utf-8") as f:
+        for af in audio_files:
+            f.write(f"file '{os.path.basename(af)}'\n")
+    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "alist.txt",
+                    "-c:a", "aac", "-b:a", "192k", "voice.m4a"], cwd=work)
+
+    # base video: alterna le foto del soggetto lungo tutta la timeline; la pausa e l'eventuale
+    # padding per raggiungere la durata target vanno entrambi sul segmento della CTA
+    seg_files = []
+    for si, item in enumerate(timeline):
+        cp, kind = srcs[si % len(srcs)]
+        extra_ms = (pad_ms + CTA_PAUSE_MS) if si == cta_idx else 0.0
+        sub = max(0.4, (item["dur"] + extra_ms) / 1000.0)
+        outc = os.path.join(work, f"gseg{si}.mp4")
+        loop_args = ["-loop", "1"] if kind == "image" else ["-stream_loop", "-1"]
+        run_ff(ffmpeg, loop_args + ["-i", cp, "-t", f"{sub:.3f}",
+                        "-an", "-vf", CLIP_VF, "-c:v", "libx264", "-preset", "veryfast",
+                        "-pix_fmt", "yuv420p", outc])
+        seg_files.append(outc)
+    with open(os.path.join(work, "glist.txt"), "w", encoding="utf-8") as f:
+        for sf in seg_files:
+            f.write(f"file '{os.path.basename(sf)}'\n")
+    run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "glist.txt",
+                    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
+           cwd=work)
+    build_guess_ass(timeline, cta_idx, os.path.join(work, "subs.ass"))
+
+    total_sec = total_ms / 1000.0
+    out = os.path.join(work, "final.mp4")
+    vfilter = ("[0:v]subtitles=subs.ass,eq=brightness=-0.07:contrast=1.28:saturation=0.55,"
+               "colorbalance=rs=0.10:rm=0.06:rh=0.04,vignette=PI/3[v]")
+    if music_path:
+        inputs = ["-i", "base.mp4", "-i", "voice.m4a", "-stream_loop", "-1", "-i", "music.wav"]
+        fc = (vfilter + f";[1:a]volume={voice_vol}[a1];[2:a]volume={music_vol}[a2];"
+              "[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[a]")
+    else:
+        inputs = ["-i", "base.mp4", "-i", "voice.m4a"]
+        fc = vfilter + f";[1:a]volume={voice_vol}[a]"
+    run_ff(ffmpeg, inputs + ["-filter_complex", fc, "-map", "[v]", "-map", "[a]",
+                             "-t", f"{total_sec:.3f}", "-c:v", "libx264", "-preset", "medium",
+                             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "final.mp4"],
+           cwd=work)
+    try:
+        shutil.copyfile(out, LAST_RENDER)
+    except Exception:
+        pass
+    with open(out, "rb") as f:
+        return f.read()
+
+
 # ----------------------------- YOUTUBE -----------------------------
 
 def yt_get_credentials():
@@ -1249,6 +1417,23 @@ class Handler(BaseHTTPRequestHandler):
                     shutil.rmtree(work, ignore_errors=True)
             except Exception as e:
                 print(f"     ERRORE classifica: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/render_guess":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                print(f"  -> RENDER INDOVINA: {len(data.get('indizi', []))} indizi, "
+                      f"soggetto: {data.get('soggetto_reale', '')[:50]}")
+                work = tempfile.mkdtemp(prefix="viralosg_")
+                try:
+                    mp4 = render_guess_job(data, work)
+                    print(f"     OK video {len(mp4)//1024} KB")
+                    self._send(200, "video/mp4", mp4)
+                finally:
+                    shutil.rmtree(work, ignore_errors=True)
+            except Exception as e:
+                print(f"     ERRORE indovina: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 

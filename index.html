@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.7.4';
-  const LAST_UPDATED = '2026-07-03 09:47';
+  const CURRENT_VERSION = 'v3.8.0';
+  const LAST_UPDATED = '2026-07-03 10:33';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -196,7 +196,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.7.4</div>
+    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.8.0</div>
   </div>
   <script>document.getElementById('verInfo').textContent = CURRENT_VERSION + ' · ' + LAST_UPDATED;</script>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
@@ -233,9 +233,10 @@
       <div class="input-group">
         <label class="input-label">🎬 Format</label>
         <select class="input-field" id="format" onchange="onFormatChange()">
-          <option value="classica">📖 Storia classica (creepypasta)</option>
+          <option value="classica">📖 Storia classica (creepypasta & horror reale)</option>
           <option value="interattivo">🎮 Sopravvivi o Muori (a scelte)</option>
           <option value="classifica">🔢 Classifica del terrore (Top N)</option>
+          <option value="indovina">🤔 Indovina prima del reveal</option>
         </select>
       </div>
       <div id="rankParams" style="display:none">
@@ -246,6 +247,9 @@
           <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="4"></div>
           <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="2" max="8" value="3"></div>
         </div>
+      </div>
+      <div id="guessParams" style="display:none">
+        <div class="input-group"><label class="input-label">Numero indizi</label><input class="input-field" id="guessClues" type="number" min="3" max="8" value="5"></div>
       </div>
       <div id="mediaParams" style="display:none">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -295,7 +299,7 @@
         <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Ora/giorno</label><input class="input-field" id="batchTime" type="time" value="21:00"></div>
         <div class="input-group" style="flex:1;min-width:120px"><label class="input-label">Visibilità</label><select class="input-field" id="batchPrivacy"><option value="private" selected>🔒 Privato</option><option value="public">🌍 Pubblico</option><option value="unlisted">🔗 Non in elenco</option></select></div>
       </div>
-      <div class="input-group"><label class="input-label">🎬 Format</label><select class="input-field" id="batchFormat"><option value="classica">📖 Storia classica</option><option value="interattivo">🎮 Sopravvivi o Muori</option><option value="classifica">🔢 Classifica del terrore</option><option value="misto">🎲 Misto (alterna tutti)</option></select></div>
+      <div class="input-group"><label class="input-label">🎬 Format</label><select class="input-field" id="batchFormat"><option value="classica">📖 Storia classica</option><option value="interattivo">🎮 Sopravvivi o Muori</option><option value="classifica">🔢 Classifica del terrore</option><option value="indovina">🤔 Indovina prima del reveal</option><option value="misto">🎲 Misto (alterna tutti)</option></select></div>
       <button class="btn btn-primary" id="batchBtn" onclick="runWeeklyBatch()" style="width:100%;justify-content:center">🚀 Genera e programma</button>
       <div id="batchLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:200px;overflow-y:auto"></div>
     </div>
@@ -535,22 +539,29 @@
   async function generateScriptData(lang, dur) {
     const k = getKeys();
     const sottogeneri = [
-      { nome: 'horror domestico', ambientazione: 'casa, stanze, specchi, seminterrato', video_theme: 'home' },
-      { nome: 'tecnologia maledetta', ambientazione: 'schermo, messaggi, app, algoritmo', video_theme: 'tech' },
-      { nome: 'entità nel bosco', ambientazione: 'foresta, sentiero, nebbia, alberi', video_theme: 'forest' },
-      { nome: 'memoria perduta', ambientazione: 'ricordi distorti, fotografie, deja vu', video_theme: 'dark' },
-      { nome: 'stalker soprannaturale', ambientazione: 'seguire, ombra, rumori, presenza', video_theme: 'urban' },
-      { nome: 'luogo abbandonato', ambientazione: 'ospedale, scuola, fabbrica dismessa', video_theme: 'abandoned' },
-      { nome: 'sogno lucido maledetto', ambientazione: 'sogno, sonno, paralisi, confine realtà', video_theme: 'dark' },
-      { nome: 'bambino inquietante', ambientazione: 'giocattoli, risate, cameretta, buio', video_theme: 'home' },
-      { nome: 'presenza nello specchio', ambientazione: 'specchi, riflessi, bagno, notte', video_theme: 'home' },
-      { nome: 'chiamata maledetta', ambientazione: 'telefono, numero sconosciuto, voce, notte', video_theme: 'tech' },
-      { nome: 'qualcosa sotto il letto', ambientazione: 'camera, buio, respiro, cigolii', video_theme: 'home' },
-      { nome: 'rituale andato storto', ambientazione: 'candele, simboli, cantina, cerchio', video_theme: 'dark' },
-      { nome: 'manicomio abbandonato', ambientazione: 'ospedale psichiatrico, corsie, celle', video_theme: 'abandoned' },
-      { nome: 'autostrada di notte', ambientazione: 'strada deserta, fari, autostop, nebbia', video_theme: 'urban' },
-      { nome: 'segreto di famiglia', ambientazione: 'casa di famiglia, soffitta, vecchie foto', video_theme: 'home' },
-      { nome: 'il mio doppelganger', ambientazione: 'sosia, identità, città, telecamere', video_theme: 'dark' },
+      { nome: 'horror domestico', ambientazione: 'casa, stanze, specchi, seminterrato', video_theme: 'home', mode: 'fiction' },
+      { nome: 'tecnologia maledetta', ambientazione: 'schermo, messaggi, app, algoritmo', video_theme: 'tech', mode: 'fiction' },
+      { nome: 'entità nel bosco', ambientazione: 'foresta, sentiero, nebbia, alberi', video_theme: 'forest', mode: 'fiction' },
+      { nome: 'memoria perduta', ambientazione: 'ricordi distorti, fotografie, deja vu', video_theme: 'dark', mode: 'fiction' },
+      { nome: 'stalker soprannaturale', ambientazione: 'seguire, ombra, rumori, presenza', video_theme: 'urban', mode: 'fiction' },
+      { nome: 'luogo abbandonato', ambientazione: 'ospedale, scuola, fabbrica dismessa', video_theme: 'abandoned', mode: 'fiction' },
+      { nome: 'sogno lucido maledetto', ambientazione: 'sogno, sonno, paralisi, confine realtà', video_theme: 'dark', mode: 'fiction' },
+      { nome: 'bambino inquietante', ambientazione: 'giocattoli, risate, cameretta, buio', video_theme: 'home', mode: 'fiction' },
+      { nome: 'presenza nello specchio', ambientazione: 'specchi, riflessi, bagno, notte', video_theme: 'home', mode: 'fiction' },
+      { nome: 'chiamata maledetta', ambientazione: 'telefono, numero sconosciuto, voce, notte', video_theme: 'tech', mode: 'fiction' },
+      { nome: 'qualcosa sotto il letto', ambientazione: 'camera, buio, respiro, cigolii', video_theme: 'home', mode: 'fiction' },
+      { nome: 'rituale andato storto', ambientazione: 'candele, simboli, cantina, cerchio', video_theme: 'dark', mode: 'fiction' },
+      { nome: 'manicomio abbandonato', ambientazione: 'ospedale psichiatrico, corsie, celle', video_theme: 'abandoned', mode: 'fiction' },
+      { nome: 'autostrada di notte', ambientazione: 'strada deserta, fari, autostop, nebbia', video_theme: 'urban', mode: 'fiction' },
+      { nome: 'segreto di famiglia', ambientazione: 'casa di famiglia, soffitta, vecchie foto', video_theme: 'home', mode: 'fiction' },
+      { nome: 'il mio doppelganger', ambientazione: 'sosia, identità, città, telecamere', video_theme: 'dark', mode: 'fiction' },
+      { nome: 'true crime irrisolto', ambientazione: 'caso criminale reale mai risolto, indagini, testimonianze, indizi', video_theme: 'dark', mode: 'real' },
+      { nome: 'leggenda urbana reale', ambientazione: 'leggenda metropolitana famosa e documentata, origine, diffusione', video_theme: 'urban', mode: 'real' },
+      { nome: 'sparizione reale', ambientazione: 'persona scomparsa nel nulla, caso reale documentato', video_theme: 'dark', mode: 'real' },
+      { nome: 'oggetto maledetto reale', ambientazione: 'oggetto reale documentato legato a disgrazie: bambola, dipinto, gioiello', video_theme: 'dark', mode: 'real' },
+      { nome: 'luogo infestato reale', ambientazione: 'luogo realmente documentato come infestato o maledetto', video_theme: 'abandoned', mode: 'real' },
+      { nome: 'criptide reale avvistato', ambientazione: 'creatura o criptide con avvistamenti reali documentati', video_theme: 'forest', mode: 'real' },
+      { nome: 'omicidio storico irrisolto', ambientazione: 'delitto storico reale mai risolto, contesto d\'epoca', video_theme: 'dark', mode: 'real' },
     ];
     // OTTIMIZZA: se ci sono dati, 70% delle volte usa il sottogenere vincente
     const _opt = getOptimize();
@@ -578,7 +589,22 @@
       : lang === 'spagnolo'
       ? 'Eres un guionista de terror de fama mundial. DEBES escribir absolutamente todo el texto exclusivamente en ESPAÑOL. Nunca escribas en italiano ni en ningún otro idioma. Las claves JSON quedan igual, pero cada VALOR de texto debe estar en español.'
       : 'Sei uno sceneggiatore horror di fama mondiale. Scrivi tutti i testi esclusivamente in ITALIANO.';
-    const prompt = `Sei uno sceneggiatore horror di fama mondiale specializzato in cortometraggi virali per ${platform}. La tua creepypasta deve fermare lo scroll in 1 secondo e hauntar la mente per giorni.
+    const isReal = sg.mode === 'real';
+    const styleBlock = isReal ? `
+NARRAZIONE: TERZA PERSONA, tono documentario/true-crime — racconta i fatti come li riporterebbe una seria serie true-crime, non come una fiction.
+GROUNDING NEI FATTI REALI (obbligatorio):
+- USA SOLO UN CASO/SOGGETTO REALE E DOCUMENTATO, con il suo NOME PROPRIO ESATTO (un vero caso di cronaca, una vera leggenda metropolitana documentata, un vero oggetto maledetto famoso, un vero luogo). VIETATO inventare nomi, dettagli o esiti non documentati — se non sei certo di un dettaglio, resta più generico piuttosto che inventare.
+- Deve essere un soggetto davvero famoso/documentato, così esistono foto e informazioni vere.
+- Escalation basata sui fatti reali noti (indagini, testimonianze, indizi emersi nel tempo), MAI su un colpo di scena fabbricato.
+FINALE: chiudi con una domanda aperta e inquietante coerente con i fatti reali noti (es. cosa resta irrisolto ancora oggi) — MAI un twist narrativo inventato.` : `
+NARRAZIONE: PRIMA PERSONA, stile creepypasta.
+TECNICA (CREEPYPASTA AVVINCENTE):
+- Protagonista ordinario, dettagli mondani specifici (un nome, "le 3:14", un oggetto comune)
+- Dal normale al dettaglio sbagliato che gela il sangue; dettagli sensoriali concreti
+- Ogni frase apre una nuova domanda; a metà un secondo shock più grande
+- Orrore implicito e suggerito; escalation continua
+FINALE: A TWIST che ribalta tutto e fa rileggere da capo.`;
+    const prompt = `Sei uno sceneggiatore horror di fama mondiale specializzato in cortometraggi virali per ${platform}. La tua storia deve fermare lo scroll in 1 secondo e hauntar la mente per giorni.
 
 ⚠️ LINGUA OBBLIGATORIA: scrivi TUTTI i contenuti testuali ESCLUSIVAMENTE in ${langName}. Anche se queste istruzioni sono in italiano, il tuo output DEVE essere interamente in ${langName}.
 ${_opt && _opt.insight ? '\n📈 OTTIMIZZAZIONE DAI DATI REALI: ' + _opt.insight + '\n' : ''}
@@ -596,21 +622,16 @@ PROCESSO OBBLIGATORIO PER L'HOOK (la prima frase decide tutto):
 3. Scegli LA PIÙ scioccante e originale — quella che NEMMENO TU riusciresti a scrollare via.
 4. Costruisci tutta la storia a partire da quella.
 La prima frase deve fermare lo scroll in mezzo secondo. Mai introduzioni lente, mai "ti racconto di".
+${styleBlock}
 
-TECNICA (CREEPYPASTA AVVINCENTE):
-- Protagonista ordinario, dettagli mondani specifici (un nome, "le 3:14", un oggetto comune)
-- Dal normale al dettaglio sbagliato che gela il sangue; dettagli sensoriali concreti
-- Ogni frase apre una nuova domanda; a metà un secondo shock più grande
-- Orrore implicito e suggerito; escalation continua
-- FINALE A TWIST che ribalta tutto e fa rileggere da capo
-
-REGOLE: SOLO una storia (zero prodotti/pubblicità), prima persona, frasi brevi ma numerose, mostra non dire, mini-rivelazione ogni 2-3 frasi.
+REGOLE: SOLO una storia (zero prodotti/pubblicità), frasi brevi ma numerose, mostra non dire, mini-rivelazione ogni 2-3 frasi.
 PUNTEGGIATURA ESPRESSIVA (per un'intonazione drammatica della voce): usa i puntini di sospensione "..." per creare tensione e pause, il trattino "—" per gli stacchi improvvisi, e "?" / "!" con parsimonia nei momenti chiave. Non frasi tutte piatte con solo il punto.
 
 Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, prima degli altri campi.
 
 {
-  "script": "Storia completa AUTOCONCLUSIVA e LUNGA (almeno ${Math.round(parseInt(dur) * 2.6)} parole): hook fulminante, frasi brevi numerose, tensione crescente, finale a colpo di scena. ZERO pubblicità.",
+  "script": "Storia completa AUTOCONCLUSIVA e LUNGA (almeno ${Math.round(parseInt(dur) * 2.6)} parole): hook fulminante, frasi brevi numerose, tensione crescente, finale ${isReal ? 'con domanda aperta coerente con i fatti reali' : 'a colpo di scena'}. ZERO pubblicità.",
+  ${isReal ? '"soggetto_reale": "nome proprio ESATTO del caso/leggenda/oggetto reale (serve a trovarne la foto vera su Wikipedia)",' : ''}
   "nicchia": "${sg.nome}",
   "video_theme": "${sg.video_theme}",
   "viral_score": numero 1-100,
@@ -659,6 +680,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         script: extract('script', clean.slice(0, 500)), hashtags: extractArr('hashtags'),
         descrizione: extract('descrizione',''), tip_viralita: extract('tip_viralita',''),
         scene_queries: extractArr('scene_queries'), video_theme: extract('video_theme','dark'),
+        soggetto_reale: extract('soggetto_reale',''),
       });
     }
     return out;
@@ -671,10 +693,12 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
     show('intParams', f === 'interattivo');
     show('rankParams', f === 'classifica');
-    show('mediaParams', f === 'interattivo' || f === 'classifica');
+    show('guessParams', f === 'indovina');
+    show('mediaParams', f === 'interattivo' || f === 'classifica' || f === 'indovina');
     const b = document.getElementById('genBtn');
     if (b) b.textContent = f === 'interattivo' ? '🎮 Genera video interattivo'
       : f === 'classifica' ? '🔢 Genera classifica del terrore'
+      : f === 'indovina' ? '🤔 Genera video indovina'
       : '🔍 Analizza trend e genera contenuto';
   }
 
@@ -683,6 +707,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const f = document.getElementById('format') ? document.getElementById('format').value : 'classica';
     if (f === 'interattivo') assembleInteractive();
     else if (f === 'classifica') assembleRanking();
+    else if (f === 'indovina') assembleGuess();
     else startGen();
   }
 
@@ -847,15 +872,6 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     d.hashtags = arr(d.hashtags);
     d.trend_tags = arr(d.trend_tags);
     d.scene_queries = arr(d.scene_queries);
-    if (d.affiliate && typeof d.affiliate === 'object') {
-      d.affiliate.prodotto = str(d.affiliate.prodotto);
-      d.affiliate.perche = str(d.affiliate.perche);
-      d.affiliate.commissione = str(d.affiliate.commissione);
-      d.affiliate.piattaforma = str(d.affiliate.piattaforma);
-      d.affiliate.cta = str(d.affiliate.cta);
-    } else {
-      d.affiliate = { prodotto:'', perche:'', commissione:'', piattaforma:'', cta:'' };
-    }
     return d;
   }
 
@@ -1353,7 +1369,8 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     if (bgType !== 'none') { try { musicB64 = await renderMusicWavBase64(bgType, bgVol, totalMs/1000); } catch {} }
     const rr = await fetch('http://127.0.0.1:5555/render', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ voice_mp3_b64: voiceB64, timings, music_wav_b64: musicB64, clips, total_ms: totalMs, voice_vol: 1.8, music_vol: bgVol })
+      body: JSON.stringify({ voice_mp3_b64: voiceB64, timings, music_wav_b64: musicB64, clips, total_ms: totalMs, voice_vol: 1.8, music_vol: bgVol,
+        lang: opts.lang || 'italiano', soggetto_reale: data.soggetto_reale || '' })
     });
     if (!rr.ok) throw new Error(await rr.text());
     return await rr.blob();
@@ -1376,6 +1393,18 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   const MUSIC_POOL = ['drone','tension','dark','heartbeat','pulse','choir','musicbox'];
   const rnd = a => a[Math.floor(Math.random()*a.length)];
   function randomVoice(lang){ return rnd(VOICE_POOL[lang] || VOICE_POOL.italiano); }
+
+  // ripopola la tendina voce (#intVoice, usata da interattivo/classifica/indovina) in base alla lingua scelta
+  function populateVoiceSelect(lang) {
+    const sel = document.getElementById('intVoice');
+    if (!sel) return;
+    const cur = sel.value;
+    const pool = VOICE_POOL[lang] || VOICE_POOL.italiano;
+    sel.innerHTML = pool.map(v => `<option value="${v}">${v.split('-').pop().replace('Neural','')}</option>`).join('');
+    sel.value = pool.includes(cur) ? cur : pool[0];
+  }
+  document.getElementById('lang').addEventListener('change', () => populateVoiceSelect(document.getElementById('lang').value));
+  populateVoiceSelect(document.getElementById('lang').value);
 
   // genera script con retry automatico sul rate limit Groq
   async function genScriptRetry(lang, dur, add, label) {
@@ -1431,8 +1460,8 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       // spaziatura PRIMA di ogni chiamata Groq (tranne la prima) per il limite TPM
       if (i > 0) { add(`${dayLabel} attendo 60s (limite API Groq)...`); await sleep(60000); }
       try {
-        // format del video corrente (misto = ruota tra i tre)
-        const fmt = batchFmt === 'misto' ? ['classica','interattivo','classifica'][i % 3] : batchFmt;
+        // format del video corrente (misto = ruota tra tutti)
+        const fmt = batchFmt === 'misto' ? ['classica','interattivo','classifica','indovina'][i % 4] : batchFmt;
         const vVoice = randomVoice(lang);
         const vMusic = rnd(MUSIC_POOL);
         let data;
@@ -1480,6 +1509,29 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
               choice_ms: choiceSec*1000, intro: data.intro, rounds: data.rounds, finale: data.finale }) });
           if (!rr.ok) throw new Error(await rr.text());
           await rr.blob();
+        } else if (fmt === 'indovina') {
+          add(`${dayLabel} genero mistero...`);
+          const nClues = Math.max(3, Math.min(8, parseInt(document.getElementById('guessClues').value) || 5));
+          for (let a = 0; a < 3; a++) {
+            try { data = await generateGuessData(lang, dur, nClues); break; }
+            catch(e) { const msg = e.message||''; const m = msg.match(/try again in ([\d.]+)s/);
+              if (/rate limit|TPM|429/i.test(msg) && a < 2) { const w = Math.ceil(m?parseFloat(m[1]):30)+5; add(`${dayLabel} rate limit, attendo ${w}s...`); await sleep(w*1000); continue; }
+              throw e; } }
+          add(`${dayLabel} «${data.titolo}» — ${(data.indizi||[]).length} indizi`);
+          const gUsed = new Set();
+          const gClip = (await searchClip(data.soggetto_reale || data.categoria || data.video_theme, k, gUsed)) || (await searchClip(data.video_theme, k, gUsed));
+          if (!gClip) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
+          const gAtmo = (await searchClip('dark mystery fog atmosphere', k, gUsed)) || gClip;
+          const gEstSec = 15 + (data.indizi||[]).length*8 + 12;
+          let gMusicB64 = null; try { gMusicB64 = await renderMusicWavBase64(vMusic, bgVol, gEstSec); } catch {}
+          add(`${dayLabel} monto indovina (foto Wikipedia dinamiche)...`);
+          const gr = await fetch('http://127.0.0.1:5555/render_guess', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ voice: vVoice, fallback: gClip.url, atmosphere_clip: gAtmo.url, lang, music_wav_b64: gMusicB64, music_vol: bgVol, voice_vol: 1.8,
+              soggetto_reale: data.soggetto_reale, hook: data.hook, indizi: data.indizi, cta_indovina: data.cta_indovina, reveal: data.reveal, chiusura: data.chiusura,
+              target_ms: (parseInt(dur)||61)*1000 }) });
+          if (!gr.ok) throw new Error(await gr.text());
+          await gr.blob();
         } else {
           add(`${dayLabel} genero script...`);
           data = await genScriptRetry(lang, dur, add, dayLabel);
@@ -1487,7 +1539,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           const clips = (await fetchClipsData(data, k.pexels)).results.map(v=>v.url);
           if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
           add(`${dayLabel} monto video (${clips.length} clip · ${vVoice.split('-').pop()} · ${vMusic})...`);
-          await renderVideoData(data, clips, { voice: vVoice, bgType: vMusic, bgVol, targetSec: parseInt(dur) });
+          await renderVideoData(data, clips, { voice: vVoice, bgType: vMusic, bgVol, targetSec: parseInt(dur), lang });
         }
         // programma il giorno i
         const when = new Date(base); when.setDate(base.getDate()+i);
@@ -1758,10 +1810,8 @@ Rispondi SOLO con JSON valido:
     const choiceSec = Math.max(3, Math.min(8, parseInt(document.getElementById('intSeconds').value)||5));
     const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
     const bgType = document.getElementById('intMusic') ? document.getElementById('intMusic').value : 'tension';
-    // voce scelta, adattata alla lingua
-    let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : 'it-IT-DiegoNeural';
-    if (lang==='inglese') voice = 'en-US-GuyNeural';
-    else if (lang==='spagnolo') voice = 'es-ES-AlvaroNeural';
+    // voce scelta dalla tendina, gia' ripopolata in base alla lingua da populateVoiceSelect()
+    let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : randomVoice(lang);
     try {
       add('Genero la storia a bivi...');
       const d = await generateInteractiveData(lang, dur, rounds, choiceSec);
@@ -1883,8 +1933,7 @@ Rispondi SOLO con JSON valido:
     const targetSec = parseInt(document.getElementById('dur') ? document.getElementById('dur').value : '') || 61;
     const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
     const bgType = document.getElementById('intMusic') ? document.getElementById('intMusic').value : 'tension';
-    let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : 'it-IT-DiegoNeural';
-    if (lang==='inglese') voice='en-US-GuyNeural'; else if (lang==='spagnolo') voice='es-ES-AlvaroNeural';
+    let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : randomVoice(lang);
     try {
       add(`Genero la classifica Top ${n}...`);
       const d = await generateRankingData(lang, n);
@@ -1918,6 +1967,131 @@ Rispondi SOLO con JSON valido:
       add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo.`);
     } catch(e) { add('❌ '+(e.message||e)); }
     btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore';
+  }
+
+  // --- Indovina prima del reveal (mistero reale a indizi + CTA + reveal) ---
+  async function generateGuessData(lang, dur, nClues) {
+    const k = getKeys();
+    const areaMap = { italiano: 'reale e documentato', inglese: 'real and documented, famous internationally', spagnolo: 'real y documentado' };
+    const area = areaMap[lang] || areaMap.italiano;
+    const categoriaPool = [
+      `un mistero irrisolto ${area}`,
+      `una leggenda urbana ${area} e famosa`,
+      `un oggetto maledetto ${area}`,
+      `un criptide o creatura ${area} con avvistamenti`,
+      `una sparizione ${area} mai risolta`,
+      `un luogo ${area} considerato infestato o maledetto`,
+    ];
+    const categoria = categoriaPool[Math.floor(Math.random()*categoriaPool.length)];
+    const _opt = getOptimize();
+    const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
+    const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
+    const targetMs = (parseInt(dur)||61) * 1000;
+    const ctaPauseMs = 4000; // pausa fissa dopo la CTA, vedi CTA_PAUSE_MS in local_server.py
+    const narrationBudgetMs = Math.max(10000, targetMs - ctaPauseMs);
+    const narrationWords = Math.round(narrationBudgetMs / 1000 * 2.6);
+    const prompt = `Sei un creatore di misteri virali per ${platform}. Racconta ${categoria} a indizi crescenti, invitando chi guarda a indovinare PRIMA del reveal.
+
+⚠️ Scrivi TUTTI i testi in ${langName}.
+${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
+
+REGOLE FONDAMENTALI:
+- USA SOLO UN CASO REALE E DOCUMENTATO (non inventare), con il suo NOME PROPRIO ESATTO (serve a trovarne la foto vera su Wikipedia). VIETATO inventare dettagli o esiti non documentati — se non sei certo di un dettaglio, resta più generico piuttosto che inventare.
+- "hook": 1 frase che promette il mistero SENZA svelarlo, entra subito, zero preamboli.
+- "indizi": esattamente ${nClues} indizi in ordine CRESCENTE di specificità (dal più vago al più rivelatore), UNA frase secca e concreta ciascuno. Ogni indizio aggiunge un fatto vero senza risolvere il mistero.
+- "cta_indovina": 1 frase che si ferma un attimo prima del finale e chiede esplicitamente di scrivere la propria ipotesi nei commenti PRIMA di continuare (es. "Hai già capito di cosa si tratta? Scrivilo nei commenti prima di andare avanti...").
+- "reveal": rivela il fatto/nome/spiegazione reale con enfasi drammatica, coerente con tutti gli indizi dati.
+- "chiusura": 1 frase finale che rilancia sul rewatch e sul commento (es. "Quanti indizi avevi notato? Guardalo di nuovo e scrivi quanti te ne erano sfuggiti.").
+- BUDGET DI DURATA: il testo narrato TOTALE (hook + tutti gli indizi + cta_indovina + reveal + chiusura) deve stare in circa ${narrationWords} parole complessive (una voce legge ~2.6 parole/sec), per rispettare la durata target di ${Math.round(targetMs/1000)}s. Meglio restare leggermente sotto il budget che sforarlo.
+- Frasi corte, concrete, sensoriali. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave.
+
+Rispondi SOLO con JSON valido:
+{
+  "soggetto_reale": "nome proprio ESATTO del caso/leggenda/oggetto/creatura reale (per trovare la foto vera su Wikipedia)",
+  "categoria": "${categoria}",
+  "hook": "1 frase che promette il mistero senza svelarlo",
+  "indizi": [${Array.from({length:nClues},()=>'{"testo":"1 frase, un indizio vero che aggiunge informazione senza risolvere"}').join(',')}],
+  "cta_indovina": "1 frase che invita a commentare l'ipotesi prima di continuare",
+  "reveal": "la spiegazione/rivelazione reale, con enfasi drammatica",
+  "chiusura": "1 frase che rilancia su rewatch e commento",
+  "titolo": "titolo che incuriosisce in ${langName}, max 60 caratteri",
+  "descrizione": "descrizione in ${langName}, max 200 caratteri",
+  "hashtags": ["10 hashtag horror/mistero in ${langName}, ognuno con #"],
+  "video_theme": "uno tra: home, forest, abandoned, dark, urban, tech",
+  "nicchia": "indovina prima del reveal",
+  "orario_pubblicazione": "orario sera/notte ottimale"
+}`;
+    const models = ['llama-3.3-70b-versatile','llama-3.1-8b-instant'];
+    let dataR=null, lastErr='';
+    for (const model of models) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k.groq}`},
+          body: JSON.stringify({ model, messages:[{role:'system',content:langSystem},{role:'user',content:prompt}], temperature:0.9, max_tokens:3000 })
+        });
+        if (res.ok) { dataR = await res.json(); break; }
+        const e = await res.json().catch(()=>({})); lastErr = e.error?.message || `HTTP ${res.status}`;
+      } catch(e){ lastErr = e.message||String(e); }
+    }
+    if (!dataR) throw new Error(lastErr||'generazione fallita');
+    let clean = (dataR.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+    const s = clean.indexOf('{'), en = clean.lastIndexOf('}');
+    if (s!==-1 && en!==-1) clean = clean.slice(s, en+1);
+    clean = clean.replace(/[\x00-\x1F\x7F]/g,' ').replace(/,\s*([}\]])/g,'$1');
+    const d = JSON.parse(clean);
+    d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
+    d.indizi = Array.isArray(d.indizi) ? d.indizi : [];
+    d.video_theme = d.video_theme || 'dark';
+    return d;
+  }
+
+  async function assembleGuess() {
+    const btn = document.getElementById('genBtn');
+    const log = document.getElementById('intLog');
+    const prev = document.getElementById('intPreview');
+    const add = m => { log.innerHTML += `<div>${m}</div>`; log.scrollTop = log.scrollHeight; };
+    log.innerHTML=''; prev.innerHTML='';
+    btn.disabled=true; btn.textContent='⏳ In corso...';
+    try { const p = await fetch('http://127.0.0.1:5555/ping'); if(!p.ok) throw 0; }
+    catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='🤔 Genera video indovina'; return; }
+    const k = getKeys();
+    if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='🤔 Genera video indovina'; return; }
+    if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🤔 Genera video indovina'; return; }
+    const lang = document.getElementById('lang').value;
+    const nClues = Math.max(3, Math.min(8, parseInt(document.getElementById('guessClues').value)||5));
+    const targetSec = parseInt(document.getElementById('dur') ? document.getElementById('dur').value : '') || 61;
+    const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
+    const bgType = document.getElementById('intMusic') ? document.getElementById('intMusic').value : 'tension';
+    let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : randomVoice(lang);
+    try {
+      add('Genero il mistero...');
+      const d = await generateGuessData(lang, targetSec, nClues);
+      gData = d; window._videoTheme = d.video_theme;
+      add(`«${d.titolo||'mistero'}» — ${d.indizi.length} indizi`);
+      add('Cerco clip di fallback (la foto la prende il server da Wikipedia)...');
+      const usedIds = new Set();
+      const c = await searchClip(d.soggetto_reale || d.categoria || d.video_theme, k, usedIds)
+             || await searchClip(d.video_theme, k, usedIds);
+      const fallback = c ? c.url : null;
+      const ic = await searchClip('dark mystery fog atmosphere', k, usedIds) || await searchClip(d.video_theme, k, usedIds);
+      const atmosphere_clip = ic ? ic.url : fallback;
+      add('Genero musica...');
+      const estSec = Math.max(targetSec, 15 + d.indizi.length*8 + 12);
+      let musicB64=null; try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
+      add('Monto il video (foto Wikipedia dinamiche + indizi, attendi)...');
+      const body = { voice, fallback, atmosphere_clip, lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+        soggetto_reale: d.soggetto_reale, hook: d.hook, indizi: d.indizi, cta_indovina: d.cta_indovina,
+        reveal: d.reveal, chiusura: d.chiusura, target_ms: targetSec*1000 };
+      const r = await fetch('http://127.0.0.1:5555/render_guess', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(await r.text());
+      const blob = await r.blob(); const url = URL.createObjectURL(blob);
+      const mb = (blob.size/1024/1024).toFixed(1);
+      prev.innerHTML = `<video src="${url}" controls style="width:100%;border-radius:8px;max-height:320px"></video>
+        <div style="margin-top:10px"><a href="${url}" download="viralos-indovina-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${mb} MB)</a></div>`;
+      add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo.`);
+    } catch(e) { add('❌ '+(e.message||e)); }
+    btn.disabled=false; btn.textContent='🤔 Genera video indovina';
   }
 
   async function assembleVideo() {
@@ -1976,7 +2150,8 @@ Rispondi SOLO con JSON valido:
     try {
       const r = await fetch('http://127.0.0.1:5555/render', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ voice_mp3_b64: voiceB64, timings, music_wav_b64: musicB64, clips, total_ms: totalMs, voice_vol: 1.8, music_vol: bgVol })
+        body: JSON.stringify({ voice_mp3_b64: voiceB64, timings, music_wav_b64: musicB64, clips, total_ms: totalMs, voice_vol: 1.8, music_vol: bgVol,
+          lang: _lang, soggetto_reale: gData.soggetto_reale || '' })
       });
       if (!r.ok) throw new Error(await r.text());
       const blob = await r.blob();
@@ -1992,41 +2167,6 @@ Rispondi SOLO con JSON valido:
     } catch(e){ addLog('❌ Errore montaggio: '+(e.message||e)); badge.textContent='Errore'; }
     btn.textContent='🔄 Rigenera'; btn.disabled=false;
   }
-  function drawSubtitle(ctx2d, canvas, lines, idx, startMs) {
-    if (!lines.length) return;
-    const line = lines[idx % lines.length]?.trim();
-    if (!line) return;
-    ctx2d.save();
-    ctx2d.globalAlpha = Math.min(1, (Date.now() - startMs) / 300);
-    const fontSize = Math.round(canvas.width * 0.055);
-    ctx2d.font = `bold ${fontSize}px Arial, sans-serif`;
-    ctx2d.textAlign = 'center';
-    ctx2d.textBaseline = 'top';
-    const maxW = canvas.width * 0.82;
-    const lineH = fontSize * 1.4;
-    const words = line.split(' ');
-    const wrapped = [];
-    let cur = '';
-    for (const w of words) {
-      const test = cur ? cur + ' ' + w : w;
-      if (ctx2d.measureText(test).width > maxW) { wrapped.push(cur); cur = w; }
-      else cur = test;
-    }
-    if (cur) wrapped.push(cur);
-    const blockH = wrapped.length * lineH;
-    const blockY = canvas.height * 0.78; // Y di partenza del blocco testo
-    const pad = 16;
-    // Un singolo rettangolo per tutto il blocco
-    const maxLineW = Math.max(...wrapped.map(l => ctx2d.measureText(l).width));
-    ctx2d.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx2d.fillRect(canvas.width / 2 - maxLineW / 2 - pad, blockY - pad / 2, maxLineW + pad * 2, blockH + pad);
-    // Testo sopra il rettangolo
-    ctx2d.shadowColor = '#000'; ctx2d.shadowBlur = 8;
-    ctx2d.fillStyle = '#ffffff';
-    wrapped.forEach((l, i) => ctx2d.fillText(l, canvas.width / 2, blockY + i * lineH));
-    ctx2d.restore();
-  }
-
   function cp(id) { const el=document.getElementById(id); if(el) navigator.clipboard.writeText(el.textContent).catch(()=>{}); }
   function cpText(txt) { navigator.clipboard.writeText(txt).catch(()=>{}); }
 
