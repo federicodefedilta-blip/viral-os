@@ -815,11 +815,11 @@ def render_ranking_job(data, work):
 
 # ----------------------------- RENDER CHI E' STATO (giallo inventato) -----------------------------
 
-def build_whodunit_ass(timeline, cta_idx, path):
+def build_whodunit_ass(timeline, cta_idx, pad_ms, path):
     styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleB = "Style: B,Arial Black,54,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
     styleC = "Style: C,Arial Black,220,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,10,5,5,0,0,0,1"
-    styleL = "Style: L,Arial,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,2,60,60,240,1"
+    styleL = "Style: L,Arial,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,8,70,70,300,1"
     ev = [_ass_header_i(styleN + "\n" + styleB + "\n" + styleC + "\n" + styleL)]
     for idx, item in enumerate(timeline):
         base = item["start"]; dur = item["dur"]
@@ -846,6 +846,13 @@ def build_whodunit_ass(timeline, cta_idx, path):
             st = ms_to_ass(base); en = ms_to_ass(base + dur)
             ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs56\\c&H00F0FF&\\bord7\\shad3}👍 METTI LIKE E COMMENTA CHI E' STATO\n"
                       % (st, en))
+    # coda finale con solo musica (padding sull'ultimo segmento): mostra condividi + iscriviti
+    if pad_ms > 0 and timeline:
+        last = timeline[-1]
+        st = ms_to_ass(last["start"] + last["dur"])
+        en = ms_to_ass(last["start"] + last["dur"] + pad_ms)
+        ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1400)\\fs56\\c&H00F0FF&\\bord7\\shad3}📤 CONDIVIDI\n" % (st, en))
+        ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs56\\c&H00F0FF&\\bord7\\shad3}🔔 ISCRIVITI\n" % (st, en))
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(ev))
 
@@ -978,7 +985,7 @@ def render_whodunit_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "wlist.txt",
                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
            cwd=work)
-    build_whodunit_ass(timeline, cta_idx, os.path.join(work, "subs.ass"))
+    build_whodunit_ass(timeline, cta_idx, pad_ms, os.path.join(work, "subs.ass"))
 
     total_sec = total_ms / 1000.0
     out = os.path.join(work, "final.mp4")

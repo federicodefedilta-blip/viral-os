@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.9.0';
-  const LAST_UPDATED = '2026-07-03 15:08';
+  const CURRENT_VERSION = 'v3.9.1';
+  const LAST_UPDATED = '2026-07-03 15:49';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -196,7 +196,7 @@
   <div class="logo">
     <div class="logo-icon">🚀</div>
     <div class="logo-text">Viral<span>OS</span></div>
-    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.9.0</div>
+    <div id="verInfo" style="font-size:0.6em;color:var(--muted);margin-left:6px;margin-top:2px;letter-spacing:0.04em">v3.9.1</div>
   </div>
   <script>document.getElementById('verInfo').textContent = CURRENT_VERSION + ' · ' + LAST_UPDATED;</script>
   <div class="status-pill" onclick="openKeys()"><div class="dot"></div><span id="headerStatus">AI Online</span> · 🔑</div>
