@@ -131,6 +131,14 @@ def ass_escape(t):
     return t.replace("\n", " ").replace("\r", " ").replace("{", "(").replace("}", ")").strip()
 
 
+def ensure_punct(s):
+    """Aggiunge un punto finale se manca, cosi' concatenare piu' campi non produce un'unica frase senza pause."""
+    s = (s or "").strip()
+    if s and s[-1] not in ".!?…":
+        s += "."
+    return s
+
+
 def build_ass(timings, total_ms, path):
     """Crea un file ASS con sottotitoli KARAOKE animati: ogni parola si illumina
     a tempo (stile virale Shorts/TikTok). Le parole già pronunciate sono gialle,
@@ -827,6 +835,7 @@ def render_whodunit_job(data, work):
     if not ffmpeg:
         raise RuntimeError("ffmpeg non trovato")
     voice = data.get("voice") or DEFAULT_VOICE
+    hook = (data.get("hook") or "").strip()
     scenario = (data.get("scenario") or "").strip()
     sospetti = data.get("sospetti") or []
     cta = (data.get("cta") or "").strip()
@@ -891,13 +900,16 @@ def render_whodunit_job(data, work):
         t += dur
         return idx
 
-    add_narr(scenario, src=atmo_src)
+    add_narr(ensure_punct(hook), src=atmo_src)
+    add_narr(ensure_punct(scenario), src=atmo_src)
     for i, s in enumerate(sospetti):
-        text = f"{s.get('nome','')}. {s.get('alibi','')} {s.get('movente','')} {s.get('indizio','')}"
+        text = " ".join(ensure_punct(x) for x in (
+            s.get('nome',''), s.get('alibi',''), s.get('movente',''), s.get('indizio','')
+        ) if x)
         add_narr(text, src=suspect_srcs[i] if i < len(suspect_srcs) else None)
-    cta_idx = add_narr(cta, src=atmo_src)
-    add_narr(f"Il colpevole è {colpevole}. {motivazione}", src=atmo_src)
-    add_narr(chiusura, src=atmo_src)
+    cta_idx = add_narr(ensure_punct(cta), src=atmo_src)
+    add_narr(f"{ensure_punct('Il colpevole è ' + colpevole)} {ensure_punct(motivazione)}", src=atmo_src)
+    add_narr(ensure_punct(chiusura), src=atmo_src)
 
     # il budget di durata conta la pausa dopo la CTA come parte del target, non in aggiunta
     target_ms = float(data.get("target_ms") or 0)
