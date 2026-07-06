@@ -1169,6 +1169,7 @@ def yt_upload(data):
         "nicchia": meta.get("nicchia"), "voice": meta.get("voice"),
         "music": meta.get("music"), "duration": meta.get("duration"),
         "hook": meta.get("hook"), "lang": meta.get("lang"),
+        "format": meta.get("format"),
     })
     return {"id": vid, "url": f"https://youtu.be/{vid}", "thumbnail": thumb_set,
             "scheduled": bool(publish_at)}
