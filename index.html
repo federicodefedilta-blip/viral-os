@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.11.1';
-  const LAST_UPDATED = '2026-07-06 12:37';
+  const CURRENT_VERSION = 'v3.11.2';
+  const LAST_UPDATED = '2026-07-06 12:44';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1911,11 +1911,8 @@ Rispondi SOLO con JSON valido:
       'e il numero 1 non ha una spiegazione razionale',
       'e quello che scoprirai al numero 1 ti perseguiterà',
       'e il numero 1 fa ancora paura a chi lo racconta',
-      'e il numero 1 è la storia più assurda che sentirai oggi',
-      'e quello che è successo al numero 1 non si dimentica',
       'e il numero 1 lascia ancora tutti senza parole',
       'e il numero 1 potrebbe essere più vicino di quanto pensi',
-      'e il numero 1 è ancora là fuori',
     ];
     const hookSample = [...hookPool].sort(()=>Math.random()-0.5).slice(0,4);
     const _opt = getOptimize();
