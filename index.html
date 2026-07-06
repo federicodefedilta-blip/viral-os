@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.10.0';
-  const LAST_UPDATED = '2026-07-06 09:43';
+  const CURRENT_VERSION = 'v3.10.1';
+  const LAST_UPDATED = '2026-07-06 12:00';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1494,13 +1494,14 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           if (!rClips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
           const rUsed = new Set();
           const rIntro = (await searchClip('dark horror fog atmosphere', k, rUsed) || await searchClip(data.video_theme, k, rUsed));
-          const estSec = 12 + (data.items||[]).length*9 + 8;
+          const rTargetSec = parseInt(dur) || 61;
+          const estSec = Math.max(rTargetSec, 12 + (data.items||[]).length*9 + 8);
           let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
           add(`${dayLabel} monto classifica (foto Wikipedia dinamiche)...`);
           const rr = await fetchRetry('http://127.0.0.1:5555/render_ranking', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ voice: vVoice, fallback: rClips, intro_clip: (rIntro?rIntro.url:rClips[0]), lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
-              intro: data.intro, items: data.items, outro: data.outro }) });
+              intro: data.intro, items: data.items, outro: data.outro, target_ms: rTargetSec*1000 }) });
           if (!rr.ok) throw new Error(await rr.text());
           await rr.blob();
         } else if (fmt === 'interattivo') {
@@ -1508,20 +1509,21 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value) || 3));
           const choiceSec = Math.max(3, Math.min(8, parseInt(document.getElementById('intSeconds').value) || 5));
           for (let a = 0; a < 3; a++) {
-            try { data = await generateInteractiveData(lang, dur, rounds); break; }
+            try { data = await generateInteractiveData(lang, dur, rounds, choiceSec); break; }
             catch(e) { const msg = e.message||''; const m = msg.match(/try again in ([\d.]+)s/);
               if (/rate limit|TPM|429/i.test(msg) && a < 2) { const w = Math.ceil(m?parseFloat(m[1]):30)+5; add(`${dayLabel} rate limit, attendo ${w}s...`); await sleep(w*1000); continue; }
               throw e; } }
           add(`${dayLabel} «${data.titolo}» — ${(data.rounds||[]).length} scelte`);
           const clips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:[]}, k.pexels)).results.map(v=>v.url);
           if (!clips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
-          const estSec = 20 + (data.rounds||[]).length*(choiceSec+6) + 8;
+          const iTargetSec = parseInt(dur) || 61;
+          const estSec = Math.max(iTargetSec, 20 + (data.rounds||[]).length*(choiceSec+6) + 8);
           let musicB64 = null; try { musicB64 = await renderMusicWavBase64(vMusic, bgVol, estSec); } catch {}
           add(`${dayLabel} monto interattivo (${clips.length} clip · ${vVoice.split('-').pop()})...`);
           const rr = await fetchRetry('http://127.0.0.1:5555/render_interactive', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ voice: vVoice, clips, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
-              choice_ms: choiceSec*1000, intro: data.intro, rounds: data.rounds, finale: data.finale }) });
+              choice_ms: choiceSec*1000, intro: data.intro, rounds: data.rounds, finale: data.finale, target_ms: iTargetSec*1000 }) });
           if (!rr.ok) throw new Error(await rr.text());
           await rr.blob();
         } else if (fmt === 'whodunit') {
