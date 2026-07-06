@@ -41,7 +41,7 @@ W, H = 1080, 1920
 
 # Filtro clip: zoom lento cinematografico (Ken Burns) + grana pellicola horror
 ZW, ZH = int(1080 * 1.14), int(1920 * 1.14)
-CLIP_VF = (f"scale={ZW}:{ZH}:force_original_aspect_ratio=increase,crop={ZW}:{ZH},"
+CLIP_VF = (f"scale={ZW}:{ZH}:force_original_aspect_ratio=increase:flags=lanczos,crop={ZW}:{ZH},"
            f"zoompan=z='min(1.0+0.0011*in,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
            f"d=1:s=1080x1920:fps=30,noise=c0s=9:allf=t,setsar=1,format=yuv420p")
 
@@ -114,6 +114,28 @@ def download_file(url, path):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=30) as r, open(path, "wb") as f:
         shutil.copyfileobj(r, f)
+
+
+MIN_IMG_DIM = 500  # sotto questa risoluzione (lato corto) una foto Wikipedia risulta sgranata dopo lo zoom Ken Burns
+
+
+def image_min_dim(ffmpeg, path):
+    """Lato più corto dell'immagine in pixel, o 0 se non leggibile. Usato per scartare foto troppo piccole."""
+    # replace solo sul nome file (non sull'intero path): la cartella di ffmpeg.exe
+    # spesso contiene "ffmpeg" nel nome (es. ffmpeg-8.1.1-full_build), un replace
+    # naive su tutto il path la corrompe e ffprobe non viene più trovato
+    base = os.path.basename(ffmpeg).lower().replace("ffmpeg", "ffprobe")
+    ffprobe = os.path.join(os.path.dirname(ffmpeg), base)
+    try:
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10,
+        )
+        w, h = out.stdout.decode().strip().split(",")
+        return min(int(w), int(h))
+    except Exception:
+        return 0
 
 
 def ms_to_ass(ms):
@@ -237,7 +259,7 @@ def render_job(data, work):
             wp = os.path.join(work, f"wimg{j}.jpg")
             try:
                 download_file(img, wp)
-                if os.path.getsize(wp) > 0:
+                if os.path.getsize(wp) > 0 and image_min_dim(ffmpeg, wp) >= MIN_IMG_DIM:
                     clip_paths.append((wp, "image"))
             except Exception:
                 pass
@@ -715,7 +737,7 @@ def render_ranking_job(data, work):
             cp = os.path.join(work, f"m{i}_{j}.jpg")
             try:
                 download_file(img, cp)
-                if os.path.getsize(cp) > 0:
+                if os.path.getsize(cp) > 0 and image_min_dim(ffmpeg, cp) >= MIN_IMG_DIM:
                     srcs.append((cp, "image"))
             except Exception:
                 pass
