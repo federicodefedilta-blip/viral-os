@@ -349,7 +349,7 @@ def _ass_header_i(styles):
             % (W, H, styles))
 
 
-def build_interactive_ass(timeline, path):
+def build_interactive_ass(timeline, pad_ms, path):
     # N = narrazione karaoke (basso), I = overlay posizionati (scelte/countdown/reveal)
     styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleI = "Style: I,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,3,5,0,0,0,1"
@@ -399,6 +399,13 @@ def build_interactive_ass(timeline, path):
                       % (ms_to_ass(ce), ms_to_ass(re_end), ca, ma, a))
             ev.append("Dialogue: 3,%s,%s,I,,0,0,0,,{\\pos(540,1100)\\fs60\\bord8\\c%s}%s B)  %s\n"
                       % (ms_to_ass(ce), ms_to_ass(re_end), cb, mb, b))
+    # coda finale con solo musica (padding sull'ultimo segmento): mostra condividi + iscriviti
+    if pad_ms > 0 and timeline:
+        last_item = timeline[-1]
+        st = ms_to_ass(last_item["start"] + last_item["dur"])
+        en = ms_to_ass(last_item["start"] + last_item["dur"] + pad_ms)
+        ev.append("Dialogue: 3,%s,%s,I,,0,0,0,,{\\pos(540,1300)\\fs56\\c&H00F0FF&\\bord7\\shad3}📤 CONDIVIDI\n" % (st, en))
+        ev.append("Dialogue: 3,%s,%s,I,,0,0,0,,{\\pos(540,1460)\\fs56\\c&H00F0FF&\\bord7\\shad3}🔔 ISCRIVITI\n" % (st, en))
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(ev))
 
@@ -518,7 +525,7 @@ def render_interactive_job(data, work):
 
     # base video + sottotitoli interattivi
     build_base_even(ffmpeg, clip_paths, total_ms, work)
-    build_interactive_ass(timeline, os.path.join(work, "subs.ass"))
+    build_interactive_ass(timeline, pad_ms, os.path.join(work, "subs.ass"))
 
     total_sec = total_ms / 1000.0
     out = os.path.join(work, "final.mp4")
@@ -568,7 +575,7 @@ def _karaoke_dialogue(ev, base, seg_dur, words):
         ev.append("Dialogue: 0,%s,%s,N,,0,0,0,,%s\n" % (ms_to_ass(st), ms_to_ass(en), body))
 
 
-def build_ranking_ass(timeline, path):
+def build_ranking_ass(timeline, pad_ms, path):
     styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleB = "Style: B,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
     ev = [_ass_header_i(styleN + "\n" + styleB)]
@@ -587,6 +594,13 @@ def build_ranking_ass(timeline, path):
             st = ms_to_ass(base); en = ms_to_ass(base + dur)
             ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs64\\c&H00F0FF&\\bord7\\shad3}COMMENTA E METTI LIKE\n"
                       % (st, en))
+    # coda finale con solo musica (padding sull'ultimo segmento): mostra condividi + iscriviti
+    if pad_ms > 0 and timeline:
+        last_item = timeline[-1]
+        st = ms_to_ass(last_item["start"] + last_item["dur"])
+        en = ms_to_ass(last_item["start"] + last_item["dur"] + pad_ms)
+        ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1300)\\fs56\\c&H00F0FF&\\bord7\\shad3}📤 CONDIVIDI\n" % (st, en))
+        ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1460)\\fs56\\c&H00F0FF&\\bord7\\shad3}🔔 ISCRIVITI\n" % (st, en))
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(ev))
 
@@ -788,7 +802,7 @@ def render_ranking_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "rlist.txt",
                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
            cwd=work)
-    build_ranking_ass(timeline, os.path.join(work, "subs.ass"))
+    build_ranking_ass(timeline, pad_ms, os.path.join(work, "subs.ass"))
 
     total_sec = total_ms / 1000.0
     out = os.path.join(work, "final.mp4")
