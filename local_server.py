@@ -1226,6 +1226,7 @@ def yt_analytics(max_videos=25):
             retention[d["video"]] = {
                 "retention": d.get("averageViewPercentage"),
                 "avgDur": d.get("averageViewDuration"),
+                "sampleViews": d.get("views"),
             }
     except Exception as e:
         analytics_ok = False
@@ -1235,11 +1236,21 @@ def yt_analytics(max_videos=25):
     for vid, title, pub in vids:
         st = stats.get(vid, {})
         rt = retention.get(vid, {})
+        real_views = st.get("views", 0)
+        sample_views = rt.get("sampleViews")
+        # L'API Analytics impiega 24-72h a processare le view: su video recenti
+        # può restituire una retention "vera" ma basata su un campione minuscolo
+        # (es. 1 view analizzata contro 500 reali) che non è statisticamente
+        # affidabile. Se il campione copre meno della metà delle view reali,
+        # trattiamo la retention come "in elaborazione" invece che mostrarla.
+        stale = sample_views is not None and real_views > 0 and sample_views < real_views * 0.5
         out.append({
             "id": vid, "title": title, "published": pub,
-            "views": st.get("views", 0), "likes": st.get("likes", 0),
+            "views": real_views, "likes": st.get("likes", 0),
             "comments": st.get("comments", 0),
-            "retention": rt.get("retention"), "avgDur": rt.get("avgDur"),
+            "retention": None if stale else rt.get("retention"),
+            "avgDur": None if stale else rt.get("avgDur"),
+            "retentionPending": stale,
         })
     return {"videos": out, "subs": subs, "analytics_ok": analytics_ok}
 
