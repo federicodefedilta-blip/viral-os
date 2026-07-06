@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.11.0';
-  const LAST_UPDATED = '2026-07-06 14:00';
+  const CURRENT_VERSION = 'v3.11.1';
+  const LAST_UPDATED = '2026-07-06 12:37';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1903,6 +1903,21 @@ Rispondi SOLO con JSON valido:
       `misteri e sparizioni reali irrisolti ${area}`,
     ];
     const tema = temaPool[Math.floor(Math.random()*temaPool.length)];
+    // chiusure per l'intro: "è ancora là fuori" ha senso solo per creature/luoghi che si muovono,
+    // non per un dipinto, una bambola in teca o un film — pool varia + campione casuale ogni volta
+    const hookPool = [
+      'e il numero 1 ti farà dubitare di tutto',
+      'e nessuno è mai riuscito a spiegare il numero 1',
+      'e il numero 1 non ha una spiegazione razionale',
+      'e quello che scoprirai al numero 1 ti perseguiterà',
+      'e il numero 1 fa ancora paura a chi lo racconta',
+      'e il numero 1 è la storia più assurda che sentirai oggi',
+      'e quello che è successo al numero 1 non si dimentica',
+      'e il numero 1 lascia ancora tutti senza parole',
+      'e il numero 1 potrebbe essere più vicino di quanto pensi',
+      'e il numero 1 è ancora là fuori',
+    ];
+    const hookSample = [...hookPool].sort(()=>Math.random()-0.5).slice(0,4);
     const _opt = getOptimize();
     const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
     const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
@@ -1915,7 +1930,7 @@ REGOLE FONDAMENTALI:
 - USA SOLO SOGGETTI REALI ED ESISTENTI (luoghi, oggetti maledetti, bambole infestate, creature/criptidi, film maledetti, casi paranormali...), con il loro NOME PROPRIO esatto (es. "Isola di Poveglia", "Bambola Annabelle", "Robert the Doll", "Mothman", "Dipinto The Anguished Man"). VIETATO inventare nomi o usare descrizioni generiche tipo "un vecchio castello" o "una bambola".
 - Il campo "titolo" DEVE essere il nome reale del soggetto (serve a trovarne la foto vera su Wikipedia). Nella "query" metti il nome reale in inglese + una parola tipo "haunted/cursed/abandoned".
 - Devono essere soggetti davvero famosi/documentati, così esistono foto e informazioni vere.
-- INTRO FULMINANTE (max 1 frase, ~2 secondi): niente preamboli, entra subito. Deve promettere che il #1 è scioccante E anticipare che vale l'attesa (es. "I 3 [tema] più spaventosi mai documentati — e il numero 1 è ancora là fuori."). Poi via SUBITO al primo elemento.
+- INTRO FULMINANTE (max 1 frase, ~2 secondi): niente preamboli, entra subito. Deve promettere che il #1 è scioccante E anticipare che vale l'attesa, con una chiusura ADATTA al soggetto (una frase su un dipinto o una bambola in teca non può dire "è ancora là fuori" — quello vale solo per creature o luoghi). Spunti di chiusura da adattare al tema, VIETATO copiarli testualmente e VIETATO usare sempre la stessa in ogni video: ${hookSample.map(h=>`"${h}"`).join(', ')}. Poi via SUBITO al primo elemento.
 - Gli elementi vanno in COUNTDOWN dal ${n} all'1, intensità CRESCENTE (l'1 è il più agghiacciante).
 - Ogni elemento: titolo (nome reale) + descrizione di UNA SOLA frase secca, concreta e inquietante. RITMO VELOCE, zero prolissità — la gente deve arrivare al #1.
 - L'outro (1 frase) rilancia sul #1 e chiede un commento con una domanda diretta.
