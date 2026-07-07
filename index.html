@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.11.3';
-  const LAST_UPDATED = '2026-07-06 13:14';
+  const CURRENT_VERSION = 'v3.11.4';
+  const LAST_UPDATED = '2026-07-07 15:45';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1830,6 +1830,37 @@ Rispondi SOLO con JSON valido:
     d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
     d.rounds = Array.isArray(d.rounds) ? d.rounds : [];
     d.video_theme = d.video_theme || 'dark';
+    // SICUREZZA DURATA: il budget di parole nel prompt è solo un suggerimento, il
+    // modello a volte lo ignora e scrive molto più testo del previsto — il video
+    // non ha un tetto massimo (solo un pavimento via target_ms/padding lato server),
+    // quindi uno script troppo lungo si traduce in un video molto più lungo del
+    // target (es. 61s selezionati -> quasi 2 minuti reali). Se il totale supera il
+    // budget di oltre il 25%, tronca proporzionalmente ogni campo per riportarlo
+    // vicino al target, proteggendo il "Cosa fai: A o B?" finale di ogni situazione.
+    const wc = t => (t||'').trim().split(/\s+/).filter(Boolean).length;
+    function capWords(text, maxWords, protectQuestion) {
+      if (!text) return text;
+      let prefix = text, suffix = '';
+      if (protectQuestion) {
+        const m = text.match(/Cosa (fai|facciamo)[^?]*\?|Qué (haces|hacemos)[^?]*\?|What do (you|we) do[^?]*\?/i);
+        if (m) { prefix = text.slice(0, m.index); suffix = text.slice(m.index); }
+      }
+      const words = prefix.trim().split(/\s+/).filter(Boolean);
+      if (words.length <= maxWords) return text;
+      let trimmed = words.slice(0, Math.max(3, maxWords)).join(' ');
+      if (!/[.!?…]$/.test(trimmed)) trimmed += '.';
+      return suffix ? `${trimmed} ${suffix}` : trimmed;
+    }
+    const totalNow = wc(d.intro) + d.rounds.reduce((s,r)=>s+wc(r.situazione)+wc(r.esito),0) + wc(d.finale);
+    if (totalNow > narrationWords * 1.25) {
+      const scale = narrationWords / totalNow;
+      d.intro = capWords(d.intro, Math.round(wc(d.intro)*scale));
+      d.rounds.forEach(r => {
+        r.situazione = capWords(r.situazione, Math.round(wc(r.situazione)*scale), true);
+        r.esito = capWords(r.esito, Math.round(wc(r.esito)*scale));
+      });
+      d.finale = capWords(d.finale, Math.round(wc(d.finale)*scale));
+    }
     return d;
   }
 
