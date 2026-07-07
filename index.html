@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.12.2';
-  const LAST_UPDATED = '2026-07-07 17:42';
+  const CURRENT_VERSION = 'v3.12.3';
+  const LAST_UPDATED = '2026-07-07 18:01';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1334,12 +1334,32 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     }
   }
 
+  // Apre la scheda di consenso TikTok con window.open() (eredita la modalità
+  // normale/incognito della finestra corrente, a differenza di un browser aperto
+  // lato server) e resta in attesa facendo polling su /tiktok_status, perché la
+  // scheda aperta e questa pagina sono due contesti separati che non comunicano
+  // direttamente: il collegamento vero e proprio lo completa /tiktok_callback.
+  async function tkOpenAndWait(setMsg) {
+    const r = await fetch('http://127.0.0.1:5555/tiktok_auth');
+    if (!r.ok) throw new Error(await r.text());
+    const j = await r.json();
+    if (!j.auth_url) throw new Error('URL di consenso mancante nella risposta del server');
+    window.open(j.auth_url, '_blank');
+    setMsg('🔄 Completa il login nella scheda appena aperta... in attesa (fino a 3 minuti).');
+    const deadline = Date.now() + 180000;
+    while (Date.now() < deadline) {
+      await new Promise(res => setTimeout(res, 3000));
+      const s = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json();
+      if (s.authorized) return s;
+    }
+    throw new Error('timeout: autorizzazione non completata in tempo, riprova');
+  }
+
   async function tkConnect() {
     const el = document.getElementById('tkStatus');
-    el.innerHTML = '🔄 Apertura consenso TikTok nel browser... autorizza e torna qui (la pagina di callback dirà "Fatto").';
     try {
-      const r = await fetch('http://127.0.0.1:5555/tiktok_auth');
-      if (!r.ok) throw new Error(await r.text());
+      const s = await tkOpenAndWait(h => el.innerHTML = h);
+      el.innerHTML = `✅ Collegato come <strong>${escTxt(s.username||'account TikTok')}</strong>`;
       await tkCheckStatus();
     } catch(e){ el.innerHTML = '❌ Errore collegamento: ' + escTxt(e.message||e); }
   }
@@ -1733,12 +1753,9 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const setMsg = (h) => { if (el) el.innerHTML = h; };
     try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
     catch { setMsg('⚠️ Server locale non attivo. Avvia <code>START_LOCAL_SERVER.bat</code>.'); return; }
-    setMsg('🔄 Apertura consenso TikTok nel browser... autorizza e torna qui.');
     try {
-      const r = await fetch('http://127.0.0.1:5555/tiktok_auth');
-      if (!r.ok) throw new Error(await r.text());
-      const j = await r.json();
-      setMsg(`✅ Collegato come <strong>${escTxt(j.username||'account TikTok')}</strong>`);
+      const s = await tkOpenAndWait(setMsg);
+      setMsg(`✅ Collegato come <strong>${escTxt(s.username||'account TikTok')}</strong>`);
     } catch(e) { setMsg('❌ Errore: ' + escTxt(e.message||e)); }
   }
 

@@ -27,9 +27,7 @@ import glob
 import tempfile
 import shutil
 import subprocess
-import threading
 import secrets
-import webbrowser
 import urllib.request
 import urllib.parse
 from shutil import which
@@ -73,11 +71,9 @@ TIKTOK_AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
 TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 TIKTOK_API_BASE = "https://open.tiktokapis.com/v2/post/publish"
 
-# stato del flusso OAuth TikTok: /tiktok_auth resta bloccato in attesa che il
-# browser dell'utente completi il consenso e la pagina di callback su gh-pages
-# richiami /tiktok_callback su questo stesso server (vedi tk_authorize()).
-_tk_auth_event = threading.Event()
-_tk_auth_result = {}
+# stato del flusso OAuth TikTok: /tiktok_auth costruisce e restituisce l'URL di
+# consenso (aperto lato client con window.open, non dal server); /tiktok_callback
+# riceve il code dalla pagina statica su gh-pages e completa lo scambio token.
 _tk_expected_state = None
 
 
@@ -1376,9 +1372,9 @@ def yt_optimize():
 # InstalledAppFlow.run_local_server(): TikTok richiede un redirect_uri HTTPS
 # statico pre-registrato, non una porta locale dinamica. Il redirect punta alla
 # pagina statica tiktok-callback.html su gh-pages, che inoltra il code a questo
-# server via POST /tiktok_callback: tk_authorize() resta bloccato ad aspettarlo
-# con un threading.Event (il server è già ThreadingHTTPServer, quindi un
-# thread può restare in attesa mentre un altro gestisce la richiesta di callback).
+# server via POST /tiktok_callback, dove si completa subito lo scambio token
+# (nessuna attesa bloccante lato server: il client fa polling su /tiktok_status
+# dopo aver aperto lui stesso, con window.open(), la scheda di consenso).
 
 def tk_get_credentials():
     """Carica/rinnova il token TikTok salvato. None se non autorizzato."""
@@ -1449,8 +1445,12 @@ def tk_exchange_code(code):
     return _tk_save_token(j)
 
 
-def tk_authorize():
-    """Avvia il flusso OAuth TikTok (apre il browser) e resta in attesa del callback."""
+def tk_build_auth_url():
+    """Costruisce l'URL di consenso TikTok. NON apre il browser lato server: aprirlo
+    da webbrowser.open() userebbe sempre il browser predefinito in modalità normale,
+    ignorando l'incognito della scheda da cui l'utente ha avviato il collegamento.
+    Il link viene aperto lato client con window.open(), che eredita correttamente
+    la modalità (normale/incognito) della finestra del browser in uso."""
     global _tk_expected_state
     if not os.path.exists(TIKTOK_SECRET):
         raise RuntimeError("tiktok_secret.json mancante nella cartella viral-os")
@@ -1462,17 +1462,7 @@ def tk_authorize():
         "scope": TIKTOK_SCOPES, "redirect_uri": TIKTOK_REDIRECT_URI,
         "state": _tk_expected_state,
     })
-    _tk_auth_event.clear()
-    _tk_auth_result.clear()
-    webbrowser.open(f"{TIKTOK_AUTH_URL}?{qs}")
-    print("  -> apro il browser per il consenso TikTok (se non si apre, controlla i popup bloccati)...")
-    if not _tk_auth_event.wait(timeout=180):
-        raise RuntimeError("timeout: autorizzazione TikTok non completata in tempo (3 min)")
-    if _tk_auth_result.get("error"):
-        raise RuntimeError(f"TikTok ha rifiutato l'autorizzazione: {_tk_auth_result['error']}")
-    if _tk_auth_result.get("state") != _tk_expected_state:
-        raise RuntimeError("stato OAuth non corrispondente (possibile problema di sicurezza), riprova")
-    return tk_exchange_code(_tk_auth_result["code"])
+    return f"{TIKTOK_AUTH_URL}?{qs}"
 
 
 def _tk_request(path, access_token, payload):
@@ -1659,13 +1649,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/tiktok_auth":
             try:
-                print("  -> avvio OAuth TikTok (apro il browser per il consenso)...")
-                tk_authorize()
-                tok = tk_get_credentials()
-                info = tk_creator_info(tok["access_token"])
-                print(f"     autorizzato: {info.get('username')}")
-                self._send(200, "application/json",
-                           json.dumps({"authorized": True, "username": info.get("username")}).encode("utf-8"))
+                url = tk_build_auth_url()
+                self._send(200, "application/json", json.dumps({"auth_url": url}).encode("utf-8"))
             except Exception as e:
                 print(f"     ERRORE auth TikTok: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
@@ -1801,14 +1786,20 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/tiktok_callback":
             # chiamato dalla pagina statica tiktok-callback.html (gh-pages) dopo il
-            # consenso: sblocca tk_authorize() che sta aspettando su _tk_auth_event
+            # consenso: completa subito lo scambio code->token. Il client (tkConnect)
+            # scopre l'esito facendo polling su /tiktok_status, non da questa risposta
+            # (la scheda del browser e la pagina del tool sono contesti separati).
             try:
                 data = json.loads(raw.decode("utf-8"))
-                _tk_auth_result.clear()
-                _tk_auth_result.update(data)
-                _tk_auth_event.set()
+                if data.get("error"):
+                    raise RuntimeError(f"TikTok ha rifiutato l'autorizzazione: {data['error']}")
+                if data.get("state") != _tk_expected_state:
+                    raise RuntimeError("stato OAuth non corrispondente (possibile problema di sicurezza), riprova")
+                tk_exchange_code(data["code"])
+                print("  -> TikTok autorizzato")
                 self._send(200, "application/json", json.dumps({"ok": True}).encode("utf-8"))
             except Exception as e:
+                print(f"     ERRORE callback TikTok: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
