@@ -27,7 +27,11 @@ import glob
 import tempfile
 import shutil
 import subprocess
+import threading
+import secrets
+import webbrowser
 import urllib.request
+import urllib.parse
 from shutil import which
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -55,6 +59,24 @@ TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
              "https://www.googleapis.com/auth/youtube",
              "https://www.googleapis.com/auth/yt-analytics.readonly"]
+
+TIKTOK_SECRET = os.path.join(BASE_DIR, "tiktok_secret.json")       # {"client_key","client_secret"}, fornito dall'utente
+TIKTOK_TOKEN_FILE = os.path.join(BASE_DIR, "tiktok_token.json")
+# TikTok non supporta un redirect su porta locale dinamica (a differenza di Google):
+# serve un URL HTTPS statico pre-registrato nell'app TikTok -> usiamo la pagina
+# statica pubblicata su gh-pages accanto a index.html, che inoltra il code qui.
+TIKTOK_REDIRECT_URI = "https://federicodefedilta-blip.github.io/viral-os/tiktok-callback.html"
+TIKTOK_SCOPES = "user.info.basic,video.publish"
+TIKTOK_AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
+TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
+TIKTOK_API_BASE = "https://open.tiktokapis.com/v2/post/publish"
+
+# stato del flusso OAuth TikTok: /tiktok_auth resta bloccato in attesa che il
+# browser dell'utente completi il consenso e la pagina di callback su gh-pages
+# richiami /tiktok_callback su questo stesso server (vedi tk_authorize()).
+_tk_auth_event = threading.Event()
+_tk_auth_result = {}
+_tk_expected_state = None
 
 
 # ----------------------------- TTS -----------------------------
@@ -1347,6 +1369,199 @@ def yt_optimize():
             "analytics_ok": an.get("analytics_ok", True)}
 
 
+# ----------------------------- TIKTOK -----------------------------
+# Stesso pattern delle funzioni yt_* qui sopra, ma il flusso OAuth non può usare
+# InstalledAppFlow.run_local_server(): TikTok richiede un redirect_uri HTTPS
+# statico pre-registrato, non una porta locale dinamica. Il redirect punta alla
+# pagina statica tiktok-callback.html su gh-pages, che inoltra il code a questo
+# server via POST /tiktok_callback: tk_authorize() resta bloccato ad aspettarlo
+# con un threading.Event (il server è già ThreadingHTTPServer, quindi un
+# thread può restare in attesa mentre un altro gestisce la richiesta di callback).
+
+def tk_get_credentials():
+    """Carica/rinnova il token TikTok salvato. None se non autorizzato."""
+    if not os.path.exists(TIKTOK_TOKEN_FILE):
+        return None
+    try:
+        with open(TIKTOK_TOKEN_FILE, "r", encoding="utf-8") as f:
+            tok = json.load(f)
+    except Exception:
+        return None
+    import time as _time
+    if tok.get("expires_at", 0) <= _time.time():
+        tok = tk_refresh(tok)
+    return tok
+
+
+def tk_refresh(tok):
+    """Rinnova l'access token scaduto usando il refresh_token. None se non riuscito."""
+    if not tok.get("refresh_token") or not os.path.exists(TIKTOK_SECRET):
+        return None
+    with open(TIKTOK_SECRET, "r", encoding="utf-8") as f:
+        secret = json.load(f)
+    body = urllib.parse.urlencode({
+        "client_key": secret["client_key"], "client_secret": secret["client_secret"],
+        "grant_type": "refresh_token", "refresh_token": tok["refresh_token"],
+    }).encode("utf-8")
+    req = urllib.request.Request(TIKTOK_TOKEN_URL, data=body, method="POST",
+                                  headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            j = json.load(r)
+    except Exception as e:
+        print(f"     refresh TikTok fallito: {e}")
+        return None
+    return _tk_save_token(j)
+
+
+def _tk_save_token(j):
+    """Salva la risposta OAuth TikTok (access/refresh token) con scadenza assoluta."""
+    import time as _time
+    now = _time.time()
+    tok = {
+        "access_token": j["access_token"], "refresh_token": j.get("refresh_token"),
+        "open_id": j.get("open_id"),
+        "expires_at": now + int(j.get("expires_in", 0)) - 60,  # -60s di margine
+        "refresh_expires_at": now + int(j.get("refresh_expires_in", 0)),
+    }
+    with open(TIKTOK_TOKEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(tok, f)
+    return tok
+
+
+def tk_exchange_code(code):
+    """Scambia il code OAuth per un access/refresh token. Salva tiktok_token.json."""
+    with open(TIKTOK_SECRET, "r", encoding="utf-8") as f:
+        secret = json.load(f)
+    body = urllib.parse.urlencode({
+        "client_key": secret["client_key"], "client_secret": secret["client_secret"],
+        "code": code, "grant_type": "authorization_code",
+        "redirect_uri": TIKTOK_REDIRECT_URI,
+    }).encode("utf-8")
+    req = urllib.request.Request(TIKTOK_TOKEN_URL, data=body, method="POST",
+                                  headers={"Content-Type": "application/x-www-form-urlencoded"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        j = json.load(r)
+    if "access_token" not in j:
+        raise RuntimeError(f"risposta TikTok senza access_token: {j}")
+    return _tk_save_token(j)
+
+
+def tk_authorize():
+    """Avvia il flusso OAuth TikTok (apre il browser) e resta in attesa del callback."""
+    global _tk_expected_state
+    if not os.path.exists(TIKTOK_SECRET):
+        raise RuntimeError("tiktok_secret.json mancante nella cartella viral-os")
+    with open(TIKTOK_SECRET, "r", encoding="utf-8") as f:
+        secret = json.load(f)
+    _tk_expected_state = secrets.token_urlsafe(16)
+    qs = urllib.parse.urlencode({
+        "client_key": secret["client_key"], "response_type": "code",
+        "scope": TIKTOK_SCOPES, "redirect_uri": TIKTOK_REDIRECT_URI,
+        "state": _tk_expected_state,
+    })
+    _tk_auth_event.clear()
+    _tk_auth_result.clear()
+    webbrowser.open(f"{TIKTOK_AUTH_URL}?{qs}")
+    print("  -> apro il browser per il consenso TikTok (se non si apre, controlla i popup bloccati)...")
+    if not _tk_auth_event.wait(timeout=180):
+        raise RuntimeError("timeout: autorizzazione TikTok non completata in tempo (3 min)")
+    if _tk_auth_result.get("error"):
+        raise RuntimeError(f"TikTok ha rifiutato l'autorizzazione: {_tk_auth_result['error']}")
+    if _tk_auth_result.get("state") != _tk_expected_state:
+        raise RuntimeError("stato OAuth non corrispondente (possibile problema di sicurezza), riprova")
+    return tk_exchange_code(_tk_auth_result["code"])
+
+
+def _tk_request(path, access_token, payload):
+    req = urllib.request.Request(
+        f"{TIKTOK_API_BASE}{path}", data=json.dumps(payload).encode("utf-8"), method="POST",
+        headers={"Content-Type": "application/json; charset=UTF-8",
+                 "Authorization": f"Bearer {access_token}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+
+def tk_creator_info(access_token):
+    """Info sul creator + privacy_level consentiti ORA (SELF_ONLY finché l'app non è auditata)."""
+    j = _tk_request("/creator_info/query/", access_token, {})
+    d = j.get("data", {})
+    return {
+        "username": d.get("creator_username") or d.get("creator_nickname"),
+        "privacy_options": d.get("privacy_level_options") or [],
+        "max_duration_sec": d.get("max_video_post_duration_sec"),
+    }
+
+
+def tk_upload(data):
+    """Carica LAST_RENDER su TikTok tramite la Content Posting API (source FILE_UPLOAD)."""
+    tok = tk_get_credentials()
+    if not tok:
+        raise RuntimeError("non autorizzato - clicca prima 'Collega TikTok'")
+    if not os.path.exists(LAST_RENDER):
+        raise RuntimeError("nessun video montato - assembla prima il video")
+    access_token = tok["access_token"]
+
+    info = tk_creator_info(access_token)
+    options = info.get("privacy_options") or ["SELF_ONLY"]
+    # non fissare mai la privacy: la scegliamo tra quelle DAVVERO consentite ora
+    # (SELF_ONLY finché TikTok non ha approvato l'app, poi si sblocca da sola)
+    wanted = data.get("privacy")
+    privacy_level = wanted if wanted in options else options[0]
+
+    caption = (data.get("caption") or "").strip()[:2200]
+    video_size = os.path.getsize(LAST_RENDER)
+
+    init = _tk_request("/video/init/", access_token, {
+        "post_info": {
+            "title": caption, "privacy_level": privacy_level,
+            "disable_duet": False, "disable_stitch": False, "disable_comment": False,
+        },
+        "source_info": {
+            "source": "FILE_UPLOAD", "video_size": video_size,
+            "chunk_size": video_size, "total_chunk_count": 1,
+        },
+    })
+    idata = init.get("data") or {}
+    publish_id, upload_url = idata.get("publish_id"), idata.get("upload_url")
+    if not publish_id or not upload_url:
+        raise RuntimeError(f"init TikTok fallito: {init}")
+
+    with open(LAST_RENDER, "rb") as f:
+        video_bytes = f.read()
+    put_req = urllib.request.Request(upload_url, data=video_bytes, method="PUT", headers={
+        "Content-Type": "video/mp4", "Content-Length": str(video_size),
+        "Content-Range": f"bytes 0-{video_size - 1}/{video_size}",
+    })
+    with urllib.request.urlopen(put_req, timeout=120) as r:
+        r.read()
+
+    import time as _time
+    status_data = {}
+    for _ in range(40):  # fino a ~2 minuti di polling
+        st = _tk_request("/status/fetch/", access_token, {"publish_id": publish_id})
+        status_data = st.get("data") or {}
+        status = status_data.get("status")
+        if status == "PUBLISH_COMPLETE":
+            break
+        if status == "FAILED":
+            raise RuntimeError(f"pubblicazione TikTok fallita: {status_data.get('fail_reason')}")
+        _time.sleep(3)
+    else:
+        raise RuntimeError("timeout in attesa di conferma da TikTok (video caricato ma stato incerto)")
+
+    meta = data.get("meta") or {}
+    registry_add({
+        "id": publish_id, "title": caption[:100], "ts": _time.strftime("%Y-%m-%d %H:%M"),
+        "publishAt": None, "privacy": privacy_level, "platform": "tiktok",
+        "nicchia": meta.get("nicchia"), "voice": meta.get("voice"),
+        "music": meta.get("music"), "duration": meta.get("duration"),
+        "hook": meta.get("hook"), "lang": meta.get("lang"),
+        "format": meta.get("format"),
+    })
+    return {"publish_id": publish_id, "status": "PUBLISH_COMPLETE", "privacy_level": privacy_level}
+
+
 # ----------------------------- HTTP -----------------------------
 
 class Handler(BaseHTTPRequestHandler):
@@ -1422,6 +1637,35 @@ class Handler(BaseHTTPRequestHandler):
                            json.dumps({"authorized": True, "channel": name}).encode("utf-8"))
             except Exception as e:
                 print(f"     ERRORE auth: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/tiktok_status":
+            try:
+                tok = tk_get_credentials()
+                info = tk_creator_info(tok["access_token"]) if tok else None
+                payload = json.dumps({
+                    "configured": os.path.exists(TIKTOK_SECRET),
+                    "authorized": bool(tok),
+                    "username": info.get("username") if info else None,
+                    "privacy_options": info.get("privacy_options") if info else None,
+                }).encode("utf-8")
+                self._send(200, "application/json", payload)
+            except Exception as e:
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/tiktok_auth":
+            try:
+                print("  -> avvio OAuth TikTok (apro il browser per il consenso)...")
+                tk_authorize()
+                tok = tk_get_credentials()
+                info = tk_creator_info(tok["access_token"])
+                print(f"     autorizzato: {info.get('username')}")
+                self._send(200, "application/json",
+                           json.dumps({"authorized": True, "username": info.get("username")}).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE auth TikTok: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
@@ -1550,6 +1794,31 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, "application/json", json.dumps(res).encode("utf-8"))
             except Exception as e:
                 print(f"     ERRORE upload: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/tiktok_callback":
+            # chiamato dalla pagina statica tiktok-callback.html (gh-pages) dopo il
+            # consenso: sblocca tk_authorize() che sta aspettando su _tk_auth_event
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                _tk_auth_result.clear()
+                _tk_auth_result.update(data)
+                _tk_auth_event.set()
+                self._send(200, "application/json", json.dumps({"ok": True}).encode("utf-8"))
+            except Exception as e:
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/tiktok_upload":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                print(f"  -> UPLOAD TikTok: {(data.get('caption') or '')[:50]}...")
+                res = tk_upload(data)
+                print(f"     OK publish_id {res['publish_id']} ({res['privacy_level']})")
+                self._send(200, "application/json", json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE upload TikTok: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 

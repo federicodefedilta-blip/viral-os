@@ -39,7 +39,7 @@ py audio_mixer.py "percorso\al\video.webm" "il testo dello script qui" finale.mp
 py audio_mixer.py "$env:USERPROFILE\Downloads\viral-os-123.webm" "Quella notte sentii dei passi nella soffitta. Ma in casa ero solo. Mi alzai, e quello che vidi mi gela ancora il sangue." finale.mp4
 ```
 
-### 3. Carica `finale.mp4` su YouTube / TikTok / Instagram 🚀
+### 3. Carica `finale.mp4` su YouTube / TikTok 🚀
 
 ---
 

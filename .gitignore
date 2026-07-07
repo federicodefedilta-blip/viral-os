@@ -1,6 +1,8 @@
 # Segreti OAuth - NON committare mai
 client_secret.json
 token.json
+tiktok_secret.json
+tiktok_token.json
 
 # Output runtime
 output/

@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.11.4';
-  const LAST_UPDATED = '2026-07-07 15:45';
+  const CURRENT_VERSION = 'v3.12.0';
+  const LAST_UPDATED = '2026-07-07 16:44';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -188,6 +188,13 @@
       <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Richiede <code>client_secret.json</code> nella cartella + server attivo</div>
     </div>
 
+    <div class="input-group">
+      <label class="input-label" style="display:flex;align-items:center;gap:6px">🎵 TikTok (pubblicazione automatica)</label>
+      <div id="tkStatusModal" style="font-size:0.72em;color:var(--muted);margin:4px 0 8px"></div>
+      <button class="btn btn-ghost" onclick="tkReconnect('tkStatusModal')" style="width:100%;justify-content:center">🔗 Collega / Ricollega TikTok</button>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Richiede <code>tiktok_secret.json</code> nella cartella + server attivo. Finché l'app non supera l'audit di TikTok, i video arrivano come privati/bozza.</div>
+    </div>
+
     <button class="btn btn-primary" onclick="closeKeys()" style="width:100%;justify-content:center;margin-top:8px">✅ Salva e chiudi</button>
   </div>
 </div>
@@ -220,7 +227,6 @@
       <div class="channel-grid">
         <div class="ch-card selected" onclick="selCh(this,'YouTube Shorts')"><div class="ch-icon">▶️</div><div class="ch-name">YouTube</div><div class="ch-desc">Shorts & ads</div></div>
         <div class="ch-card" onclick="selCh(this,'TikTok')"><div class="ch-icon">🎵</div><div class="ch-name">TikTok</div><div class="ch-desc">Viralità organica</div></div>
-        <div class="ch-card" onclick="selCh(this,'Instagram Reels')"><div class="ch-icon">📸</div><div class="ch-name">Instagram</div><div class="ch-desc">Reels & Italia</div></div>
       </div>
       <div class="input-group">
         <label class="input-label">Lingua</label>
@@ -278,7 +284,7 @@
       <div class="input-group">
         <label class="input-label">Durata video</label>
         <select class="input-field" id="dur">
-          <option value="30">30s — Instagram Reels (reach massimo)</option>
+          <option value="30">30s — reach massimo (TikTok/Shorts brevi)</option>
           <option value="45">45s — bilanciato tutte le piattaforme</option>
           <option value="61" selected>61s — YouTube Shorts monetizzabile ✓</option>
           <option value="90">90s — TikTok Creativity Program ✓</option>
@@ -294,7 +300,7 @@
 
     <div class="card" style="margin-top:16px">
       <div class="card-title">📅 Batch settimanale (automatico)</div>
-      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Genera N video di fila, li monta e li <strong>programma su YouTube</strong> a giorni consecutivi. Per ogni video salva anche video+didascalia in <code>output/</code> per caricarli a mano su TikTok/Instagram. Richiede server attivo e YouTube collegato (step 6).</div>
+      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Genera N video di fila, li monta e li <strong>programma su YouTube</strong> a giorni consecutivi. Per ogni video pubblica anche automaticamente su TikTok (se collegato), o salva video+didascalia in <code>output/</code> come fallback. Richiede server attivo e YouTube collegato (step 6).</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div class="input-group" style="flex:1;min-width:90px"><label class="input-label">Quanti</label><input class="input-field" id="batchDays" type="number" min="1" max="14" value="7"></div>
         <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Ora/giorno</label><input class="input-field" id="batchTime" type="time" value="21:00"></div>
@@ -303,6 +309,13 @@
       <div class="input-group"><label class="input-label">🎬 Format</label><select class="input-field" id="batchFormat" onchange="applyRankNSuggestion()"><option value="classica">📖 Storia classica</option><option value="interattivo">🎮 Sopravvivi o Muori</option><option value="classifica">🔢 Classifica del terrore</option><option value="whodunit">🔪 Chi è stato?</option><option value="misto">🎲 Misto (alterna tutti)</option></select></div>
       <button class="btn btn-primary" id="batchBtn" onclick="runWeeklyBatch()" style="width:100%;justify-content:center">🚀 Genera e programma</button>
       <div id="batchLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:200px;overflow-y:auto"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🎵 TikTok (pubblicazione automatica)</div>
+      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Pubblica automaticamente su TikTok tramite la Content Posting API ufficiale. Finché l'app non supera l'audit di TikTok, i video vengono caricati come <strong>privati (solo tu)</strong> — puoi comunque verificare l'intera pipeline end-to-end.</div>
+      <div id="tkStatusMain" style="font-size:0.78em;color:var(--muted);margin-bottom:8px"></div>
+      <button class="btn btn-ghost" onclick="tkReconnect('tkStatusMain')" style="width:100%;justify-content:center">🔗 Collega / Ricollega TikTok</button>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -495,6 +508,7 @@
     updateKeyDots();
     document.getElementById('keysModal').classList.remove('hidden');
     ytShowStatus('ytStatusModal');
+    tkShowStatus('tkStatusModal');
   }
 
   function closeKeys() {
@@ -1193,9 +1207,14 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       <button class="btn btn-primary" id="pubBtn" onclick="ytPublish()" style="width:100%;justify-content:center" disabled>📤 Pubblica su YouTube</button>
       <div id="pubResult" style="margin-top:12px"></div>
       <div style="font-size:0.68em;color:var(--muted);margin-top:10px">Orario ottimale: <strong>${escTxt(d.orario_pubblicazione||'sera')}</strong>. Programmando, la visibilità diventa privata fino all'orario scelto.</div>
+
+      <div id="tkStatus" style="font-size:0.8em;color:var(--muted);margin:16px 0 8px">Verifico collegamento TikTok...</div>
+      <button class="btn btn-primary" id="tkPubBtn" onclick="tkPublish()" style="width:100%;justify-content:center" disabled>🎵 Pubblica su TikTok</button>
+      <div id="tkPubResult" style="margin-top:12px"></div>
     `;
     ytSetOptimal();
     ytCheckStatus();
+    tkCheckStatus();
   }
 
   // Calcola la prossima occorrenza dell'orario ottimale suggerito dall'AI
@@ -1288,6 +1307,60 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     } catch(e){
       res.innerHTML = `<div class="error-box">❌ ${escTxt(e.message||e)}</div>`;
       btn.textContent = '📤 Riprova'; btn.disabled = false;
+    }
+  }
+
+  // --- TikTok (mirror delle funzioni yt* qui sopra) ---
+  async function tkCheckStatus() {
+    const el = document.getElementById('tkStatus');
+    const btn = document.getElementById('tkPubBtn');
+    try {
+      const r = await fetch('http://127.0.0.1:5555/tiktok_status');
+      const s = await r.json();
+      if (!s.configured) {
+        el.innerHTML = '⚠️ TikTok non configurato. Manca <code>tiktok_secret.json</code> (vedi setup TikTok Developer Portal).';
+        if (btn) btn.disabled = true;
+      } else if (!s.authorized) {
+        el.innerHTML = 'TikTok configurato ma non collegato. <button class="btn-sm" onclick="tkConnect()">🔗 Collega TikTok</button>';
+        if (btn) btn.disabled = true;
+      } else {
+        const priv = (s.privacy_options||[]).join(', ') || 'SELF_ONLY';
+        el.innerHTML = `✅ Collegato come <strong>${escTxt(s.username||'account TikTok')}</strong> · privacy consentita ora: ${escTxt(priv)}`;
+        if (btn) btn.disabled = false;
+      }
+    } catch {
+      el.innerHTML = '⚠️ Server locale non attivo. Avvia <code>py local_server.py</code>.';
+      if (btn) btn.disabled = true;
+    }
+  }
+
+  async function tkConnect() {
+    const el = document.getElementById('tkStatus');
+    el.innerHTML = '🔄 Apertura consenso TikTok nel browser... autorizza e torna qui (la pagina di callback dirà "Fatto").';
+    try {
+      const r = await fetch('http://127.0.0.1:5555/tiktok_auth');
+      if (!r.ok) throw new Error(await r.text());
+      await tkCheckStatus();
+    } catch(e){ el.innerHTML = '❌ Errore collegamento: ' + escTxt(e.message||e); }
+  }
+
+  async function tkPublish() {
+    const btn = document.getElementById('tkPubBtn');
+    const res = document.getElementById('tkPubResult');
+    btn.disabled = true; btn.textContent = '⏳ Caricamento...';
+    res.innerHTML = '';
+    const caption = ((document.getElementById('pubTitle').value||'') + '\n\n' + (document.getElementById('pubDesc').value||'')).slice(0, 2200);
+    try {
+      const r = await fetch('http://127.0.0.1:5555/tiktok_upload', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ caption })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      res.innerHTML = `<div class="alert-info">✅ Caricato su TikTok (${escTxt(j.privacy_level)}). Apri l'app TikTok per vederlo/pubblicarlo.</div>`;
+      btn.textContent = '✅ Fatto';
+    } catch(e) {
+      res.innerHTML = `<div class="error-box">❌ ${escTxt(e.message||e)}</div>`;
+      btn.textContent = '🎵 Riprova'; btn.disabled = false;
     }
   }
 
@@ -1453,7 +1526,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     }
   }
 
-  // --- Batch settimanale: genera N video, monta, programma su YouTube, salva pack TikTok/IG ---
+  // --- Batch settimanale: genera N video, monta, programma su YouTube, pubblica su TikTok ---
   async function runWeeklyBatch() {
     const log = document.getElementById('batchLog');
     const btn = document.getElementById('batchBtn');
@@ -1476,6 +1549,9 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     catch { add('⚠️ Server locale non attivo (py local_server.py).'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
     try { const s = await (await fetch('http://127.0.0.1:5555/youtube_status')).json(); if (!s.authorized) { add('⚠️ YouTube non collegato. Vai allo step 6 e collega prima.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; } add('✅ YouTube: ' + (s.channel||'collegato')); }
     catch { add('⚠️ Impossibile verificare YouTube.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+    // TikTok è opzionale: se non collegato il batch continua comunque (fallback a pacchetto manuale)
+    try { const tks = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json(); add(tks.authorized ? '✅ TikTok: ' + (tks.username||'collegato') : 'ℹ️ TikTok non collegato — verrà usato il pacchetto di fallback in output/.'); }
+    catch { add('ℹ️ TikTok non verificabile — verrà usato il pacchetto di fallback in output/.'); }
     if (!k.pexels) { add('⚠️ Chiave Pexels mancante.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
 
     // base data: prossima occorrenza dell'orario scelto
@@ -1595,21 +1671,33 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         });
         if (!up.ok) throw new Error(await up.text());
         const uj = await up.json();
-        // salva pacchetto per TikTok/IG
+        // pubblica anche su TikTok se collegato, altrimenti salva il pacchetto come fallback
         const dayStr = when.toISOString().slice(0,10);
         try {
-          await fetch('http://127.0.0.1:5555/save_pack', {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ date: dayStr, title: data.titolo, caption: data.titolo + '\n\n' + desc })
-          });
-        } catch {}
-        add(`${dayLabel} ✅ ${uj.url} · pacchetto TikTok/IG salvato (${dayStr})`);
+          const tks = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json();
+          if (tks.authorized) {
+            const caption = (data.titolo + '\n\n' + desc).slice(0, 2200);
+            const tkr = await fetch('http://127.0.0.1:5555/tiktok_upload', {
+              method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ caption })
+            });
+            if (!tkr.ok) throw new Error(await tkr.text());
+            add(`${dayLabel} ✅ ${uj.url} · pubblicato anche su TikTok (${(tks.privacy_options||[])[0]||'privato'})`);
+          } else {
+            await fetch('http://127.0.0.1:5555/save_pack', {
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ date: dayStr, title: data.titolo, caption: data.titolo + '\n\n' + desc })
+            });
+            add(`${dayLabel} ✅ ${uj.url} · TikTok non collegato, pacchetto salvato in output/ (${dayStr})`);
+          }
+        } catch(e) {
+          add(`${dayLabel} ⚠️ YouTube ok ma TikTok fallito: ${e.message||e}`);
+        }
         ok++;
       } catch(e) {
         add(`${dayLabel} ❌ ${e.message||e}`);
       }
     }
-    add(`🎉 Fatto: ${ok}/${days} video programmati. Pacchetti TikTok/IG nella cartella output/.`);
+    add(`🎉 Fatto: ${ok}/${days} video programmati (YouTube + TikTok dove collegato).`);
     btn.disabled = false; btn.textContent = '🚀 Genera e programma';
   }
 
@@ -1636,6 +1724,32 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       if (!s.configured) el.innerHTML = '⚠️ Manca <code>client_secret.json</code> (setup Google Cloud).';
       else if (!s.authorized) el.innerHTML = 'Non collegato.';
       else el.innerHTML = `✅ Collegato a <strong>${escTxt(s.channel||'canale')}</strong>`;
+    } catch { el.innerHTML = '⚠️ Server non attivo.'; }
+  }
+
+  // --- Collega/Ricollega TikTok da qualsiasi punto ---
+  async function tkReconnect(statusId) {
+    const el = statusId ? document.getElementById(statusId) : null;
+    const setMsg = (h) => { if (el) el.innerHTML = h; };
+    try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
+    catch { setMsg('⚠️ Server locale non attivo. Avvia <code>START_LOCAL_SERVER.bat</code>.'); return; }
+    setMsg('🔄 Apertura consenso TikTok nel browser... autorizza e torna qui.');
+    try {
+      const r = await fetch('http://127.0.0.1:5555/tiktok_auth');
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      setMsg(`✅ Collegato come <strong>${escTxt(j.username||'account TikTok')}</strong>`);
+    } catch(e) { setMsg('❌ Errore: ' + escTxt(e.message||e)); }
+  }
+
+  async function tkShowStatus(statusId) {
+    const el = document.getElementById(statusId);
+    if (!el) return;
+    try {
+      const s = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json();
+      if (!s.configured) el.innerHTML = '⚠️ Manca <code>tiktok_secret.json</code> (setup TikTok Developer Portal).';
+      else if (!s.authorized) el.innerHTML = 'Non collegato.';
+      else el.innerHTML = `✅ Collegato come <strong>${escTxt(s.username||'account TikTok')}</strong>`;
     } catch { el.innerHTML = '⚠️ Server non attivo.'; }
   }
 
@@ -2294,6 +2408,7 @@ Rispondi SOLO con JSON valido:
   if (localStorage.getItem('vos_pexels') === _deadPexels) localStorage.removeItem('vos_pexels');
   updateKeyDots();
   setTimeout(() => { try { ytShowStatus('ytStatusMain'); } catch {} }, 600);
+  setTimeout(() => { try { tkShowStatus('tkStatusMain'); } catch {} }, 600);
 </script>
 </body>
 </html>

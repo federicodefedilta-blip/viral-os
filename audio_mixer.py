@@ -160,7 +160,7 @@ def main():
     print()
     print("=" * 55)
     print(f"  COMPLETATO!  ->  {output_file}  ({size_mb:.1f} MB)")
-    print("  Pronto per YouTube / TikTok / Instagram")
+    print("  Pronto per YouTube / TikTok")
     print("=" * 55)
 
 

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>ViralOS · TikTok</title>
+<meta name="robots" content="noindex">
+</head>
+<body style="font-family:sans-serif;text-align:center;padding-top:15vh;background:#0a0a0f;color:#eee">
+<h2 id="msg">Completamento autorizzazione TikTok...</h2>
+<p id="sub" style="color:#999;font-size:0.9em"></p>
+<script>
+  const qs = new URLSearchParams(location.search);
+  const code = qs.get('code'), state = qs.get('state'), error = qs.get('error');
+  const msg = document.getElementById('msg');
+  const sub = document.getElementById('sub');
+  fetch('http://127.0.0.1:5555/tiktok_callback', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ code, state, error })
+  }).then(() => {
+    if (error) {
+      msg.textContent = '❌ Autorizzazione TikTok annullata o fallita.';
+      sub.textContent = error;
+    } else {
+      msg.textContent = '✅ Fatto, torna al tool ViralOS.';
+      sub.textContent = 'Puoi chiudere questa scheda.';
+    }
+  }).catch(() => {
+    msg.textContent = '⚠️ Impossibile contattare il server locale.';
+    sub.textContent = 'Assicurati che sia attivo (START_LOCAL_SERVER.bat) e riprova da ViralOS.';
+  });
+</script>
+</body>
+</html>
