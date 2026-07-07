@@ -1446,11 +1446,7 @@ def tk_exchange_code(code):
 
 
 def tk_build_auth_url():
-    """Costruisce l'URL di consenso TikTok. NON apre il browser lato server: aprirlo
-    da webbrowser.open() userebbe sempre il browser predefinito in modalità normale,
-    ignorando l'incognito della scheda da cui l'utente ha avviato il collegamento.
-    Il link viene aperto lato client con window.open(), che eredita correttamente
-    la modalità (normale/incognito) della finestra del browser in uso."""
+    """Costruisce l'URL di consenso TikTok (vedi tk_open_incognito per come viene aperto)."""
     global _tk_expected_state
     if not os.path.exists(TIKTOK_SECRET):
         raise RuntimeError("tiktok_secret.json mancante nella cartella viral-os")
@@ -1463,6 +1459,53 @@ def tk_build_auth_url():
         "state": _tk_expected_state,
     })
     return f"{TIKTOK_AUTH_URL}?{qs}"
+
+
+def _default_browser_exe():
+    """Percorso dell'eseguibile del browser predefinito di Windows (via registro)."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                r"SOFTWARE\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice") as k:
+            prog_id = winreg.QueryValueEx(k, "ProgId")[0]
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"{prog_id}\shell\open\command") as k:
+            cmd = winreg.QueryValueEx(k, "")[0]
+        # cmd tipico: "C:\...\chrome.exe" --single-argument %1 -> ci serve solo l'exe
+        import shlex
+        parts = shlex.split(cmd, posix=False)
+        exe = parts[0].strip('"') if parts else None
+        return exe if exe and os.path.exists(exe) else None
+    except Exception:
+        return None
+
+
+def _incognito_flag(exe_path):
+    name = os.path.basename(exe_path).lower()
+    if "firefox" in name:
+        return "-private-window"
+    if "msedge" in name:
+        return "--inprivate"
+    if "opera" in name:
+        return "--private"
+    return "--incognito"  # chrome, brave e la maggior parte dei derivati chromium
+
+
+def tk_open_incognito(url):
+    """Apre l'URL in una finestra IN INCOGNITO dedicata del browser predefinito,
+    lanciata dal server (non window.open() lato client, che erediterebbe la
+    modalità della finestra di ViralOS invece di forzare sempre una sessione pulita).
+    Così il login TikTok non entra mai in conflitto con una sessione già salvata
+    nel browser normale (dove restano intatte le chiavi API dell'utente), e non
+    serve che l'utente stesso apra manualmente un incognito per usare ViralOS.
+    Ritorna True se l'apertura è riuscita, False se serve il fallback lato client."""
+    exe = _default_browser_exe()
+    if not exe:
+        return False
+    try:
+        subprocess.Popen([exe, _incognito_flag(exe), url])
+        return True
+    except Exception:
+        return False
 
 
 def _tk_request(path, access_token, payload):
@@ -1650,7 +1693,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/tiktok_auth":
             try:
                 url = tk_build_auth_url()
-                self._send(200, "application/json", json.dumps({"auth_url": url}).encode("utf-8"))
+                opened = tk_open_incognito(url)
+                self._send(200, "application/json",
+                           json.dumps({"auth_url": url, "opened_incognito": opened}).encode("utf-8"))
             except Exception as e:
                 print(f"     ERRORE auth TikTok: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))

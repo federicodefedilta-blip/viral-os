@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.12.3';
-  const LAST_UPDATED = '2026-07-07 18:01';
+  const CURRENT_VERSION = 'v3.13.0';
+  const LAST_UPDATED = '2026-07-07 18:15';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -307,6 +307,7 @@
         <div class="input-group" style="flex:1;min-width:120px"><label class="input-label">Visibilità</label><select class="input-field" id="batchPrivacy"><option value="private" selected>🔒 Privato</option><option value="public">🌍 Pubblico</option><option value="unlisted">🔗 Non in elenco</option></select></div>
       </div>
       <div class="input-group"><label class="input-label">🎬 Format</label><select class="input-field" id="batchFormat" onchange="applyRankNSuggestion()"><option value="classica">📖 Storia classica</option><option value="interattivo">🎮 Sopravvivi o Muori</option><option value="classifica">🔢 Classifica del terrore</option><option value="whodunit">🔪 Chi è stato?</option><option value="misto">🎲 Misto (alterna tutti)</option></select></div>
+      <div class="input-group"><label class="input-label">📤 Pubblica su</label><select class="input-field" id="batchTarget"><option value="both" selected>YouTube + TikTok</option><option value="youtube">Solo YouTube</option><option value="tiktok">Solo TikTok</option></select></div>
       <button class="btn btn-primary" id="batchBtn" onclick="runWeeklyBatch()" style="width:100%;justify-content:center">🚀 Genera e programma</button>
       <div id="batchLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:200px;overflow-y:auto"></div>
     </div>
@@ -1334,18 +1335,22 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     }
   }
 
-  // Apre la scheda di consenso TikTok con window.open() (eredita la modalità
-  // normale/incognito della finestra corrente, a differenza di un browser aperto
-  // lato server) e resta in attesa facendo polling su /tiktok_status, perché la
-  // scheda aperta e questa pagina sono due contesti separati che non comunicano
-  // direttamente: il collegamento vero e proprio lo completa /tiktok_callback.
+  // Il server prova ad aprire una finestra IN INCOGNITO dedicata (tk_open_incognito,
+  // lanciata dal browser predefinito con il flag giusto) così il login TikTok non
+  // entra mai in conflitto con una sessione già salvata, e ViralOS può restare nella
+  // finestra normale (chiavi API intatte). Se il server non riesce (browser non
+  // riconosciuto), si ricade su window.open() lato client come prima. In entrambi i
+  // casi si fa polling su /tiktok_status perché la finestra aperta e questa pagina
+  // sono due contesti separati: il collegamento vero lo completa /tiktok_callback.
   async function tkOpenAndWait(setMsg) {
     const r = await fetch('http://127.0.0.1:5555/tiktok_auth');
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();
     if (!j.auth_url) throw new Error('URL di consenso mancante nella risposta del server');
-    window.open(j.auth_url, '_blank');
-    setMsg('🔄 Completa il login nella scheda appena aperta... in attesa (fino a 3 minuti).');
+    if (!j.opened_incognito) window.open(j.auth_url, '_blank');
+    setMsg(j.opened_incognito
+      ? '🔄 Si è aperta una finestra in incognito per il login TikTok... in attesa (fino a 3 minuti).'
+      : '🔄 Completa il login nella scheda appena aperta... in attesa (fino a 3 minuti).');
     const deadline = Date.now() + 180000;
     while (Date.now() < deadline) {
       await new Promise(res => setTimeout(res, 3000));
@@ -1556,6 +1561,9 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const timeStr = document.getElementById('batchTime').value || '21:00';
     const privacy = document.getElementById('batchPrivacy').value;
     const batchFmt = document.getElementById('batchFormat') ? document.getElementById('batchFormat').value : 'classica';
+    const target = document.getElementById('batchTarget') ? document.getElementById('batchTarget').value : 'both';
+    const wantYt = target !== 'tiktok';
+    const wantTk = target !== 'youtube';
     const lang = document.getElementById('lang').value;
     const dur = document.getElementById('dur').value;
     const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
@@ -1567,11 +1575,24 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     // verifiche
     try { const p = await fetch('http://127.0.0.1:5555/ping'); if (!p.ok) throw 0; }
     catch { add('⚠️ Server locale non attivo (py local_server.py).'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
-    try { const s = await (await fetch('http://127.0.0.1:5555/youtube_status')).json(); if (!s.authorized) { add('⚠️ YouTube non collegato. Vai allo step 6 e collega prima.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; } add('✅ YouTube: ' + (s.channel||'collegato')); }
-    catch { add('⚠️ Impossibile verificare YouTube.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
-    // TikTok è opzionale: se non collegato il batch continua comunque (fallback a pacchetto manuale)
-    try { const tks = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json(); add(tks.authorized ? '✅ TikTok: ' + (tks.username||'collegato') : 'ℹ️ TikTok non collegato — verrà usato il pacchetto di fallback in output/.'); }
-    catch { add('ℹ️ TikTok non verificabile — verrà usato il pacchetto di fallback in output/.'); }
+    if (wantYt) {
+      try { const s = await (await fetch('http://127.0.0.1:5555/youtube_status')).json(); if (!s.authorized) { add('⚠️ YouTube non collegato. Vai allo step 6 e collega prima.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; } add('✅ YouTube: ' + (s.channel||'collegato')); }
+      catch { add('⚠️ Impossibile verificare YouTube.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+    }
+    if (wantTk) {
+      // se "solo TikTok" e non è collegato non c'è nessun fallback sensato: blocca.
+      // se invece è "entrambi" e TikTok non è collegato, il batch continua comunque
+      // (fallback al pacchetto manuale), perché YouTube da solo resta un risultato utile.
+      try {
+        const tks = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json();
+        if (tks.authorized) add('✅ TikTok: ' + (tks.username||'collegato'));
+        else if (!wantYt) { add('⚠️ TikTok non collegato. Vai allo step 6 e collega prima.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+        else add('ℹ️ TikTok non collegato — verrà usato il pacchetto di fallback in output/.');
+      } catch {
+        if (!wantYt) { add('⚠️ Impossibile verificare TikTok.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+        add('ℹ️ TikTok non verificabile — verrà usato il pacchetto di fallback in output/.');
+      }
+    }
     if (!k.pexels) { add('⚠️ Chiave Pexels mancante.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
 
     // base data: prossima occorrenza dell'orario scelto
@@ -1682,42 +1703,53 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         const publishAt = when.toISOString();
         const desc = (data.descrizione||'') + '\n\n' + (data.hashtags||[]).join(' ');
         const tags = [...(data.hashtags||[]).map(h=>h.replace(/^#/,'')), ...(data.trend_tags||[])].filter(Boolean);
-        add(`${dayLabel} carico su YouTube (${when.toLocaleDateString()} ${timeStr})...`);
         const hook = ((data.script||data.intro||'')).trim().split(/(?<=[.!?])\s+/)[0] || '';
-        const up = await fetch('http://127.0.0.1:5555/youtube_upload', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ title: data.titolo, description: desc, tags, privacy, publishAt, thumbnail: true,
-            meta: { nicchia: data.nicchia, hook, voice: vVoice, music: vMusic, duration: dur, lang, format: fmt } })
-        });
-        if (!up.ok) throw new Error(await up.text());
-        const uj = await up.json();
-        // pubblica anche su TikTok se collegato, altrimenti salva il pacchetto come fallback
         const dayStr = when.toISOString().slice(0,10);
-        try {
-          const tks = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json();
-          if (tks.authorized) {
-            const caption = (data.titolo + '\n\n' + desc).slice(0, 2200);
-            const tkr = await fetch('http://127.0.0.1:5555/tiktok_upload', {
-              method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ caption })
-            });
-            if (!tkr.ok) throw new Error(await tkr.text());
-            add(`${dayLabel} ✅ ${uj.url} · pubblicato anche su TikTok (${(tks.privacy_options||[])[0]||'privato'})`);
-          } else {
-            await fetch('http://127.0.0.1:5555/save_pack', {
-              method:'POST', headers:{'Content-Type':'application/json'},
-              body: JSON.stringify({ date: dayStr, title: data.titolo, caption: data.titolo + '\n\n' + desc })
-            });
-            add(`${dayLabel} ✅ ${uj.url} · TikTok non collegato, pacchetto salvato in output/ (${dayStr})`);
+        let ytUrl = '';
+        if (wantYt) {
+          add(`${dayLabel} carico su YouTube (${when.toLocaleDateString()} ${timeStr})...`);
+          const up = await fetch('http://127.0.0.1:5555/youtube_upload', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ title: data.titolo, description: desc, tags, privacy, publishAt, thumbnail: true,
+              meta: { nicchia: data.nicchia, hook, voice: vVoice, music: vMusic, duration: dur, lang, format: fmt } })
+          });
+          if (!up.ok) throw new Error(await up.text());
+          ytUrl = (await up.json()).url;
+        }
+        if (wantTk) {
+          try {
+            const tks = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json();
+            if (tks.authorized) {
+              const caption = (data.titolo + '\n\n' + desc).slice(0, 2200);
+              const tkr = await fetch('http://127.0.0.1:5555/tiktok_upload', {
+                method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ caption })
+              });
+              if (!tkr.ok) throw new Error(await tkr.text());
+              add(`${dayLabel} ✅ ${ytUrl ? ytUrl + ' · ' : ''}pubblicato su TikTok (${(tks.privacy_options||[])[0]||'privato'})`);
+            } else if (wantYt) {
+              // "entrambi" ma TikTok non collegato: YouTube resta comunque un risultato valido, fallback al pacchetto
+              await fetch('http://127.0.0.1:5555/save_pack', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ date: dayStr, title: data.titolo, caption: data.titolo + '\n\n' + desc })
+              });
+              add(`${dayLabel} ✅ ${ytUrl} · TikTok non collegato, pacchetto salvato in output/ (${dayStr})`);
+            } else {
+              throw new Error('TikTok non collegato'); // "solo TikTok": niente da salvare come alternativa
+            }
+          } catch(e) {
+            if (wantYt) add(`${dayLabel} ⚠️ YouTube ok (${ytUrl}) ma TikTok fallito: ${e.message||e}`);
+            else throw e;
           }
-        } catch(e) {
-          add(`${dayLabel} ⚠️ YouTube ok ma TikTok fallito: ${e.message||e}`);
+        } else {
+          add(`${dayLabel} ✅ ${ytUrl}`);
         }
         ok++;
       } catch(e) {
         add(`${dayLabel} ❌ ${e.message||e}`);
       }
     }
-    add(`🎉 Fatto: ${ok}/${days} video programmati (YouTube + TikTok dove collegato).`);
+    const targetLabel = target === 'youtube' ? 'solo YouTube' : target === 'tiktok' ? 'solo TikTok' : 'YouTube + TikTok dove collegato';
+    add(`🎉 Fatto: ${ok}/${days} video programmati (${targetLabel}).`);
     btn.disabled = false; btn.textContent = '🚀 Genera e programma';
   }
 
