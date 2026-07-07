@@ -66,16 +66,12 @@ TIKTOK_TOKEN_FILE = os.path.join(BASE_DIR, "tiktok_token.json")
 # serve un URL HTTPS statico pre-registrato nell'app TikTok -> usiamo la pagina
 # statica pubblicata su gh-pages accanto a index.html, che inoltra il code qui.
 TIKTOK_REDIRECT_URI = "https://federicodefedilta-blip.github.io/viral-os/tiktok-callback.html"
-# Scope video.publish (post diretto, con scelta di privacy) richiede una richiesta
-# separata approvata da TikTok. Con la sola app "Content Posting API" di base si ha
-# solo video.upload: il video arriva come BOZZA nell'inbox TikTok dell'utente, che
-# deve aprire l'app per aggiungere didascalia/effetti e pubblicare a mano. Niente
-# creator_info/privacy_level in questo flusso (richiede video.publish, non presente).
-TIKTOK_SCOPES = "user.info.basic,video.upload"
+# video.publish = post diretto (Direct Post) con scelta di privacy reale, abilitato
+# nell'app tramite il prodotto "Direct Post" della Content Posting API.
+TIKTOK_SCOPES = "user.info.basic,video.publish"
 TIKTOK_AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
 TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 TIKTOK_API_BASE = "https://open.tiktokapis.com/v2/post/publish"
-TIKTOK_USER_INFO_URL = "https://open.tiktokapis.com/v2/user/info/"
 
 # stato del flusso OAuth TikTok: /tiktok_auth resta bloccato in attesa che il
 # browser dell'utente completi il consenso e la pagina di callback su gh-pages
@@ -1488,22 +1484,19 @@ def _tk_request(path, access_token, payload):
         return json.load(r)
 
 
-def tk_user_info(access_token):
-    """Nome utente TikTok (scope user.info.basic, funziona senza video.publish)."""
-    url = f"{TIKTOK_USER_INFO_URL}?fields=open_id,display_name"
-    req = urllib.request.Request(url, method="GET", headers={"Authorization": f"Bearer {access_token}"})
-    with urllib.request.urlopen(req, timeout=15) as r:
-        j = json.load(r)
-    u = (j.get("data") or {}).get("user") or {}
-    return {"username": u.get("display_name"), "open_id": u.get("open_id")}
+def tk_creator_info(access_token):
+    """Info sul creator + privacy_level consentiti ORA (SELF_ONLY finché l'app non è auditata)."""
+    j = _tk_request("/creator_info/query/", access_token, {})
+    d = j.get("data", {})
+    return {
+        "username": d.get("creator_username") or d.get("creator_nickname"),
+        "privacy_options": d.get("privacy_level_options") or [],
+        "max_duration_sec": d.get("max_video_post_duration_sec"),
+    }
 
 
 def tk_upload(data):
-    """Carica LAST_RENDER su TikTok come BOZZA nell'inbox (scope video.upload).
-    Niente scelta di privacy: quella richiede video.publish, non disponibile con
-    la sola app "Content Posting API" di base. La didascalia non viaggia con
-    l'API in questo flusso: la salviamo in output/ perché l'utente la incolli
-    a mano quando finalizza il post dall'app TikTok."""
+    """Carica LAST_RENDER su TikTok tramite Direct Post (scope video.publish)."""
     tok = tk_get_credentials()
     if not tok:
         raise RuntimeError("non autorizzato - clicca prima 'Collega TikTok'")
@@ -1511,10 +1504,21 @@ def tk_upload(data):
         raise RuntimeError("nessun video montato - assembla prima il video")
     access_token = tok["access_token"]
 
+    info = tk_creator_info(access_token)
+    options = info.get("privacy_options") or ["SELF_ONLY"]
+    # non fissare mai la privacy: la scegliamo tra quelle DAVVERO consentite ora
+    # (SELF_ONLY finché TikTok non ha approvato l'app, poi si sblocca da sola)
+    wanted = data.get("privacy")
+    privacy_level = wanted if wanted in options else options[0]
+
     caption = (data.get("caption") or "").strip()[:2200]
     video_size = os.path.getsize(LAST_RENDER)
 
-    init = _tk_request("/inbox/video/init/", access_token, {
+    init = _tk_request("/video/init/", access_token, {
+        "post_info": {
+            "title": caption, "privacy_level": privacy_level,
+            "disable_duet": False, "disable_stitch": False, "disable_comment": False,
+        },
         "source_info": {
             "source": "FILE_UPLOAD", "video_size": video_size,
             "chunk_size": video_size, "total_chunk_count": 1,
@@ -1535,38 +1539,29 @@ def tk_upload(data):
         r.read()
 
     import time as _time
-    status = "PROCESSING"
+    status_data = {}
     for _ in range(40):  # fino a ~2 minuti di polling
         st = _tk_request("/status/fetch/", access_token, {"publish_id": publish_id})
         status_data = st.get("data") or {}
-        status = status_data.get("status") or status
-        if status in ("PUBLISH_COMPLETE", "SEND_TO_USER_INBOX"):
+        status = status_data.get("status")
+        if status == "PUBLISH_COMPLETE":
             break
-        if status in ("FAILED", "SPAM_RISK_TOO_HIGH"):
-            raise RuntimeError(f"caricamento TikTok fallito: {status_data.get('fail_reason') or status}")
+        if status == "FAILED":
+            raise RuntimeError(f"pubblicazione TikTok fallita: {status_data.get('fail_reason')}")
         _time.sleep(3)
-    # se resta in PROCESSING dopo il timeout non è un errore: il PUT è già andato
-    # a buon fine, il video è quasi certamente arrivato nell'inbox comunque
-
-    # la bozza non porta didascalia: la salviamo per il copia-incolla manuale,
-    # stessa cartella/giorno usata da /save_pack per coerenza con il flusso precedente
-    day = _time.strftime("%Y-%m-%d")
-    folder = os.path.join(OUTPUT_DIR, day)
-    os.makedirs(folder, exist_ok=True)
-    caption_path = os.path.join(folder, "tiktok_caption.txt")
-    with open(caption_path, "w", encoding="utf-8") as f:
-        f.write(caption)
+    else:
+        raise RuntimeError("timeout in attesa di conferma da TikTok (video caricato ma stato incerto)")
 
     meta = data.get("meta") or {}
     registry_add({
         "id": publish_id, "title": caption[:100], "ts": _time.strftime("%Y-%m-%d %H:%M"),
-        "publishAt": None, "privacy": "DRAFT_INBOX", "platform": "tiktok",
+        "publishAt": None, "privacy": privacy_level, "platform": "tiktok",
         "nicchia": meta.get("nicchia"), "voice": meta.get("voice"),
         "music": meta.get("music"), "duration": meta.get("duration"),
         "hook": meta.get("hook"), "lang": meta.get("lang"),
         "format": meta.get("format"),
     })
-    return {"publish_id": publish_id, "status": status, "caption_file": caption_path}
+    return {"publish_id": publish_id, "status": "PUBLISH_COMPLETE", "privacy_level": privacy_level}
 
 
 # ----------------------------- HTTP -----------------------------
@@ -1650,11 +1645,12 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/tiktok_status":
             try:
                 tok = tk_get_credentials()
-                info = tk_user_info(tok["access_token"]) if tok else None
+                info = tk_creator_info(tok["access_token"]) if tok else None
                 payload = json.dumps({
                     "configured": os.path.exists(TIKTOK_SECRET),
                     "authorized": bool(tok),
                     "username": info.get("username") if info else None,
+                    "privacy_options": info.get("privacy_options") if info else None,
                 }).encode("utf-8")
                 self._send(200, "application/json", payload)
             except Exception as e:
@@ -1666,7 +1662,7 @@ class Handler(BaseHTTPRequestHandler):
                 print("  -> avvio OAuth TikTok (apro il browser per il consenso)...")
                 tk_authorize()
                 tok = tk_get_credentials()
-                info = tk_user_info(tok["access_token"])
+                info = tk_creator_info(tok["access_token"])
                 print(f"     autorizzato: {info.get('username')}")
                 self._send(200, "application/json",
                            json.dumps({"authorized": True, "username": info.get("username")}).encode("utf-8"))
@@ -1821,7 +1817,7 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(raw.decode("utf-8"))
                 print(f"  -> UPLOAD TikTok: {(data.get('caption') or '')[:50]}...")
                 res = tk_upload(data)
-                print(f"     OK publish_id {res['publish_id']} ({res['status']})")
+                print(f"     OK publish_id {res['publish_id']} ({res['privacy_level']})")
                 self._send(200, "application/json", json.dumps(res).encode("utf-8"))
             except Exception as e:
                 print(f"     ERRORE upload TikTok: {e}")
