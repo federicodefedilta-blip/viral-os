@@ -30,6 +30,7 @@ import subprocess
 import secrets
 import urllib.request
 import urllib.parse
+import urllib.error
 from shutil import which
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -1508,13 +1509,27 @@ def tk_open_incognito(url):
         return False
 
 
+def _tk_http_error(e):
+    """TikTok mette il vero motivo dell'errore nel corpo JSON della risposta
+    (es. {"error":{"code":"...","message":"..."}}), che altrimenti si perde
+    dietro un generico "HTTP Error 403: Forbidden"."""
+    try:
+        body = e.read().decode("utf-8", errors="replace")
+    except Exception:
+        body = ""
+    return RuntimeError(f"TikTok HTTP {e.code}: {body or e.reason}")
+
+
 def _tk_request(path, access_token, payload):
     req = urllib.request.Request(
         f"{TIKTOK_API_BASE}{path}", data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json; charset=UTF-8",
                  "Authorization": f"Bearer {access_token}"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        raise _tk_http_error(e)
 
 
 def tk_creator_info(access_token):
@@ -1539,10 +1554,18 @@ def tk_upload(data):
 
     info = tk_creator_info(access_token)
     options = info.get("privacy_options") or ["SELF_ONLY"]
-    # non fissare mai la privacy: la scegliamo tra quelle DAVVERO consentite ora
-    # (SELF_ONLY finché TikTok non ha approvato l'app, poi si sblocca da sola)
+    # creator_info può elencare anche PUBLIC_TO_EVERYONE pur essendo l'app non
+    # ancora auditata: è TikTok stesso a rifiutare poi la richiesta con
+    # "unaudited_client_can_only_post_to_private_accounts". Finché l'audit non
+    # passa, SELF_ONLY è l'unica scelta che funziona davvero: va sempre preferita
+    # quando disponibile, non scelta a caso come "prima opzione della lista".
     wanted = data.get("privacy")
-    privacy_level = wanted if wanted in options else options[0]
+    if wanted in options:
+        privacy_level = wanted
+    elif "SELF_ONLY" in options:
+        privacy_level = "SELF_ONLY"
+    else:
+        privacy_level = options[0]
 
     caption = (data.get("caption") or "").strip()[:2200]
     video_size = os.path.getsize(LAST_RENDER)
@@ -1568,8 +1591,11 @@ def tk_upload(data):
         "Content-Type": "video/mp4", "Content-Length": str(video_size),
         "Content-Range": f"bytes 0-{video_size - 1}/{video_size}",
     })
-    with urllib.request.urlopen(put_req, timeout=120) as r:
-        r.read()
+    try:
+        with urllib.request.urlopen(put_req, timeout=120) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        raise _tk_http_error(e)
 
     import time as _time
     status_data = {}
