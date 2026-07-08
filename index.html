@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.17.1';
-  const LAST_UPDATED = '2026-07-08 15:49';
+  const CURRENT_VERSION = 'v3.18.0';
+  const LAST_UPDATED = '2026-07-08 16:48';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -179,6 +179,17 @@
         <button class="key-toggle" onclick="toggleVis('keyPixabay')">👁</button>
       </div>
       <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>pixabay.com/api/docs</strong> — seconda fonte clip (più varietà)</div>
+    </div>
+
+    <div class="input-group">
+      <label class="input-label" style="display:flex;align-items:center;gap:6px">
+        <span class="key-status" id="dotCoverr"></span> Coverr API Key <span style="color:var(--orange);font-size:0.8em">opzionale</span>
+      </label>
+      <div class="key-input-wrap">
+        <input class="key-input" type="password" id="keyCoverr" placeholder="..." oninput="saveKeys()">
+        <button class="key-toggle" onclick="toggleVis('keyCoverr')">👁</button>
+      </div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:4px">Gratis su <strong>coverr.co/developers</strong> (50 richieste/ora) — terza fonte clip, più varietà</div>
     </div>
 
     <div class="input-group">
@@ -476,7 +487,8 @@
     return {
       groq: localStorage.getItem('vos_groq') || '',
       pexels: localStorage.getItem('vos_pexels') || '',
-      pixabay: localStorage.getItem('vos_pixabay') || ''
+      pixabay: localStorage.getItem('vos_pixabay') || '',
+      coverr: localStorage.getItem('vos_coverr') || ''
     };
   }
 
@@ -484,9 +496,11 @@
     const g = document.getElementById('keyGroq').value.trim();
     const p = document.getElementById('keyPexels').value.trim();
     const px = document.getElementById('keyPixabay') ? document.getElementById('keyPixabay').value.trim() : '';
+    const cv = document.getElementById('keyCoverr') ? document.getElementById('keyCoverr').value.trim() : '';
     if (g) localStorage.setItem('vos_groq', g); else localStorage.removeItem('vos_groq');
     if (p) localStorage.setItem('vos_pexels', p); else localStorage.removeItem('vos_pexels');
     if (px) localStorage.setItem('vos_pixabay', px); else localStorage.removeItem('vos_pixabay');
+    if (cv) localStorage.setItem('vos_coverr', cv); else localStorage.removeItem('vos_coverr');
     updateKeyDots();
   }
 
@@ -500,6 +514,7 @@
     dot('dotGroq', !!k.groq, false);
     dot('dotPexels', !!k.pexels, true);
     dot('dotPixabay', !!k.pixabay, true);
+    dot('dotCoverr', !!k.coverr, true);
     document.getElementById('headerStatus').textContent = k.groq ? 'AI Online' : 'Configura chiavi';
     const banner = document.getElementById('missingKeysBanner');
     if (!k.groq) {
@@ -514,6 +529,7 @@
     document.getElementById('keyGroq').value = k.groq;
     document.getElementById('keyPexels').value = k.pexels;
     if (document.getElementById('keyPixabay')) document.getElementById('keyPixabay').value = k.pixabay;
+    if (document.getElementById('keyCoverr')) document.getElementById('keyCoverr').value = k.coverr;
     updateKeyDots();
     document.getElementById('keysModal').classList.remove('hidden');
     ytShowStatus('ytStatusModal');
@@ -1024,9 +1040,35 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     if (ab) { ab.style.display = ''; ab.textContent = '🔄 Rigenera'; }
   }
 
-  // --- Core fetch clip (Pexels + Pixabay, riusabile da manuale e batch) ---
+  // --- Cronologia clip cross-video: usedIds evita solo i duplicati DENTRO lo
+  // stesso video; senza altro, le stesse clip "top match" di una query ricorrente
+  // (es. "dark hallway horror") riappaiono identiche in video diversi. Questa
+  // cronologia persistente (localStorage, tetto 300 id) fa preferire clip MAI
+  // usate negli ultimi video, con fallback alle altre se non ce ne sono di fresche. ---
+  const RECENT_CLIPS_KEY = 'vos_recent_clip_ids';
+  const RECENT_CLIPS_MAX = 300;
+  function loadRecentClips() {
+    try { return new Set(JSON.parse(localStorage.getItem(RECENT_CLIPS_KEY) || '[]')); }
+    catch { return new Set(); }
+  }
+  function rememberClip(id) {
+    try {
+      const arr = JSON.parse(localStorage.getItem(RECENT_CLIPS_KEY) || '[]');
+      arr.push(id);
+      while (arr.length > RECENT_CLIPS_MAX) arr.shift();
+      localStorage.setItem(RECENT_CLIPS_KEY, JSON.stringify(arr));
+    } catch {}
+  }
+  function preferFresh(candidates, idFn, recent) {
+    const fresh = candidates.filter(c => !recent.has(idFn(c)));
+    return fresh.length ? fresh : candidates;
+  }
+
+  // --- Core fetch clip (Pexels + Pixabay + Coverr, riusabile da manuale e batch) ---
   async function pexelsSearch(query, pexelsKey, usedIds) {
-    const page = Math.floor(Math.random() * 4) + 1;
+    // pagine più profonde = risultati via via meno pertinenti alla query: le
+    // privilegiamo raramente, solo per un po' di varietà in più
+    const page = Math.random() < 0.65 ? 1 : Math.floor(Math.random() * 3) + 1;
     try {
       const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=12&page=${page}`, { headers: { Authorization: pexelsKey } });
       if (!res.ok) return null;
@@ -1034,9 +1076,11 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       let vids = (d.videos || []).filter(v => !usedIds.has('px'+v.id));
       if (!vids.length) return null;
       vids.sort((a,b) => (a.height/a.width >= 1 ? -1 : 1) - (b.height/b.width >= 1 ? -1 : 1));
-      const top = vids.slice(0, 6);
+      let top = vids.slice(0, 6);
+      top = preferFresh(top, v => 'px'+v.id, loadRecentClips());
       const video = top[Math.floor(Math.random() * top.length)];
       usedIds.add('px'+video.id);
+      rememberClip('px'+video.id);
       // preferisci alta risoluzione: il file più piccolo con larghezza >= 1080, altrimenti il più grande
       const files = video.video_files.slice().sort((a, b) => a.width - b.width);
       const file = files.find(f => f.width >= 1080) || files[files.length - 1];
@@ -1046,15 +1090,18 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
 
   async function pixabaySearch(query, pixabayKey, usedIds) {
     if (!pixabayKey) return null;
-    const page = Math.floor(Math.random() * 3) + 1;
+    const page = Math.random() < 0.65 ? 1 : Math.floor(Math.random() * 2) + 1;
     try {
       const res = await fetch(`https://pixabay.com/api/videos/?key=${pixabayKey}&q=${encodeURIComponent(query)}&per_page=12&page=${page}`);
       if (!res.ok) return null;
       const d = await res.json();
       let hits = (d.hits || []).filter(h => !usedIds.has('pb'+h.id));
       if (!hits.length) return null;
-      const hit = hits[Math.floor(Math.random() * Math.min(hits.length, 6))];
+      let top = hits.slice(0, 6);
+      top = preferFresh(top, h => 'pb'+h.id, loadRecentClips());
+      const hit = top[Math.floor(Math.random() * top.length)];
       usedIds.add('pb'+hit.id);
+      rememberClip('pb'+hit.id);
       const v = hit.videos || {};
       const url = (v.large && v.large.url) || (v.medium && v.medium.url) || (v.small && v.small.url) || (v.tiny && v.tiny.url);
       if (!url) return null;
@@ -1062,16 +1109,41 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     } catch { return null; }
   }
 
-  // cerca una clip alternando le due fonti (varietà), con fallback all'altra
+  async function coverrSearch(query, coverrKey, usedIds) {
+    if (!coverrKey) return null;
+    const page = Math.random() < 0.65 ? 0 : Math.floor(Math.random() * 2);
+    try {
+      const res = await fetch(`https://api.coverr.co/videos?query=${encodeURIComponent(query)}&urls=true&page_size=12&page=${page}&api_key=${encodeURIComponent(coverrKey)}`);
+      if (!res.ok) return null;
+      const d = await res.json();
+      let hits = (d.hits || []).filter(h => !usedIds.has('cv'+h.id));
+      if (!hits.length) return null;
+      // preferisci i verticali (già nel formato giusto per gli Shorts)
+      hits = hits.slice().sort((a,b) => (b.is_vertical?1:0) - (a.is_vertical?1:0));
+      let top = hits.slice(0, 6);
+      top = preferFresh(top, h => 'cv'+h.id, loadRecentClips());
+      const hit = top[Math.floor(Math.random() * top.length)];
+      usedIds.add('cv'+hit.id);
+      rememberClip('cv'+hit.id);
+      const url = hit.urls && (hit.urls.mp4 || hit.urls.mp4_download || hit.urls.mp4_preview);
+      if (!url) return null;
+      return { url, thumbnail: hit.thumbnail || '', id: 'cv'+hit.id, photographer: 'Coverr', pexels_url: hit.poster || 'https://coverr.co', query };
+    } catch { return null; }
+  }
+
+  // cerca una clip alternando le fonti disponibili (varietà), con fallback alle altre
   async function searchClip(query, keys, usedIds) {
     const sources = [];
     if (keys.pexels) sources.push('px');
     if (keys.pixabay) sources.push('pb');
+    if (keys.coverr) sources.push('cv');
     if (!sources.length) return null;
     // ordine casuale per mescolare le fonti
     sources.sort(() => Math.random() - 0.5);
     for (const s of sources) {
-      const v = s === 'px' ? await pexelsSearch(query, keys.pexels, usedIds) : await pixabaySearch(query, keys.pixabay, usedIds);
+      const v = s === 'px' ? await pexelsSearch(query, keys.pexels, usedIds)
+              : s === 'pb' ? await pixabaySearch(query, keys.pixabay, usedIds)
+              : await coverrSearch(query, keys.coverr, usedIds);
       if (v) return v;
     }
     return null;
@@ -1126,8 +1198,8 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   async function generateImages() {
     if (!gData) return;
     const k = getKeys();
-    if (!k.pexels) {
-      document.getElementById('imagesResult').innerHTML = `<div class="alert-warn" style="margin-top:10px">⚠️ Chiave Pexels non configurata. <button class="btn-sm" onclick="openKeys()">🔑 Aggiungi</button></div>`;
+    if (!k.pexels && !k.pixabay && !k.coverr) {
+      document.getElementById('imagesResult').innerHTML = `<div class="alert-warn" style="margin-top:10px">⚠️ Serve almeno una chiave Pexels, Pixabay o Coverr. <button class="btn-sm" onclick="openKeys()">🔑 Aggiungi</button></div>`;
       return;
     }
     const btn = document.getElementById('imgBtn');
@@ -1661,7 +1733,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         add('ℹ️ TikTok non verificabile — verrà usato il pacchetto di fallback in output/.');
       }
     }
-    if (!k.pexels) { add('⚠️ Chiave Pexels mancante.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
+    if (!k.pexels && !k.pixabay && !k.coverr) { add('⚠️ Serve almeno una chiave Pexels, Pixabay o Coverr.'); btn.disabled=false; btn.textContent='🚀 Genera e programma'; return; }
 
     // base data: prossima occorrenza dell'orario scelto
     const [hh, mm] = timeStr.split(':').map(n=>parseInt(n));
@@ -2216,7 +2288,7 @@ Rispondi SOLO con JSON valido:
     catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
     const k = getKeys();
     if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
-    if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
+    if (!k.pexels && !k.pixabay && !k.coverr) { add('⚠️ Serve almeno una chiave Pexels, Pixabay o Coverr.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
     const lang = document.getElementById('lang').value;
     const dur = document.getElementById('dur').value;
     const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value)||4));
@@ -2353,7 +2425,7 @@ Rispondi SOLO con JSON valido:
     catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
     const k = getKeys();
     if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
-    if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
+    if (!k.pexels && !k.pixabay && !k.coverr) { add('⚠️ Serve almeno una chiave Pexels, Pixabay o Coverr.'); btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore'; return; }
     const lang = document.getElementById('lang').value;
     const n = Math.max(3, Math.min(7, parseInt(document.getElementById('rankN').value)||5));
     const targetSec = parseInt(document.getElementById('dur') ? document.getElementById('dur').value : '') || 61;
@@ -2490,7 +2562,7 @@ Rispondi SOLO con JSON valido:
     catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica'; return; }
     const k = getKeys();
     if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica'; return; }
-    if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica'; return; }
+    if (!k.pexels && !k.pixabay && !k.coverr) { add('⚠️ Serve almeno una chiave Pexels, Pixabay o Coverr.'); btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica'; return; }
     const lang = document.getElementById('lang').value;
     const n = Math.max(3, Math.min(7, parseInt(document.getElementById('rankN').value)||5));
     const targetSec = parseInt(document.getElementById('dur') ? document.getElementById('dur').value : '') || 61;
@@ -2647,7 +2719,7 @@ Rispondi SOLO con JSON valido:
     catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='🔪 Genera giallo'; return; }
     const k = getKeys();
     if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='🔪 Genera giallo'; return; }
-    if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='🔪 Genera giallo'; return; }
+    if (!k.pexels && !k.pixabay && !k.coverr) { add('⚠️ Serve almeno una chiave Pexels, Pixabay o Coverr.'); btn.disabled=false; btn.textContent='🔪 Genera giallo'; return; }
     const lang = document.getElementById('lang').value;
     const nSuspetti = Math.max(2, Math.min(5, parseInt(document.getElementById('whodunitSuspects').value)||3));
     const targetSec = parseInt(document.getElementById('dur') ? document.getElementById('dur').value : '') || 61;
