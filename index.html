@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.16.1';
-  const LAST_UPDATED = '2026-07-08 15:08';
+  const CURRENT_VERSION = 'v3.17.0';
+  const LAST_UPDATED = '2026-07-08 15:14';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -318,6 +318,13 @@
       <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Pubblica automaticamente su TikTok tramite la Content Posting API ufficiale (Direct Post, scope <code>video.publish</code>). Finché l'app non supera l'audit di TikTok, i video vengono caricati come <strong>privati (solo tu)</strong> — puoi comunque verificare l'intera pipeline end-to-end.</div>
       <div id="tkStatusMain" style="font-size:0.78em;color:var(--muted);margin-bottom:8px"></div>
       <button class="btn btn-ghost" onclick="tkReconnect('tkStatusMain')" style="width:100%;justify-content:center">🔗 Collega / Ricollega TikTok</button>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">📅 Video programmati</div>
+      <div style="font-size:0.78em;color:var(--muted);line-height:1.5;margin-bottom:12px">Video già caricati su YouTube ma ancora privati, in attesa della data di pubblicazione. Utile per cancellare e rigenerare quelli creati prima di un fix.</div>
+      <button class="btn btn-primary" id="schedBtn" onclick="loadScheduled()" style="width:100%;justify-content:center">📅 Carica programmati</button>
+      <div id="schedResult" style="margin-top:12px"></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -1886,6 +1893,64 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       else if (!s.authorized) el.innerHTML = 'Non collegato.';
       else el.innerHTML = `✅ Collegato come <strong>${escTxt(s.username||'account TikTok')}</strong>`;
     } catch { el.innerHTML = '⚠️ Server non attivo.'; }
+  }
+
+  // --- Video programmati (privati, in attesa di pubblicazione) ---
+  async function loadScheduled() {
+    const btn = document.getElementById('schedBtn');
+    const out = document.getElementById('schedResult');
+    btn.disabled = true; btn.textContent = '⏳ Carico...';
+    out.innerHTML = '';
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_scheduled');
+      if (!r.ok) throw new Error(await r.text());
+      const list = await r.json();
+      if (!list.length) {
+        out.innerHTML = '<div class="alert-info">Nessun video programmato in attesa.</div>';
+      } else {
+        const rows = list.map(v => `<tr id="sched-${v.id}" style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 4px;font-size:0.72em"><a href="${v.url}" target="_blank" style="color:var(--text);text-decoration:none">${escTxt((v.title||'').slice(0,38))}</a></td>
+          <td style="padding:6px 4px;font-size:0.72em;color:var(--muted)">${escTxt(v.format||'?')}</td>
+          <td style="padding:6px 4px;font-size:0.72em;color:var(--muted)">${new Date(v.publishAt).toLocaleString()}</td>
+          <td style="padding:6px 4px;text-align:right"><button class="btn-sm" onclick="deleteScheduledVideo('${v.id}')">🗑</button></td>
+        </tr>`).join('');
+        out.innerHTML = `
+          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.8em">
+            <thead><tr style="text-align:left;color:var(--muted)"><th style="padding:6px 4px">Titolo</th><th>Format</th><th>Quando</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>
+          <button class="btn btn-ghost" onclick="deleteAllScheduled()" style="width:100%;justify-content:center;margin-top:10px">🗑 Elimina tutti (${list.length})</button>`;
+      }
+    } catch(e) {
+      out.innerHTML = `<div class="error-box">❌ ${escTxt(e.message||e)}</div>`;
+    }
+    btn.disabled = false; btn.textContent = '📅 Carica programmati';
+  }
+
+  async function deleteScheduledVideo(id) {
+    const row = document.getElementById(`sched-${id}`);
+    try {
+      const r = await fetch('http://127.0.0.1:5555/youtube_delete', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      if (row) row.remove();
+    } catch(e) { alert('Errore eliminazione: ' + (e.message||e)); }
+  }
+
+  async function deleteAllScheduled() {
+    if (!confirm('Eliminare TUTTI i video programmati elencati? L\'azione non è reversibile.')) return;
+    const rows = document.querySelectorAll('#schedResult tbody tr');
+    for (const row of rows) {
+      const id = row.id.replace('sched-','');
+      try {
+        await fetch('http://127.0.0.1:5555/youtube_delete', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })
+        });
+        row.remove();
+      } catch(e) { /* continua con gli altri anche se uno fallisce */ }
+    }
+    await loadScheduled();
   }
 
   // --- Analisi performance YouTube ---

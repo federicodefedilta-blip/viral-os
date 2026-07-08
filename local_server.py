@@ -1175,6 +1175,46 @@ def registry_add(record):
         print(f"     registro non salvato: {e}")
 
 
+def registry_remove(video_id):
+    data = registry_load()
+    data = [r for r in data if r.get("id") != video_id]
+    try:
+        with open(REGISTRY, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"     registro non salvato: {e}")
+
+
+def yt_scheduled():
+    """Video privati con pubblicazione futura ancora programmata (registro locale)."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    out = []
+    for r in registry_load():
+        pa = r.get("publishAt")
+        if not pa or r.get("privacy") != "private":
+            continue
+        try:
+            dt = datetime.fromisoformat(pa.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if dt > now:
+            out.append({"id": r.get("id"), "title": r.get("title"), "format": r.get("format"),
+                        "publishAt": pa, "url": f"https://youtu.be/{r.get('id')}"})
+    out.sort(key=lambda r: r["publishAt"])
+    return out
+
+
+def yt_delete(video_id):
+    creds = yt_get_credentials()
+    if not creds:
+        raise RuntimeError("non autorizzato - collega prima YouTube")
+    yt = yt_service(creds)
+    yt.videos().delete(id=video_id).execute()
+    registry_remove(video_id)
+    return {"id": video_id, "deleted": True}
+
+
 def yt_upload(data):
     from googleapiclient.http import MediaFileUpload
     import time as _time
@@ -1708,6 +1748,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
+        if parsed.path == "/youtube_scheduled":
+            try:
+                res = yt_scheduled()
+                self._send(200, "application/json", json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
         if parsed.path == "/youtube_auth":
             try:
                 print("  -> avvio OAuth YouTube (apro il browser per il consenso)...")
@@ -1872,6 +1920,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, "application/json", json.dumps(res).encode("utf-8"))
             except Exception as e:
                 print(f"     ERRORE upload: {e}")
+                self._send(500, "text/plain", str(e).encode("utf-8"))
+            return
+
+        if parsed.path == "/youtube_delete":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                vid = data.get("id")
+                if not vid:
+                    raise RuntimeError("id video mancante")
+                print(f"  -> DELETE YouTube: {vid}")
+                res = yt_delete(vid)
+                self._send(200, "application/json", json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                print(f"     ERRORE delete: {e}")
                 self._send(500, "text/plain", str(e).encode("utf-8"))
             return
 
