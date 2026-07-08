@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.13.1';
-  const LAST_UPDATED = '2026-07-08 09:20';
+  const CURRENT_VERSION = 'v3.14.0';
+  const LAST_UPDATED = '2026-07-08 09:41';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1204,18 +1204,51 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       <label style="display:flex;align-items:center;gap:8px;font-size:0.8em;color:var(--muted);margin:4px 0 12px">
         <input type="checkbox" id="pubThumb" checked> Genera miniatura automatica
       </label>
+      <div class="input-group">
+        <label class="input-label">📤 Pubblica su</label>
+        <select class="input-field" id="pubTarget"><option value="both" selected>YouTube + TikTok</option><option value="youtube">Solo YouTube</option><option value="tiktok">Solo TikTok</option></select>
+      </div>
 
-      <button class="btn btn-primary" id="pubBtn" onclick="ytPublish()" style="width:100%;justify-content:center" disabled>📤 Pubblica su YouTube</button>
-      <div id="pubResult" style="margin-top:12px"></div>
-      <div style="font-size:0.68em;color:var(--muted);margin-top:10px">Orario ottimale: <strong>${escTxt(d.orario_pubblicazione||'sera')}</strong>. Programmando, la visibilità diventa privata fino all'orario scelto.</div>
+      <button class="btn btn-primary" id="pubGoBtn" onclick="publishSelected()" style="width:100%;justify-content:center">📤 Pubblica</button>
+      <div id="pubGoResult" style="margin-top:12px"></div>
+      <div style="font-size:0.68em;color:var(--muted);margin-top:10px">Orario ottimale: <strong>${escTxt(d.orario_pubblicazione||'sera')}</strong>. Programmando su YouTube, la visibilità diventa privata fino all'orario scelto.</div>
 
-      <div id="tkStatus" style="font-size:0.8em;color:var(--muted);margin:16px 0 8px">Verifico collegamento TikTok...</div>
-      <button class="btn btn-primary" id="tkPubBtn" onclick="tkPublish()" style="width:100%;justify-content:center" disabled>🎵 Pubblica su TikTok</button>
-      <div id="tkPubResult" style="margin-top:12px"></div>
+      <div style="display:none">
+        <div id="ytStatus"></div>
+        <button id="pubBtn" onclick="ytPublish()"></button>
+        <div id="pubResult"></div>
+        <div id="tkStatus"></div>
+        <button id="tkPubBtn" onclick="tkPublish()"></button>
+        <div id="tkPubResult"></div>
+      </div>
     `;
     ytSetOptimal();
     ytCheckStatus();
     tkCheckStatus();
+  }
+
+  // Un solo pulsante che pubblica su una o entrambe le piattaforme in base al
+  // selettore #pubTarget, riusando ytPublish()/tkPublish() così com'è (già
+  // testate) contro gli elementi nascosti #pubBtn/#tkPubBtn — evita di
+  // duplicare la logica di upload, aggrega solo i risultati per l'utente.
+  async function publishSelected() {
+    const target = document.getElementById('pubTarget').value;
+    const wantYt = target !== 'tiktok';
+    const wantTk = target !== 'youtube';
+    const goBtn = document.getElementById('pubGoBtn');
+    const goRes = document.getElementById('pubGoResult');
+    goBtn.disabled = true; goBtn.textContent = '⏳ Pubblicazione...'; goRes.innerHTML = '';
+    const results = [];
+    if (wantYt) {
+      await ytPublish();
+      results.push(document.getElementById('pubResult').innerHTML || '');
+    }
+    if (wantTk) {
+      await tkPublish();
+      results.push(document.getElementById('tkPubResult').innerHTML || '');
+    }
+    goRes.innerHTML = results.filter(Boolean).join('');
+    goBtn.disabled = false; goBtn.textContent = '📤 Pubblica';
   }
 
   // Calcola la prossima occorrenza dell'orario ottimale suggerito dall'AI
