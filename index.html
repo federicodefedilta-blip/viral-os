@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.15.0';
-  const LAST_UPDATED = '2026-07-08 11:29';
+  const CURRENT_VERSION = 'v3.16.0';
+  const LAST_UPDATED = '2026-07-08 11:38';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -243,6 +243,7 @@
           <option value="interattivo">🎮 Sopravvivi o Muori (a scelte)</option>
           <option value="classifica">🔢 Classifica del terrore (Top N)</option>
           <option value="whodunit">🔪 Chi è stato?</option>
+          <option value="fatti">⚡ Fatti reali a raffica</option>
         </select>
       </div>
       <div id="rankParams" style="display:none">
@@ -306,7 +307,7 @@
         <div class="input-group" style="flex:1;min-width:110px"><label class="input-label">Ora/giorno</label><input class="input-field" id="batchTime" type="time" value="21:00"></div>
         <div class="input-group" style="flex:1;min-width:120px"><label class="input-label">Visibilità</label><select class="input-field" id="batchPrivacy"><option value="private" selected>🔒 Privato</option><option value="public">🌍 Pubblico</option><option value="unlisted">🔗 Non in elenco</option></select></div>
       </div>
-      <div class="input-group"><label class="input-label">🎬 Format</label><select class="input-field" id="batchFormat" onchange="applyRankNSuggestion()"><option value="classica">📖 Storia classica</option><option value="interattivo">🎮 Sopravvivi o Muori</option><option value="classifica">🔢 Classifica del terrore</option><option value="whodunit">🔪 Chi è stato?</option><option value="misto">🎲 Misto (alterna tutti)</option></select></div>
+      <div class="input-group"><label class="input-label">🎬 Format</label><select class="input-field" id="batchFormat" onchange="applyRankNSuggestion()"><option value="classica">📖 Storia classica</option><option value="interattivo">🎮 Sopravvivi o Muori</option><option value="classifica">🔢 Classifica del terrore</option><option value="whodunit">🔪 Chi è stato?</option><option value="fatti">⚡ Fatti reali a raffica</option><option value="misto">🎲 Misto (alterna tutti)</option></select></div>
       <div class="input-group"><label class="input-label">📤 Pubblica su</label><select class="input-field" id="batchTarget"><option value="both" selected>YouTube + TikTok</option><option value="youtube">Solo YouTube</option><option value="tiktok">Solo TikTok</option></select></div>
       <button class="btn btn-primary" id="batchBtn" onclick="runWeeklyBatch()" style="width:100%;justify-content:center">🚀 Genera e programma</button>
       <div id="batchLog" style="font-family:var(--mono);font-size:0.72em;color:var(--muted);margin-top:10px;line-height:1.8;max-height:200px;overflow-y:auto"></div>
@@ -748,14 +749,15 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const f = document.getElementById('format').value;
     const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
     show('intParams', f === 'interattivo');
-    show('rankParams', f === 'classifica');
+    show('rankParams', f === 'classifica' || f === 'fatti');
     show('whodunitParams', f === 'whodunit');
-    show('mediaParams', f === 'interattivo' || f === 'classifica' || f === 'whodunit');
-    if (f === 'classifica') applyRankNSuggestion();
+    show('mediaParams', f === 'interattivo' || f === 'classifica' || f === 'whodunit' || f === 'fatti');
+    if (f === 'classifica' || f === 'fatti') applyRankNSuggestion();
     const b = document.getElementById('genBtn');
     if (b) b.textContent = f === 'interattivo' ? '🎮 Genera video interattivo'
       : f === 'classifica' ? '🔢 Genera classifica del terrore'
       : f === 'whodunit' ? '🔪 Genera giallo'
+      : f === 'fatti' ? '⚡ Genera fatti a raffica'
       : '🔍 Analizza trend e genera contenuto';
   }
 
@@ -765,6 +767,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     if (f === 'interattivo') assembleInteractive();
     else if (f === 'classifica') assembleRanking();
     else if (f === 'whodunit') assembleWhodunit();
+    else if (f === 'fatti') assembleFacts();
     else startGen();
   }
 
@@ -1665,7 +1668,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       if (i > 0) { add(`${dayLabel} attendo 60s (limite API Groq)...`); await sleep(60000); }
       try {
         // format del video corrente (misto = ruota tra tutti)
-        const fmt = batchFmt === 'misto' ? ['classica','interattivo','classifica','whodunit'][i % 4] : batchFmt;
+        const fmt = batchFmt === 'misto' ? ['classica','interattivo','classifica','whodunit','fatti'][i % 5] : batchFmt;
         // se i dati reali confermano una voce/musica vincente, usala il 70% delle volte
         // (stessa logica gia' in uso per il sottogenere in generateScriptData)
         const _optB = getOptimize();
@@ -1698,6 +1701,30 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
               intro: data.intro, items: data.items, outro: data.outro, target_ms: rTargetSec*1000 }) });
           if (!rr.ok) throw new Error(await rr.text());
           await rr.blob();
+        } else if (fmt === 'fatti') {
+          add(`${dayLabel} genero fatti a raffica...`);
+          const nItems = Math.max(3, Math.min(7, parseInt(document.getElementById('rankN').value) || 5));
+          for (let a = 0; a < 3; a++) {
+            try { data = await generateFactsData(lang, nItems); break; }
+            catch(e) { const msg = e.message||''; const m = msg.match(/try again in ([\d.]+)s/);
+              if (/rate limit|TPM|429/i.test(msg) && a < 2) { const w = Math.ceil(m?parseFloat(m[1]):30)+5; add(`${dayLabel} rate limit, attendo ${w}s...`); await sleep(w*1000); continue; }
+              throw e; } }
+          add(`${dayLabel} «${data.titolo}» — ${(data.items||[]).length} fatti`);
+          const factQueries = (data.items||[]).map(it => (it.query || it.titolo || data.video_theme));
+          const fClips = (await fetchClipsData({video_theme:data.video_theme, scene_queries:factQueries}, k.pexels)).results.map(v=>v.url);
+          if (!fClips.length) { add(`${dayLabel} ❌ nessuna clip, salto`); continue; }
+          const fUsed = new Set();
+          const fIntro = (await searchClip('dark horror fog atmosphere', k, fUsed) || await searchClip(data.video_theme, k, fUsed));
+          const fTargetSec = parseInt(dur) || 61;
+          const fEstSec = Math.max(fTargetSec, 12 + (data.items||[]).length*9 + 8);
+          let fMusicB64 = null; try { fMusicB64 = await renderMusicWavBase64(vMusic, bgVol, fEstSec); } catch {}
+          add(`${dayLabel} monto fatti a raffica (foto Wikipedia dinamiche)...`);
+          const fr = await fetchRetry('http://127.0.0.1:5555/render_ranking', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ voice: vVoice, fallback: fClips, intro_clip: (fIntro?fIntro.url:fClips[0]), lang, music_wav_b64: fMusicB64, music_vol: bgVol, voice_vol: 1.8,
+              intro: data.intro, items: data.items, outro: data.outro, target_ms: fTargetSec*1000 }) });
+          if (!fr.ok) throw new Error(await fr.text());
+          await fr.blob();
         } else if (fmt === 'interattivo') {
           add(`${dayLabel} genero storia a bivi...`);
           const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value) || 3));
@@ -2038,6 +2065,7 @@ REGOLE FONDAMENTALI:
 - "a" e "b": scelte BREVISSIME (2-4 parole) ma SPECIFICHE della scena — devono nominare un oggetto/dettaglio concreto presente in QUESTA situazione. VIETATO usare un verbo generico da solo senza dettaglio, tipo "Scappa", "Nasconditi", "Corri", "Grida", "Combatti", "Resta fermo" — sono clichè che rendono tutte le storie uguali. Le due scelte devono essere azioni diverse tra loro (non varianti della stessa azione), una salva e una uccide, e la scelta sbagliata deve essere una trappola logica legata alla minaccia specifica di QUESTA storia, non un pericolo generico.
 - GRAMMATICA DELLE SCELTE: "a" e "b" vanno scritte in SECONDA PERSONA SINGOLARE, INDICATIVO PRESENTE — la forma che risponde naturalmente a "Cosa fai" — MAI all'imperativo. Esempi corretti: "Ti chiudi nell'armadio", "Salti dal balcone", "Segui le impronte insanguinate", "Spegni la torcia". Esempi SBAGLIATI da evitare (imperativo, suonano innaturali dopo "Cosa fai"): "Chiuditi nell'armadio!", "Salta dal balcone!", "Segui!".
 - "esito": MAX 2 frasi. Rivela drammaticamente la scelta mortale ("Se avessi scelto X... [morte breve e cruda, coerente con la minaccia]") e prosegui di slancio verso il bivio dopo, lasciando la scena in un punto preciso da cui ripartire.
+- RICHIAMO A METÀ (fondamentale per non far scrollare via chi ha già visto l'inizio): l'esito del bivio numero ${Math.ceil(rounds/2)} deve aggiungere una frase in più che rilancia sul resto della storia (es. "...e il peggio deve ancora arrivare.", "...ma quello che succede dopo è molto peggio."). Un secondo gancio a metà video, non solo nell'intro.
 - Alterna quale è giusta (a volte 'a', a volte 'b').
 - Tensione che sale ad ogni bivio (la minaccia si fa più vicina/più scoperta), finale con twist agghiacciante in 1-2 frasi legato all'obiettivo e alla minaccia.
 - Frasi corte, concrete, sensoriali. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave (voce più drammatica).
@@ -2209,6 +2237,7 @@ REGOLE FONDAMENTALI:
 - INTRO FULMINANTE (max 1 frase, ~2 secondi): niente preamboli, entra subito. Deve promettere che il #1 è scioccante E anticipare che vale l'attesa, con una chiusura ADATTA al soggetto (una frase su un dipinto o una bambola in teca non può dire "è ancora là fuori" — quello vale solo per creature o luoghi). Spunti di chiusura da adattare al tema, VIETATO copiarli testualmente e VIETATO usare sempre la stessa in ogni video: ${hookSample.map(h=>`"${h}"`).join(', ')}. Poi via SUBITO al primo elemento.
 - Gli elementi vanno in COUNTDOWN dal ${n} all'1, intensità CRESCENTE (l'1 è il più agghiacciante).
 - Ogni elemento: titolo (nome reale) + descrizione di UNA SOLA frase secca, concreta e inquietante. RITMO VELOCE, zero prolissità — la gente deve arrivare al #1.
+- RICHIAMO A METÀ (fondamentale per non far scrollare via chi ha già visto l'inizio): l'elemento numero ${Math.ceil(n/2)} deve chiudere la sua descrizione con una frase in più che rilancia sul resto della classifica (es. "...e non hai ancora sentito la parte peggiore.", "...e da qui in poi peggiora solo."). Un secondo gancio a metà video, non solo all'inizio.
 - L'outro (1 frase) rilancia sul #1 e chiede un commento con una domanda diretta.
 - Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
 
@@ -2299,6 +2328,141 @@ Rispondi SOLO con JSON valido:
       add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo.`);
     } catch(e) { add('❌ '+(e.message||e)); }
     btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore';
+  }
+
+  // --- Fatti reali a raffica (il gancio si rinnova ogni 3-4 secondi, non solo
+  // all'inizio: pensato per non far scrollare via il pubblico freddo a metà
+  // video). Riusa INTERAMENTE il renderer della classifica (stessa forma dati:
+  // intro + items[{rank,titolo,descrizione,query}] + outro) su /render_ranking,
+  // cambia solo il contenuto: fatti reali densissimi invece di item narrativi. ---
+  async function generateFactsData(lang, n) {
+    const k = getKeys();
+    const areaMap = { italiano: 'in Italia', inglese: 'in the world (famous internationally)', spagnolo: 'del mundo hispano y global' };
+    const area = areaMap[lang] || 'in Italia';
+    const temaPool = [
+      `casi di cronaca nera realmente documentati ${area}`,
+      `disastri reali con dettagli agghiaccianti poco conosciuti`,
+      `esperimenti medici o scientifici reali finiti in tragedia`,
+      `culti reali e cosa è successo davvero ai loro membri`,
+      `sparizioni reali con dettagli che nessuno sa spiegare`,
+      `oggetti reali documentati legati a disgrazie multiple`,
+      `fatti reali su serial killer realmente esistiti (SOLO dettagli già pubblici e documentati)`,
+      `fenomeni reali mai spiegati dalla scienza`,
+    ];
+    const tema = temaPool[Math.floor(Math.random()*temaPool.length)];
+    const hookPool = [
+      'e il numero 1 ti farà dubitare di tutto',
+      'e nessuno è mai riuscito a spiegare il numero 1',
+      'e il numero 1 non ha una spiegazione razionale',
+      'e quello che scoprirai al numero 1 ti perseguiterà',
+      'e il numero 1 fa ancora paura a chi lo racconta',
+      'e il numero 1 lascia ancora tutti senza parole',
+      'e il numero 1 potrebbe essere più vicino di quanto pensi',
+    ];
+    const hookSample = [...hookPool].sort(()=>Math.random()-0.5).slice(0,4);
+    const _opt = getOptimize();
+    const langName = lang === 'inglese' ? 'INGLESE (English)' : lang === 'spagnolo' ? 'SPAGNOLO (Español)' : 'ITALIANO';
+    const langSystem = lang === 'inglese' ? 'You write everything exclusively in ENGLISH.' : lang === 'spagnolo' ? 'Escribes todo exclusivamente en ESPAÑOL.' : 'Scrivi tutto esclusivamente in ITALIANO.';
+    const prompt = `Sei un creatore di contenuti horror virali per ${platform}, specializzato in fatti reali a raffica: ${n} fatti scioccanti su ${tema}, un gancio nuovo ogni 3-4 secondi.
+
+⚠️ Scrivi TUTTI i testi in ${langName}.
+${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
+
+REGOLE FONDAMENTALI:
+- USA SOLO FATTI REALI E DOCUMENTATI, con NOME PROPRIO esatto del caso/persona/luogo/oggetto (es. "Il Dyatlov Pass", "L'esperimento Stanford", "Il Cottingley Fairies"). VIETATO inventare fatti o dettagli non documentati — se non sei certo, resta più generico piuttosto che inventare.
+- Il campo "titolo" DEVE essere il nome reale del soggetto (serve a trovarne la foto vera su Wikipedia). Nella "query" metti il nome reale in inglese + una parola tipo "real/documented/mystery".
+- OGNI FATTO IN UNA SOLA FRASE DENSISSIMA: zero descrizione, zero contesto superfluo — vai dritto al dettaglio più scioccante. Più corto e diretto della classifica normale: qui il ritmo è ANCORA più veloce, un fatto nuovo ogni 3-4 secondi.
+- Gli elementi vanno in COUNTDOWN dal ${n} all'1, intensità CRESCENTE (l'1 è il più scioccante).
+- INTRO FULMINANTE (max 1 frase): promette che il #1 è scioccante. Spunti di chiusura da adattare al tema, VIETATO copiarli testualmente e VIETATO usare sempre la stessa: ${hookSample.map(h=>`"${h}"`).join(', ')}.
+- RICHIAMO A METÀ (fondamentale, non far scrollare via chi ha già visto l'inizio): il fatto numero ${Math.ceil(n/2)} deve chiudere con una frase in più che rilancia sul resto ("...e non hai ancora sentito il fatto peggiore.", "...ma è solo l'inizio.").
+- L'outro (1 frase) rilancia sul #1 e chiede un commento con una domanda diretta.
+- Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
+
+Rispondi SOLO con JSON valido:
+{
+  "intro": "1 frase fulminante: entra subito + promessa che il #1 è scioccante",
+  "items": [${Array.from({length:n},(_,i)=>`{"rank":${n-i},"titolo":"NOME REALE ESATTO del soggetto","descrizione":"UN fatto reale in UNA sola frase densissima","query":"nome reale in inglese + real/documented/mystery"}`).join(',')}],
+  "outro": "1 frase da brivido sul #1 + una domanda diretta che invita a commentare",
+  "titolo": "titolo YouTube che terrorizza in ${langName}, max 60 caratteri",
+  "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
+  "hashtags": ["10 hashtag horror in ${langName}, ognuno con #"],
+  "video_theme": "uno tra: home, forest, abandoned, dark, urban, tech",
+  "nicchia": "fatti reali horror",
+  "orario_pubblicazione": "orario sera/notte ottimale"
+}`;
+    const models = ['llama-3.3-70b-versatile','llama-3.1-8b-instant'];
+    let dataR=null, lastErr='';
+    for (const model of models) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k.groq}`},
+          body: JSON.stringify({ model, messages:[{role:'system',content:langSystem},{role:'user',content:prompt}], temperature:0.9, max_tokens:3000 })
+        });
+        if (res.ok) { dataR = await res.json(); break; }
+        const e = await res.json().catch(()=>({})); lastErr = e.error?.message || `HTTP ${res.status}`;
+      } catch(e){ lastErr = e.message||String(e); }
+    }
+    if (!dataR) throw new Error(lastErr||'generazione fallita');
+    let clean = (dataR.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+    const s = clean.indexOf('{'), en = clean.lastIndexOf('}');
+    if (s!==-1 && en!==-1) clean = clean.slice(s, en+1);
+    clean = clean.replace(/[\x00-\x1F\x7F]/g,' ').replace(/,\s*([}\]])/g,'$1');
+    const d = JSON.parse(clean);
+    d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
+    d.items = Array.isArray(d.items) ? d.items : [];
+    d.video_theme = d.video_theme || 'dark';
+    return d;
+  }
+
+  async function assembleFacts() {
+    const btn = document.getElementById('genBtn');
+    const log = document.getElementById('intLog');
+    const prev = document.getElementById('intPreview');
+    const add = m => { log.innerHTML += `<div>${m}</div>`; log.scrollTop = log.scrollHeight; };
+    log.innerHTML=''; prev.innerHTML='';
+    btn.disabled=true; btn.textContent='⏳ In corso...';
+    try { const p = await fetch('http://127.0.0.1:5555/ping'); if(!p.ok) throw 0; }
+    catch { add('⚠️ Server locale non attivo (START_LOCAL_SERVER.bat).'); btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica'; return; }
+    const k = getKeys();
+    if (!k.groq) { add('⚠️ Manca la chiave Groq.'); btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica'; return; }
+    if (!k.pexels && !k.pixabay) { add('⚠️ Serve almeno una chiave Pexels o Pixabay.'); btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica'; return; }
+    const lang = document.getElementById('lang').value;
+    const n = Math.max(3, Math.min(7, parseInt(document.getElementById('rankN').value)||5));
+    const targetSec = parseInt(document.getElementById('dur') ? document.getElementById('dur').value : '') || 61;
+    const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
+    const bgType = document.getElementById('intMusic') ? document.getElementById('intMusic').value : 'tension';
+    let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : randomVoice(lang);
+    try {
+      add(`Genero ${n} fatti a raffica...`);
+      const d = await generateFactsData(lang, n);
+      gData = d; window._videoTheme = d.video_theme;
+      add(`«${d.titolo||'fatti a raffica'}» — ${d.items.length} fatti`);
+      add('Cerco clip di fallback (le foto le prende il server da Wikipedia)...');
+      const usedIds = new Set();
+      const fallback = [];
+      for (const it of d.items) {
+        const c = await searchClip(it.query || it.titolo || d.video_theme, k, usedIds)
+               || await searchClip(d.video_theme, k, usedIds);
+        fallback.push(c ? c.url : (fallback.length ? fallback[fallback.length-1] : null));
+      }
+      const ic = await searchClip('dark horror fog atmosphere', k, usedIds) || await searchClip(d.video_theme, k, usedIds);
+      const intro_clip = ic ? ic.url : (fallback[0] || null);
+      add('Genero musica...');
+      const estSec = Math.max(targetSec, 12 + d.items.length*9 + 8);
+      let musicB64=null; try { musicB64 = await renderMusicWavBase64(bgType, bgVol, estSec); } catch {}
+      add('Monto i fatti a raffica (foto Wikipedia dinamiche + numeri, attendi)...');
+      const body = { voice, fallback, intro_clip, lang, music_wav_b64: musicB64, music_vol: bgVol, voice_vol: 1.8,
+        intro: d.intro, items: d.items, outro: d.outro, target_ms: targetSec*1000 };
+      const r = await fetch('http://127.0.0.1:5555/render_ranking', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(await r.text());
+      const blob = await r.blob(); const url = URL.createObjectURL(blob);
+      const mb = (blob.size/1024/1024).toFixed(1);
+      prev.innerHTML = `<video src="${url}" controls style="width:100%;border-radius:8px;max-height:320px"></video>
+        <div style="margin-top:10px"><a href="${url}" download="viralos-fatti-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${mb} MB)</a></div>`;
+      add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo.`);
+    } catch(e) { add('❌ '+(e.message||e)); }
+    btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica';
   }
 
   // --- Chi è stato? (giallo inventato: sospetti + CTA + colpevole) ---
