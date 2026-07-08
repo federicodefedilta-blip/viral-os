@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.16.0';
-  const LAST_UPDATED = '2026-07-08 11:38';
+  const CURRENT_VERSION = 'v3.16.1';
+  const LAST_UPDATED = '2026-07-08 15:08';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -2022,14 +2022,14 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     // pubblico freddo (vede sempre la stessa frase, scrolla subito) — pool +
     // campione casuale, stesso schema già usato per classifica e whodunit.
     const introHookPool = [
-      'Sopravvivresti a questa notte? Una scelta sbagliata e sei morto.',
-      'Hai poche scelte per restare vivo stanotte. Sbaglia anche una sola e muori.',
-      'Questo è un gioco con una sola regola: scegli bene o muori.',
-      'Tra pochi secondi dovrai scegliere per sopravvivere. Non tutte le scelte ti lasceranno vivo.',
-      'Stai per entrare in un incubo a scelte. Una sbagliata e la storia finisce con te morto.',
-      'Benvenuto nel gioco più pericoloso che tu abbia mai giocato: sopravvivere fino all\'alba.',
-      'Quante possibilità hai di arrivare vivo alla fine? Scelta dopo scelta lo scopriamo subito.',
-      'Da qui in poi ogni scelta può ucciderti. Non c\'è un modo sicuro per uscirne.',
+      'Il 90% muore alla prima scelta. Tu no?',
+      'Hai 10 secondi per decidere se vivere o morire. Pronto?',
+      'Questa storia ha già ucciso migliaia di persone. Tocca a te.',
+      'Una regola. Zero seconde possibilità. Sopravvivi o muori.',
+      'Se sbagli anche una sola scelta, per te è già finita.',
+      'Nessuno è mai arrivato vivo alla fine senza sbagliare. Proviamoci.',
+      'Ti do due scelte. Una ti salva. L\'altra ti uccide.',
+      'Scommetto che non arrivi vivo alla fine. Dimostrami che ho torto.',
     ];
     const introHookSample = [...introHookPool].sort(()=>Math.random()-0.5).slice(0,4);
     const titleStylePool = [
@@ -2059,7 +2059,7 @@ REGOLE FONDAMENTALI:
 - Minaccia: ${threat}
 - Il TUO obiettivo per tutta la storia: ${goal}. Ogni bivio deve servire concretamente questo obiettivo (ci si avvicina o ci si allontana), non sono eventi a caso.
 - COERENZA A CATENA: ogni bivio è la conseguenza DIRETTA e immediata dell'esito del bivio precedente. Stesso luogo che si evolve o luogo attiguo raggiunto scappando/muovendosi dal precedente (es. dalla stanza al corridoio, dal bosco al fiume) — MAI un salto di scena scollegato dal contesto. La "situazione" di ogni bivio (tranne il primo) deve ripartire esattamente da dove ti ha lasciato l'"esito" del bivio prima.
-- L'INTRO deve dire CHIARO dalla prima frase che è un gioco a scelte dove puoi morire, e piazzarti subito dentro l'ambientazione con la minaccia già presente. Massimo 2 frasi, dritte e adrenaliniche. Spunti di apertura da adattare al tema (VIETATO copiarli testualmente e VIETATO usare sempre la stessa in ogni video): ${introHookSample.map(h=>`"${h}"`).join(', ')}.
+- L'INTRO è la frase più importante del video: deve essere PROVOCATORIA e SCIOCCANTE, non solo informativa — una sfida diretta, una statistica shock, o una provocazione in seconda persona che fa venire voglia di dimostrare qualcosa. VIETATO un tono piatto/da manuale ("questo è un gioco a scelte dove..."): deve suonare come una sfida personale allo spettatore. Massimo 2 frasi, dritte e adrenaliniche. Spunti (VIETATO copiarli testualmente e VIETATO usare sempre la stessa in ogni video): ${introHookSample.map(h=>`"${h}"`).join(', ')}.
 - POCA storia, MOLTA azione: le scelte arrivano una dietro l'altra. Niente parti prolisse.
 - "situazione": UNA sola frase breve che crea il pericolo immediato (conseguenza del bivio precedente, vedi COERENZA A CATENA), poi SEMPRE finisce con la domanda "Cosa fai: [scelta A] o [scelta B]?" (riprendi le due scelte nella domanda).
 - "a" e "b": scelte BREVISSIME (2-4 parole) ma SPECIFICHE della scena — devono nominare un oggetto/dettaglio concreto presente in QUESTA situazione. VIETATO usare un verbo generico da solo senza dettaglio, tipo "Scappa", "Nasconditi", "Corri", "Grida", "Combatti", "Resta fermo" — sono clichè che rendono tutte le storie uguali. Le due scelte devono essere azioni diverse tra loro (non varianti della stessa azione), una salva e una uccide, e la scelta sbagliata deve essere una trappola logica legata alla minaccia specifica di QUESTA storia, non un pericolo generico.
