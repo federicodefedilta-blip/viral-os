@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.17.0';
-  const LAST_UPDATED = '2026-07-08 15:14';
+  const CURRENT_VERSION = 'v3.17.1';
+  const LAST_UPDATED = '2026-07-08 15:49';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1830,7 +1830,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
               throw new Error('TikTok non collegato'); // "solo TikTok": niente da salvare come alternativa
             }
           } catch(e) {
-            if (wantYt) add(`${dayLabel} ⚠️ YouTube ok (${ytUrl}) ma TikTok fallito: ${e.message||e}`);
+            if (wantYt) add(`${dayLabel} ⚠️ YouTube ok (${ytUrl}) ma TikTok fallito: ${escTxt(e.message||e)}`);
             else throw e;
           }
         } else {
@@ -1838,7 +1838,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         }
         ok++;
       } catch(e) {
-        add(`${dayLabel} ❌ ${e.message||e}`);
+        add(`${dayLabel} ❌ ${escTxt(e.message||e)}`);
       }
     }
     const targetLabel = target === 'youtube' ? 'solo YouTube' : target === 'tiktok' ? 'solo TikTok' : 'YouTube + TikTok dove collegato';
@@ -2251,7 +2251,7 @@ Rispondi SOLO con JSON valido:
       prev.innerHTML = `<video src="${url}" controls style="width:100%;border-radius:8px;max-height:320px"></video>
         <div style="margin-top:10px"><a href="${url}" download="viralos-interattivo-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${mb} MB)</a></div>`;
       add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo su YouTube.`);
-    } catch(e) { add('❌ '+(e.message||e)); }
+    } catch(e) { add('❌ '+escTxt(e.message||e)); }
     btn.disabled=false; btn.textContent='🎮 Genera video interattivo';
   }
 
@@ -2391,7 +2391,7 @@ Rispondi SOLO con JSON valido:
       prev.innerHTML = `<video src="${url}" controls style="width:100%;border-radius:8px;max-height:320px"></video>
         <div style="margin-top:10px"><a href="${url}" download="viralos-classifica-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${mb} MB)</a></div>`;
       add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo.`);
-    } catch(e) { add('❌ '+(e.message||e)); }
+    } catch(e) { add('❌ '+escTxt(e.message||e)); }
     btn.disabled=false; btn.textContent='🔢 Genera classifica del terrore';
   }
 
@@ -2526,7 +2526,7 @@ Rispondi SOLO con JSON valido:
       prev.innerHTML = `<video src="${url}" controls style="width:100%;border-radius:8px;max-height:320px"></video>
         <div style="margin-top:10px"><a href="${url}" download="viralos-fatti-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${mb} MB)</a></div>`;
       add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo.`);
-    } catch(e) { add('❌ '+(e.message||e)); }
+    } catch(e) { add('❌ '+escTxt(e.message||e)); }
     btn.disabled=false; btn.textContent='⚡ Genera fatti a raffica';
   }
 
@@ -2683,7 +2683,7 @@ Rispondi SOLO con JSON valido:
       prev.innerHTML = `<video src="${url}" controls style="width:100%;border-radius:8px;max-height:320px"></video>
         <div style="margin-top:10px"><a href="${url}" download="viralos-giallo-${Date.now()}.mp4" class="btn btn-primary" style="text-decoration:none;display:block;text-align:center">⬇ Scarica MP4 (${mb} MB)</a></div>`;
       add(`✓ Pronto (${mb} MB). Vai allo step 6 per pubblicarlo.`);
-    } catch(e) { add('❌ '+(e.message||e)); }
+    } catch(e) { add('❌ '+escTxt(e.message||e)); }
     btn.disabled=false; btn.textContent='🔪 Genera giallo';
   }
 
@@ -2723,7 +2723,7 @@ Rispondi SOLO con JSON valido:
       voiceB64 = j.audio;
       timings = (j.words||[]).filter(x=>x.w && x.w.trim());
       addLog(`Voce pronta (${timings.length} frasi).`);
-    } catch(e){ addLog('❌ Errore voce: '+(e.message||e)); badge.textContent='Errore'; btn.disabled=false; return; }
+    } catch(e){ addLog('❌ Errore voce: '+escTxt(e.message||e)); badge.textContent='Errore'; btn.disabled=false; return; }
     if (!timings.length) { addLog('❌ Nessuna frase rilevata.'); btn.disabled=false; return; }
 
     const voiceDurMs = timings[timings.length-1].t + timings[timings.length-1].d;
@@ -2734,7 +2734,7 @@ Rispondi SOLO con JSON valido:
     if (bgType !== 'none') {
       addLog('Genero musica...');
       try { musicB64 = await renderMusicWavBase64(bgType, bgVol, totalMs/1000); }
-      catch(e){ addLog('Musica saltata: '+(e.message||e)); }
+      catch(e){ addLog('Musica saltata: '+escTxt(e.message||e)); }
     }
 
     // 3. render lato server
@@ -2757,7 +2757,7 @@ Rispondi SOLO con JSON valido:
         </div>`;
       badge.textContent='Completato'; badge.className='badge-done';
       addLog(`✓ Video pronto (${sizeMB} MB) — voce + musica + sottotitoli, montato dal server.`);
-    } catch(e){ addLog('❌ Errore montaggio: '+(e.message||e)); badge.textContent='Errore'; }
+    } catch(e){ addLog('❌ Errore montaggio: '+escTxt(e.message||e)); badge.textContent='Errore'; }
     btn.textContent='🔄 Rigenera'; btn.disabled=false;
   }
   function cp(id) { const el=document.getElementById(id); if(el) navigator.clipboard.writeText(el.textContent).catch(()=>{}); }
