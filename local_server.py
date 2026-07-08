@@ -1570,6 +1570,20 @@ def tk_upload(data):
     caption = (data.get("caption") or "").strip()[:2200]
     video_size = os.path.getsize(LAST_RENDER)
 
+    # Regole TikTok per FILE_UPLOAD, verificate empiricamente contro l'API reale
+    # (la documentazione pubblica è fuorviante su questo punto): per file fino a
+    # 64MB va bene un chunk unico con chunk_size = video_size. Per file più
+    # grandi, TikTok vuole total_chunk_count = video_size // chunk_size con
+    # ARROTONDAMENTO PER DIFETTO (non per eccesso: quello dà sempre
+    # "the total chunk count is invalid") — l'ultimo chunk assorbe tutto il
+    # resto ed è quindi più grande degli altri, cosa esplicitamente permessa.
+    MAX_CHUNK = 64 * 1024 * 1024
+    if video_size <= MAX_CHUNK:
+        chunk_size, total_chunk_count = video_size, 1
+    else:
+        chunk_size = 20 * 1024 * 1024  # ben sotto i 64MB: garantisce total_chunk_count >= 2
+        total_chunk_count = video_size // chunk_size
+
     init = _tk_request("/video/init/", access_token, {
         "post_info": {
             "title": caption, "privacy_level": privacy_level,
@@ -1577,7 +1591,7 @@ def tk_upload(data):
         },
         "source_info": {
             "source": "FILE_UPLOAD", "video_size": video_size,
-            "chunk_size": video_size, "total_chunk_count": 1,
+            "chunk_size": chunk_size, "total_chunk_count": total_chunk_count,
         },
     })
     idata = init.get("data") or {}
@@ -1586,16 +1600,22 @@ def tk_upload(data):
         raise RuntimeError(f"init TikTok fallito: {init}")
 
     with open(LAST_RENDER, "rb") as f:
-        video_bytes = f.read()
-    put_req = urllib.request.Request(upload_url, data=video_bytes, method="PUT", headers={
-        "Content-Type": "video/mp4", "Content-Length": str(video_size),
-        "Content-Range": f"bytes 0-{video_size - 1}/{video_size}",
-    })
-    try:
-        with urllib.request.urlopen(put_req, timeout=120) as r:
-            r.read()
-    except urllib.error.HTTPError as e:
-        raise _tk_http_error(e)
+        for i in range(total_chunk_count):
+            start = i * chunk_size
+            # l'ultimo chunk prende tutti i byte restanti (può superare chunk_size,
+            # consentito da TikTok fino a 128MB per il chunk finale)
+            end = video_size - 1 if i == total_chunk_count - 1 else start + chunk_size - 1
+            f.seek(start)
+            piece = f.read(end - start + 1)
+            put_req = urllib.request.Request(upload_url, data=piece, method="PUT", headers={
+                "Content-Type": "video/mp4", "Content-Length": str(len(piece)),
+                "Content-Range": f"bytes {start}-{end}/{video_size}",
+            })
+            try:
+                with urllib.request.urlopen(put_req, timeout=120) as r:
+                    r.read()
+            except urllib.error.HTTPError as e:
+                raise _tk_http_error(e)
 
     import time as _time
     status_data = {}
