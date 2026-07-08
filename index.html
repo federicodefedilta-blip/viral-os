@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.14.1';
-  const LAST_UPDATED = '2026-07-08 09:57';
+  const CURRENT_VERSION = 'v3.14.2';
+  const LAST_UPDATED = '2026-07-08 10:02';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -627,7 +627,7 @@ ${_opt && _opt.insight ? '\n📈 OTTIMIZZAZIONE DAI DATI REALI: ' + _opt.insight
 PARAMETRI:
 - Piattaforma: ${platform}
 - Lingua output: ${langName}
-- Durata: ${dur} secondi — lo script DEVE contenere ALMENO ${Math.round(parseInt(dur) * 2.6)} parole. Una voce legge ~2.6 parole/sec: meno parole = video muto. NON scrivere meno del minimo.
+- Durata: ${dur} secondi — lo script deve stare vicino a ${Math.round(parseInt(dur) * 2.6)} parole (una voce legge ~2.6 parole/sec). Non scendere sotto questa soglia (video muto), ma non superarla neanche di molto: sforare allunga il video oltre la durata scelta e fa crollare la % di visualizzazione. Meglio restare vicini al target che abbondare.
 - Sottogenere OBBLIGATORIO: ${sg.nome}
 - Ambientazione: ${sg.ambientazione}
 - Angolo narrativo: ${angolo}
@@ -698,6 +698,31 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         scene_queries: extractArr('scene_queries'), video_theme: extract('video_theme','dark'),
         soggetto_reale: extract('soggetto_reale',''),
       });
+    }
+    // SICUREZZA DURATA (stesso principio già applicato all'interattivo): il
+    // prompt chiede di restare vicini al target ma il modello a volte scrive
+    // molto più testo del previsto, e il video non ha un tetto massimo di
+    // durata (solo un pavimento via padding lato server) — risultato, video
+    // molto più lunghi del selezionato. Se lo script supera il budget di
+    // oltre il 25%, tronca A FRASI INTERE (non a parole a caso) partendo
+    // dalla fine, tenendo sempre almeno la prima frase.
+    const targetWords = Math.round(parseInt(dur) * 2.6);
+    const wc = t => (t||'').trim().split(/\s+/).filter(Boolean).length;
+    if (wc(out.script) > targetWords * 1.25) {
+      const sentences = (out.script||'').trim().split(/(?<=[.!?…])\s+/);
+      let words = 0, kept = [];
+      for (const s of sentences) {
+        const w = wc(s);
+        if (kept.length > 0 && words + w > targetWords * 1.15) break;
+        kept.push(s); words += w;
+      }
+      if (kept.length) {
+        out.script = kept.join(' ');
+        // le scene_queries sono una per frase, nello stesso ordine: accorciale insieme
+        if (Array.isArray(out.scene_queries) && out.scene_queries.length > kept.length) {
+          out.scene_queries = out.scene_queries.slice(0, kept.length);
+        }
+      }
     }
     return out;
   }
