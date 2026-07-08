@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.13.0';
-  const LAST_UPDATED = '2026-07-07 18:15';
+  const CURRENT_VERSION = 'v3.13.1';
+  const LAST_UPDATED = '2026-07-08 09:20';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1725,7 +1725,8 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
                 method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ caption })
               });
               if (!tkr.ok) throw new Error(await tkr.text());
-              add(`${dayLabel} ✅ ${ytUrl ? ytUrl + ' · ' : ''}pubblicato su TikTok (${(tks.privacy_options||[])[0]||'privato'})`);
+              const tkj = await tkr.json();
+              add(`${dayLabel} ✅ ${ytUrl ? ytUrl + ' · ' : ''}pubblicato su TikTok (${tkj.privacy_level||'privato'})`);
             } else if (wantYt) {
               // "entrambi" ma TikTok non collegato: YouTube resta comunque un risultato valido, fallback al pacchetto
               await fetch('http://127.0.0.1:5555/save_pack', {
