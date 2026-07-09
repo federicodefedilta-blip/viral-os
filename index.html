@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.18.0';
-  const LAST_UPDATED = '2026-07-08 16:48';
+  const CURRENT_VERSION = 'v3.19.0';
+  const LAST_UPDATED = '2026-07-09 14:15';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -575,6 +575,57 @@
     if (n === 6 && gData) renderPublish();
   }
 
+  // --- Rete di sicurezza UNIVERSALE sulla durata (usata da tutti i generatori) ---
+  // Il budget di parole scritto nel prompt è solo un suggerimento: il modello a
+  // volte lo ignora, e senza un tetto massimo il video finisce per durare molto
+  // più della durata scelta (es. 61s -> 2 minuti). Invece di reinventare il
+  // troncamento in ogni nuovo formato, ogni generatore chiama questi due helper
+  // condivisi dopo aver ricevuto la risposta del modello.
+  function wcWords(t) { return (t||'').trim().split(/\s+/).filter(Boolean).length; }
+
+  // Taglia un singolo campo (frase/paragrafo) a un numero massimo di parole,
+  // preservando la punteggiatura finale. protectRegex (opzionale) individua una
+  // coda da NON tagliare mai (es. la domanda "Cosa fai: A o B?" dell'interattivo).
+  function capWordsSimple(text, maxWords, protectRegex) {
+    if (!text) return text;
+    let prefix = text, suffix = '';
+    if (protectRegex) {
+      const m = text.match(protectRegex);
+      if (m) { prefix = text.slice(0, m.index); suffix = text.slice(m.index); }
+    }
+    const words = prefix.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= maxWords) return text;
+    let trimmed = words.slice(0, Math.max(3, maxWords)).join(' ');
+    if (!/[.!?…]$/.test(trimmed)) trimmed += '.';
+    return suffix ? `${trimmed} ${suffix}` : trimmed;
+  }
+
+  // Per un testo narrativo unico e lungo (es. lo script della classica): se
+  // supera il budget di oltre il 25%, tronca A FRASI INTERE dalla fine (mai a
+  // metà frase), tenendo sempre almeno la prima.
+  function capToSentenceBudget(text, targetWords, toleranceMult = 1.25, floorMult = 1.15) {
+    if (wcWords(text) <= targetWords * toleranceMult) return text;
+    const sentences = (text||'').trim().split(/(?<=[.!?…])\s+/);
+    let words = 0, kept = [];
+    for (const s of sentences) {
+      const w = wcWords(s);
+      if (kept.length > 0 && words + w > targetWords * floorMult) break;
+      kept.push(s); words += w;
+    }
+    return kept.length ? kept.join(' ') : text;
+  }
+
+  // Per formati "a campi multipli" (intro + items[]/sospetti[] + outro): somma
+  // le parole di tutti i campi indicati e, se si supera il budget di oltre il
+  // 25%, li riduce tutti proporzionalmente con capWordsSimple.
+  function enforceFieldsBudget(getFields, targetWords, toleranceMult = 1.25) {
+    const fields = getFields(); // [{get, set}, ...]
+    const totalNow = fields.reduce((s, f) => s + wcWords(f.get()), 0);
+    if (totalNow <= targetWords * toleranceMult || totalNow === 0) return;
+    const scale = targetWords / totalNow;
+    fields.forEach(f => f.set(capWordsSimple(f.get(), Math.round(wcWords(f.get()) * scale))));
+  }
+
   // --- Core generazione script (riusabile da manuale e batch) ---
   async function generateScriptData(lang, dur) {
     const k = getKeys();
@@ -723,29 +774,15 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         soggetto_reale: extract('soggetto_reale',''),
       });
     }
-    // SICUREZZA DURATA (stesso principio già applicato all'interattivo): il
-    // prompt chiede di restare vicini al target ma il modello a volte scrive
-    // molto più testo del previsto, e il video non ha un tetto massimo di
-    // durata (solo un pavimento via padding lato server) — risultato, video
-    // molto più lunghi del selezionato. Se lo script supera il budget di
-    // oltre il 25%, tronca A FRASI INTERE (non a parole a caso) partendo
-    // dalla fine, tenendo sempre almeno la prima frase.
+    // SICUREZZA DURATA (rete di sicurezza universale, vedi capToSentenceBudget)
     const targetWords = Math.round(parseInt(dur) * 2.6);
-    const wc = t => (t||'').trim().split(/\s+/).filter(Boolean).length;
-    if (wc(out.script) > targetWords * 1.25) {
-      const sentences = (out.script||'').trim().split(/(?<=[.!?…])\s+/);
-      let words = 0, kept = [];
-      for (const s of sentences) {
-        const w = wc(s);
-        if (kept.length > 0 && words + w > targetWords * 1.15) break;
-        kept.push(s); words += w;
-      }
-      if (kept.length) {
-        out.script = kept.join(' ');
-        // le scene_queries sono una per frase, nello stesso ordine: accorciale insieme
-        if (Array.isArray(out.scene_queries) && out.scene_queries.length > kept.length) {
-          out.scene_queries = out.scene_queries.slice(0, kept.length);
-        }
+    const scriptBefore = out.script;
+    out.script = capToSentenceBudget(out.script, targetWords);
+    if (out.script !== scriptBefore) {
+      // le scene_queries sono una per frase, nello stesso ordine: accorcia insieme
+      const keptCount = out.script.split(/(?<=[.!?…])\s+/).length;
+      if (Array.isArray(out.scene_queries) && out.scene_queries.length > keptCount) {
+        out.scene_queries = out.scene_queries.slice(0, keptCount);
       }
     }
     return out;
@@ -1760,7 +1797,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           add(`${dayLabel} genero classifica...`);
           const nItems = Math.max(3, Math.min(7, parseInt(document.getElementById('rankN').value) || 5));
           for (let a = 0; a < 3; a++) {
-            try { data = await generateRankingData(lang, nItems); break; }
+            try { data = await generateRankingData(lang, nItems, dur); break; }
             catch(e) { const msg = e.message||''; const m = msg.match(/try again in ([\d.]+)s/);
               if (/rate limit|TPM|429/i.test(msg) && a < 2) { const w = Math.ceil(m?parseFloat(m[1]):30)+5; add(`${dayLabel} rate limit, attendo ${w}s...`); await sleep(w*1000); continue; }
               throw e; } }
@@ -1784,7 +1821,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           add(`${dayLabel} genero fatti a raffica...`);
           const nItems = Math.max(3, Math.min(7, parseInt(document.getElementById('rankN').value) || 5));
           for (let a = 0; a < 3; a++) {
-            try { data = await generateFactsData(lang, nItems); break; }
+            try { data = await generateFactsData(lang, nItems, dur); break; }
             catch(e) { const msg = e.message||''; const m = msg.match(/try again in ([\d.]+)s/);
               if (/rate limit|TPM|429/i.test(msg) && a < 2) { const w = Math.ceil(m?parseFloat(m[1]):30)+5; add(`${dayLabel} rate limit, attendo ${w}s...`); await sleep(w*1000); continue; }
               throw e; } }
@@ -2243,36 +2280,21 @@ Rispondi SOLO con JSON valido:
     d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
     d.rounds = Array.isArray(d.rounds) ? d.rounds : [];
     d.video_theme = d.video_theme || 'dark';
-    // SICUREZZA DURATA: il budget di parole nel prompt è solo un suggerimento, il
-    // modello a volte lo ignora e scrive molto più testo del previsto — il video
-    // non ha un tetto massimo (solo un pavimento via target_ms/padding lato server),
-    // quindi uno script troppo lungo si traduce in un video molto più lungo del
-    // target (es. 61s selezionati -> quasi 2 minuti reali). Se il totale supera il
-    // budget di oltre il 25%, tronca proporzionalmente ogni campo per riportarlo
-    // vicino al target, proteggendo il "Cosa fai: A o B?" finale di ogni situazione.
-    const wc = t => (t||'').trim().split(/\s+/).filter(Boolean).length;
-    function capWords(text, maxWords, protectQuestion) {
-      if (!text) return text;
-      let prefix = text, suffix = '';
-      if (protectQuestion) {
-        const m = text.match(/Cosa (fai|facciamo)[^?]*\?|Qué (haces|hacemos)[^?]*\?|What do (you|we) do[^?]*\?/i);
-        if (m) { prefix = text.slice(0, m.index); suffix = text.slice(m.index); }
-      }
-      const words = prefix.trim().split(/\s+/).filter(Boolean);
-      if (words.length <= maxWords) return text;
-      let trimmed = words.slice(0, Math.max(3, maxWords)).join(' ');
-      if (!/[.!?…]$/.test(trimmed)) trimmed += '.';
-      return suffix ? `${trimmed} ${suffix}` : trimmed;
-    }
-    const totalNow = wc(d.intro) + d.rounds.reduce((s,r)=>s+wc(r.situazione)+wc(r.esito),0) + wc(d.finale);
-    if (totalNow > narrationWords * 1.25) {
+    // SICUREZZA DURATA (rete di sicurezza universale, vedi capWordsSimple/
+    // enforceFieldsBudget) — protegge sempre il "Cosa fai: A o B?" di ogni situazione
+    const questionRe = /Cosa (fai|facciamo)[^?]*\?|Qué (haces|hacemos)[^?]*\?|What do (you|we) do[^?]*\?/i;
+    const interactiveFields = [
+      { get: () => d.intro, set: v => d.intro = v },
+      ...d.rounds.flatMap(r => [
+        { get: () => r.situazione, set: v => r.situazione = v, protect: questionRe },
+        { get: () => r.esito, set: v => r.esito = v },
+      ]),
+      { get: () => d.finale, set: v => d.finale = v },
+    ];
+    const totalNow = interactiveFields.reduce((s,f)=>s+wcWords(f.get()),0);
+    if (totalNow > narrationWords * 1.25 && totalNow > 0) {
       const scale = narrationWords / totalNow;
-      d.intro = capWords(d.intro, Math.round(wc(d.intro)*scale));
-      d.rounds.forEach(r => {
-        r.situazione = capWords(r.situazione, Math.round(wc(r.situazione)*scale), true);
-        r.esito = capWords(r.esito, Math.round(wc(r.esito)*scale));
-      });
-      d.finale = capWords(d.finale, Math.round(wc(d.finale)*scale));
+      interactiveFields.forEach(f => f.set(capWordsSimple(f.get(), Math.round(wcWords(f.get())*scale), f.protect)));
     }
     return d;
   }
@@ -2328,7 +2350,7 @@ Rispondi SOLO con JSON valido:
   }
 
   // --- Classifica del terrore (Top N) ---
-  async function generateRankingData(lang, n) {
+  async function generateRankingData(lang, n, dur) {
     const k = getKeys();
     const _lang0 = lang;
     // aree geografiche coerenti con la lingua (luoghi reali che Wikipedia conosce)
@@ -2411,6 +2433,12 @@ Rispondi SOLO con JSON valido:
     d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
     d.items = Array.isArray(d.items) ? d.items : [];
     d.video_theme = d.video_theme || 'dark';
+    // SICUREZZA DURATA (rete di sicurezza universale, vedi enforceFieldsBudget)
+    enforceFieldsBudget(() => [
+      { get: () => d.intro, set: v => d.intro = v },
+      ...d.items.map(it => ({ get: () => it.descrizione, set: v => it.descrizione = v })),
+      { get: () => d.outro, set: v => d.outro = v },
+    ], Math.round((parseInt(dur)||61) * 2.6));
     return d;
   }
 
@@ -2434,7 +2462,7 @@ Rispondi SOLO con JSON valido:
     let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : randomVoice(lang);
     try {
       add(`Genero la classifica Top ${n}...`);
-      const d = await generateRankingData(lang, n);
+      const d = await generateRankingData(lang, n, targetSec);
       gData = d; window._videoTheme = d.video_theme;
       add(`«${d.titolo||'classifica'}» — ${d.items.length} elementi`);
       add('Cerco clip di fallback (le foto le prende il server da Wikipedia)...');
@@ -2472,7 +2500,7 @@ Rispondi SOLO con JSON valido:
   // video). Riusa INTERAMENTE il renderer della classifica (stessa forma dati:
   // intro + items[{rank,titolo,descrizione,query}] + outro) su /render_ranking,
   // cambia solo il contenuto: fatti reali densissimi invece di item narrativi. ---
-  async function generateFactsData(lang, n) {
+  async function generateFactsData(lang, n, dur) {
     const k = getKeys();
     const areaMap = { italiano: 'in Italia', inglese: 'in the world (famous internationally)', spagnolo: 'del mundo hispano y global' };
     const area = areaMap[lang] || 'in Italia';
@@ -2548,6 +2576,12 @@ Rispondi SOLO con JSON valido:
     d.hashtags = Array.isArray(d.hashtags) ? d.hashtags : [];
     d.items = Array.isArray(d.items) ? d.items : [];
     d.video_theme = d.video_theme || 'dark';
+    // SICUREZZA DURATA (rete di sicurezza universale, vedi enforceFieldsBudget)
+    enforceFieldsBudget(() => [
+      { get: () => d.intro, set: v => d.intro = v },
+      ...d.items.map(it => ({ get: () => it.descrizione, set: v => it.descrizione = v })),
+      { get: () => d.outro, set: v => d.outro = v },
+    ], Math.round((parseInt(dur)||61) * 2.6));
     return d;
   }
 
@@ -2571,7 +2605,7 @@ Rispondi SOLO con JSON valido:
     let voice = document.getElementById('intVoice') ? document.getElementById('intVoice').value : randomVoice(lang);
     try {
       add(`Genero ${n} fatti a raffica...`);
-      const d = await generateFactsData(lang, n);
+      const d = await generateFactsData(lang, n, targetSec);
       gData = d; window._videoTheme = d.video_theme;
       add(`«${d.titolo||'fatti a raffica'}» — ${d.items.length} fatti`);
       add('Cerco clip di fallback (le foto le prende il server da Wikipedia)...');
@@ -2705,6 +2739,17 @@ Rispondi SOLO con JSON valido:
     d.video_theme = d.video_theme || 'dark';
     // hook costruito qui, non lasciato al modello: garantisce SEMPRE la frase esatta richiesta
     d.hook = `Riesci a indovinare chi ha ${d.verbo_crimine || 'ucciso'} ${d.vittima || 'la vittima'}? Ecco i sospettati:`;
+    // SICUREZZA DURATA (rete di sicurezza universale, vedi enforceFieldsBudget)
+    enforceFieldsBudget(() => [
+      ...d.sospetti.flatMap(s => [
+        { get: () => s.alibi, set: v => s.alibi = v },
+        { get: () => s.movente, set: v => s.movente = v },
+        { get: () => s.indizio, set: v => s.indizio = v },
+      ]),
+      { get: () => d.cta, set: v => d.cta = v },
+      { get: () => d.motivazione, set: v => d.motivazione = v },
+      { get: () => d.chiusura, set: v => d.chiusura = v },
+    ], narrationWords);
     return d;
   }
 
