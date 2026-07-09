@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.19.0';
-  const LAST_UPDATED = '2026-07-09 14:15';
+  const CURRENT_VERSION = 'v3.19.1';
+  const LAST_UPDATED = '2026-07-09 14:22';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -717,6 +717,8 @@ ${styleBlock}
 
 REGOLE: SOLO una storia (zero prodotti/pubblicità), frasi brevi ma numerose, mostra non dire, mini-rivelazione ogni 2-3 frasi.
 PUNTEGGIATURA ESPRESSIVA (per un'intonazione drammatica della voce): usa i puntini di sospensione "..." per creare tensione e pause, il trattino "—" per gli stacchi improvvisi, e "?" / "!" con parsimonia nei momenti chiave. Non frasi tutte piatte con solo il punto.
+
+ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
 
 Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, prima degli altri campi.
 
@@ -2246,6 +2248,8 @@ REGOLE FONDAMENTALI:
 - BUDGET DI DURATA: il testo narrato TOTALE (intro + tutte le "situazione" + tutti gli "esito" + finale — NON le finestre di scelta, quelle sono gestite a parte) deve stare in circa ${narrationWords} parole complessive (una voce legge ~2.6 parole/sec), per rispettare la durata target di ${Math.round(targetMs/1000)}s con ${rounds} bivi. Meglio restare leggermente sotto il budget che sforarlo: se sfori il video dura troppo e la % di visualizzazione crolla.
 - VARIETÀ LESSICALE: non ripetere mai lo stesso verbo/azione in più punti della storia. Evita i soliti verbi horror abusati ("senti", "vedi", "scappa", "urla", "trema") come unica scelta — alternali con verbi più vividi e diversi tra loro. Spunti (solo esempi, non vanno usati tutti né tutti letteralmente): ${verbSample.join(', ')}.
 
+ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+
 Rispondi SOLO con JSON valido:
 {
   "intro": "max 2 frasi: annuncia il gioco a scelte mortali + ti catapulta nella scena",
@@ -2400,6 +2404,8 @@ REGOLE FONDAMENTALI:
 - L'outro (1 frase) rilancia sul #1 e chiede un commento con una domanda diretta.
 - Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
 
+ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+
 Rispondi SOLO con JSON valido:
 {
   "intro": "1 frase fulminante (~2 sec): entra subito + promessa che il #1 è scioccante e vale l'attesa",
@@ -2542,6 +2548,8 @@ REGOLE FONDAMENTALI:
 - RICHIAMO A METÀ (fondamentale, non far scrollare via chi ha già visto l'inizio): il fatto numero ${Math.ceil(n/2)} deve chiudere con una frase in più che rilancia sul resto ("...e non hai ancora sentito il fatto peggiore.", "...ma è solo l'inizio.").
 - L'outro (1 frase) rilancia sul #1 e chiede un commento con una domanda diretta.
 - Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
+
+ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
 
 Rispondi SOLO con JSON valido:
 {
@@ -2699,6 +2707,8 @@ REGOLE FONDAMENTALI:
 - BUDGET DI DURATA: il testo narrato TOTALE (tutti i sospetti + cta + rivelazione del colpevole con motivazione + chiusura) deve stare in circa ${narrationWords} parole complessive (una voce legge ~2.6 parole/sec), per rispettare la durata target di ${Math.round(targetMs/1000)}s. Meglio restare leggermente sotto il budget che sforarlo.
 - Frasi corte, concrete, un po' cupe/thriller ma senza dettagli splatter gratuiti. Zero pubblicità. Usa "..." per le pause di tensione e "?"/"!" nei momenti chiave.
 - "titolo": VIETATO il formato ripetitivo "Omicidio a/in/alla [luogo]" — varia sempre l'approccio, non deve mai suonare come un titolo di cronaca generico. Per QUESTA storia usa questo stile: ${titleStyle}. Max 60 caratteri, accattivante.
+
+ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
 
 Rispondi SOLO con JSON valido:
 {
