@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.19.1';
-  const LAST_UPDATED = '2026-07-09 14:22';
+  const CURRENT_VERSION = 'v3.20.0';
+  const LAST_UPDATED = '2026-07-09 19:14';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -626,6 +626,27 @@
     fields.forEach(f => f.set(capWordsSimple(f.get(), Math.round(wcWords(f.get()) * scale))));
   }
 
+  // --- Invito all'iscrizione: mai lasciato scrivere all'LLM dentro il campo
+  // finale/outro/cta insieme al resto (rischia di essere tagliato dal budget
+  // durata, che accorcia sempre dalla fine) né mai omesso (era completamente
+  // assente prima: 0 CTA all'iscrizione su 5 format, probabile causa dei soli
+  // 40 iscritti nonostante migliaia di view). Aggiunto DOPO l'enforcement
+  // budget, così è sempre intatto e non conta nel conteggio parole/durata. ---
+  const SUBSCRIBE_CTA_POOL = [
+    'Iscriviti per non perderti le prossime.',
+    'Seguimi per altre storie così.',
+    'Iscriviti al canale, ne arrivano altre.',
+    'Segui il canale se vuoi la prossima.',
+  ];
+  function subscribeCta() {
+    return SUBSCRIBE_CTA_POOL[Math.floor(Math.random() * SUBSCRIBE_CTA_POOL.length)];
+  }
+  function appendSubscribeCta(text) {
+    let t = (text || '').trim();
+    if (t && !/[.!?…]$/.test(t)) t += '.';
+    return (t ? t + ' ' : '') + subscribeCta();
+  }
+
   // --- Core generazione script (riusabile da manuale e batch) ---
   async function generateScriptData(lang, dur) {
     const k = getKeys();
@@ -719,6 +740,7 @@ REGOLE: SOLO una storia (zero prodotti/pubblicità), frasi brevi ma numerose, mo
 PUNTEGGIATURA ESPRESSIVA (per un'intonazione drammatica della voce): usa i puntini di sospensione "..." per creare tensione e pause, il trattino "—" per gli stacchi improvvisi, e "?" / "!" con parsimonia nei momenti chiave. Non frasi tutte piatte con solo il punto.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, prima degli altri campi.
 
@@ -787,6 +809,8 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
         out.scene_queries = out.scene_queries.slice(0, keptCount);
       }
     }
+    out.script = appendSubscribeCta(out.script);
+    rememberTitle(out.titolo);
     return out;
   }
 
@@ -1101,6 +1125,32 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   function preferFresh(candidates, idFn, recent) {
     const fresh = candidates.filter(c => !recent.has(idFn(c)));
     return fresh.length ? fresh : candidates;
+  }
+
+  // --- Cronologia titoli cross-video: le istruzioni "varia lo stile" nei prompt
+  // non bastano da sole, i modelli tendono a riprodurre quasi alla lettera
+  // l'esempio dato ("Sopravvivresti a Questa Notte?" ripetuto identico su decine
+  // di video). Come per le clip, teniamo uno storico persistente e lo passiamo
+  // esplicitamente al prompt come lista VIETATA, stesso schema di preferFresh. ---
+  const RECENT_TITLES_KEY = 'vos_recent_titles';
+  const RECENT_TITLES_MAX = 30;
+  function loadRecentTitles() {
+    try { return JSON.parse(localStorage.getItem(RECENT_TITLES_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function rememberTitle(t) {
+    if (!t) return;
+    try {
+      const arr = loadRecentTitles();
+      arr.push(t);
+      while (arr.length > RECENT_TITLES_MAX) arr.shift();
+      localStorage.setItem(RECENT_TITLES_KEY, JSON.stringify(arr));
+    } catch {}
+  }
+  function recentTitlesBlock() {
+    const list = loadRecentTitles().slice(-12);
+    if (!list.length) return '';
+    return `\nTITOLI GIÀ USATI DI RECENTE (VIETATO ripeterli identici o quasi identici, anche riformulati minimamente): ${list.join(' | ')}\n`;
   }
 
   // --- Core fetch clip (Pexels + Pixabay + Coverr, riusabile da manuale e batch) ---
@@ -1785,11 +1835,18 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
       // spaziatura PRIMA di ogni chiamata Groq (tranne la prima) per il limite TPM
       if (i > 0) { add(`${dayLabel} attendo 60s (limite API Groq)...`); await sleep(60000); }
       try {
-        // format del video corrente (misto = ruota tra tutti)
-        const fmt = batchFmt === 'misto' ? ['classica','interattivo','classifica','whodunit','fatti'][i % 5] : batchFmt;
-        // se i dati reali confermano una voce/musica vincente, usala il 70% delle volte
+        // se i dati reali confermano una voce/musica/format vincente, usali il 70% delle volte
         // (stessa logica gia' in uso per il sottogenere in generateScriptData)
         const _optB = getOptimize();
+        const ALL_FORMATS = ['classica','interattivo','classifica','whodunit','fatti'];
+        // format del video corrente (misto = pesa verso quello con retention migliore,
+        // altrimenti ruota tra tutti: così non abbandoniamo mai del tutto i format più
+        // deboli, teniamo dati freschi anche su di loro nel caso migliorino)
+        const fmt = batchFmt === 'misto'
+          ? ((_optB && _optB.best && _optB.best.format && ALL_FORMATS.includes(_optB.best.format) && Math.random() < 0.7)
+              ? _optB.best.format
+              : ALL_FORMATS[i % 5])
+          : batchFmt;
         const vVoice = (_optB && _optB.best && _optB.best.voice && (VOICE_POOL[lang]||[]).includes(_optB.best.voice) && Math.random() < 0.7)
           ? _optB.best.voice : randomVoice(lang);
         const vMusic = (_optB && _optB.best && _optB.best.music && MUSIC_POOL.includes(_optB.best.music) && Math.random() < 0.7)
@@ -2249,6 +2306,7 @@ REGOLE FONDAMENTALI:
 - VARIETÀ LESSICALE: non ripetere mai lo stesso verbo/azione in più punti della storia. Evita i soliti verbi horror abusati ("senti", "vedi", "scappa", "urla", "trema") come unica scelta — alternali con verbi più vividi e diversi tra loro. Spunti (solo esempi, non vanno usati tutti né tutti letteralmente): ${verbSample.join(', ')}.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
 {
@@ -2300,6 +2358,8 @@ Rispondi SOLO con JSON valido:
       const scale = narrationWords / totalNow;
       interactiveFields.forEach(f => f.set(capWordsSimple(f.get(), Math.round(wcWords(f.get())*scale), f.protect)));
     }
+    d.finale = appendSubscribeCta(d.finale);
+    rememberTitle(d.titolo);
     return d;
   }
 
@@ -2405,6 +2465,7 @@ REGOLE FONDAMENTALI:
 - Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
 {
@@ -2445,6 +2506,8 @@ Rispondi SOLO con JSON valido:
       ...d.items.map(it => ({ get: () => it.descrizione, set: v => it.descrizione = v })),
       { get: () => d.outro, set: v => d.outro = v },
     ], Math.round((parseInt(dur)||61) * 2.6));
+    d.outro = appendSubscribeCta(d.outro);
+    rememberTitle(d.titolo);
     return d;
   }
 
@@ -2550,6 +2613,7 @@ REGOLE FONDAMENTALI:
 - Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
 {
@@ -2590,6 +2654,8 @@ Rispondi SOLO con JSON valido:
       ...d.items.map(it => ({ get: () => it.descrizione, set: v => it.descrizione = v })),
       { get: () => d.outro, set: v => d.outro = v },
     ], Math.round((parseInt(dur)||61) * 2.6));
+    d.outro = appendSubscribeCta(d.outro);
+    rememberTitle(d.titolo);
     return d;
   }
 
@@ -2709,6 +2775,7 @@ REGOLE FONDAMENTALI:
 - "titolo": VIETATO il formato ripetitivo "Omicidio a/in/alla [luogo]" — varia sempre l'approccio, non deve mai suonare come un titolo di cronaca generico. Per QUESTA storia usa questo stile: ${titleStyle}. Max 60 caratteri, accattivante.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
 {
@@ -2760,6 +2827,8 @@ Rispondi SOLO con JSON valido:
       { get: () => d.motivazione, set: v => d.motivazione = v },
       { get: () => d.chiusura, set: v => d.chiusura = v },
     ], narrationWords);
+    d.chiusura = appendSubscribeCta(d.chiusura);
+    rememberTitle(d.titolo);
     return d;
   }
 

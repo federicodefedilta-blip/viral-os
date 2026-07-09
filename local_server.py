@@ -1329,6 +1329,12 @@ def yt_analytics(max_videos=25):
         analytics_ok = False
         print(f"     analytics API non disponibile: {e}")
 
+    # NOTA: impressions/CTR (mostrati in YouTube Studio) non sono esposti dalla
+    # YouTube Analytics API pubblica per nessuna combinazione di dimensioni/nomi
+    # metrica testata (verificato live: 400 "query not supported" su tutte).
+    # È una lacuna nota e di lunga data dell'API stessa, non risolvibile da qui:
+    # per quel dato bisogna guardare YouTube Studio > Analytics > Portata.
+
     out = []
     for vid, title, pub in vids:
         st = stats.get(vid, {})
