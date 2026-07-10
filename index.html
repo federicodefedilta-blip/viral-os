@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.20.5';
-  const LAST_UPDATED = '2026-07-10 12:40';
+  const CURRENT_VERSION = 'v3.20.6';
+  const LAST_UPDATED = '2026-07-10 13:14';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -777,6 +777,7 @@ REGOLE: SOLO una storia (zero prodotti/pubblicità), frasi brevi ma numerose, mo
 PUNTEGGIATURA ESPRESSIVA (per un'intonazione drammatica della voce): usa i puntini di sospensione "..." per creare tensione e pause, il trattino "—" per gli stacchi improvvisi, e "?" / "!" con parsimonia nei momenti chiave. Non frasi tutte piatte con solo il punto.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+PAROLE VIETATE (la voce sintetica le pronuncia male, segnalato su video reali): "nasconditi" (letta "nacondìti" invece di "nascònditi") — usa alternative tipo "rannicchiati", "acquattati", "resta immobile".
 ${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, prima degli altri campi.
@@ -2348,12 +2349,13 @@ REGOLE FONDAMENTALI:
 - VARIETÀ LESSICALE: non ripetere mai lo stesso verbo/azione in più punti della storia. Evita i soliti verbi horror abusati ("senti", "vedi", "scappa", "urla", "trema") come unica scelta — alternali con verbi più vividi e diversi tra loro. Spunti (solo esempi, non vanno usati tutti né tutti letteralmente): ${verbSample.join(', ')}.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+PAROLE VIETATE (la voce sintetica le pronuncia male, segnalato su video reali): "nasconditi" (letta "nacondìti" invece di "nascònditi") — usa alternative tipo "rannicchiati", "acquattati", "resta immobile".
 ${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
 {
   "intro": "max 2 frasi: annuncia il gioco a scelte mortali + ti catapulta nella scena",
-  "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1 frase di pericolo + Cosa fai: A o B?","a":"scelta brevissima MA grammaticalmente completa: 2-4 parole con verbo + articolo/preposizione se serve (es. \'Scappa nel bosco\', \'Nasconditi nell\'armadio\' - MAI \'Scappa bosco\', MAI \'Nascondi armadio\')","b":"stessa regola di \'a\'","giusta":"a o b","esito":"max 2 frasi: rivela la morte e prosegui"}').join(',')}],
+  "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1 frase di pericolo + Cosa fai: A o B?","a":"scelta brevissima MA grammaticalmente completa: 2-4 parole con verbo + articolo/preposizione se serve (es. \'Scappa nel bosco\', \'Chiudi la porta\' - MAI \'Scappa bosco\', MAI \'Chiudi porta\')","b":"stessa regola di \'a\'","giusta":"a o b","esito":"max 2 frasi: rivela la morte e prosegui"}').join(',')}],
   "finale": "1 frase di twist agghiacciante + una domanda diretta che invita a commentare (es. 'Quante volte saresti sopravvissuto? Scrivilo nei commenti.')",
   "titolo": "titolo che terrorizza in ${langName}, max 60 caratteri. VIETATO usare sempre lo stesso stile in ogni video: varia tra questi (adattali alla storia, non copiarli testualmente) - ${titleStyleSample.join(' / ')}",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
@@ -2511,6 +2513,7 @@ REGOLE FONDAMENTALI:
 - Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+PAROLE VIETATE (la voce sintetica le pronuncia male, segnalato su video reali): "nasconditi" (letta "nacondìti" invece di "nascònditi") — usa alternative tipo "rannicchiati", "acquattati", "resta immobile".
 ${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
@@ -2659,6 +2662,7 @@ REGOLE FONDAMENTALI:
 - Frasi cortissime e dirette. Zero pubblicità. Usa "..." per le pause e "?"/"!" nei momenti chiave.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+PAROLE VIETATE (la voce sintetica le pronuncia male, segnalato su video reali): "nasconditi" (letta "nacondìti" invece di "nascònditi") — usa alternative tipo "rannicchiati", "acquattati", "resta immobile".
 ${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
@@ -2821,6 +2825,7 @@ REGOLE FONDAMENTALI:
 - "titolo": VIETATO il formato ripetitivo "Omicidio a/in/alla [luogo]" — varia sempre l'approccio, non deve mai suonare come un titolo di cronaca generico. Per QUESTA storia usa questo stile: ${titleStyle}. Max 60 caratteri, accattivante.
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
+PAROLE VIETATE (la voce sintetica le pronuncia male, segnalato su video reali): "nasconditi" (letta "nacondìti" invece di "nascònditi") — usa alternative tipo "rannicchiati", "acquattati", "resta immobile".
 ${recentTitlesBlock()}
 
 Rispondi SOLO con JSON valido:
