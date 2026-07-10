@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.20.1';
-  const LAST_UPDATED = '2026-07-10 10:25';
+  const CURRENT_VERSION = 'v3.20.2';
+  const LAST_UPDATED = '2026-07-10 10:41';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -2321,7 +2321,7 @@ ${recentTitlesBlock()}
 Rispondi SOLO con JSON valido:
 {
   "intro": "max 2 frasi: annuncia il gioco a scelte mortali + ti catapulta nella scena",
-  "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1 frase di pericolo + Cosa fai: A o B?","a":"scelta brevissima","b":"scelta brevissima","giusta":"a o b","esito":"max 2 frasi: rivela la morte e prosegui"}').join(',')}],
+  "rounds": [${Array.from({length:rounds},()=>'{"situazione":"1 frase di pericolo + Cosa fai: A o B?","a":"scelta brevissima MA grammaticalmente completa: 2-4 parole con verbo + articolo/preposizione se serve (es. \'Scappa nel bosco\', \'Nasconditi nell\'armadio\' - MAI \'Scappa bosco\', MAI \'Nascondi armadio\')","b":"stessa regola di \'a\'","giusta":"a o b","esito":"max 2 frasi: rivela la morte e prosegui"}').join(',')}],
   "finale": "1 frase di twist agghiacciante + una domanda diretta che invita a commentare (es. 'Quante volte saresti sopravvissuto? Scrivilo nei commenti.')",
   "titolo": "titolo che terrorizza in ${langName}, max 60 caratteri. VIETATO usare sempre lo stesso stile in ogni video: varia tra questi (adattali alla storia, non copiarli testualmente) - ${titleStyleSample.join(' / ')}",
   "descrizione": "descrizione da brividi in ${langName}, max 200 caratteri",
