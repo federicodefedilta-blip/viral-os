@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.20.0';
-  const LAST_UPDATED = '2026-07-09 19:14';
+  const CURRENT_VERSION = 'v3.20.1';
+  const LAST_UPDATED = '2026-07-10 10:25';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -586,6 +586,10 @@
   // Taglia un singolo campo (frase/paragrafo) a un numero massimo di parole,
   // preservando la punteggiatura finale. protectRegex (opzionale) individua una
   // coda da NON tagliare mai (es. la domanda "Cosa fai: A o B?" dell'interattivo).
+  // Taglia SEMPRE a frasi intere, mai a metà: tagliare a un conteggio di parole
+  // grezzo produceva frammenti senza senso tipo "Senti un sibilo alle." (trovato
+  // in un video reale). Tiene sempre almeno la prima frase anche se da sola
+  // supera il budget: meglio sforare leggermente la durata che rompere l'italiano.
   function capWordsSimple(text, maxWords, protectRegex) {
     if (!text) return text;
     let prefix = text, suffix = '';
@@ -593,9 +597,15 @@
       const m = text.match(protectRegex);
       if (m) { prefix = text.slice(0, m.index); suffix = text.slice(m.index); }
     }
-    const words = prefix.trim().split(/\s+/).filter(Boolean);
-    if (words.length <= maxWords) return text;
-    let trimmed = words.slice(0, Math.max(3, maxWords)).join(' ');
+    if (wcWords(prefix) <= maxWords) return text;
+    const sentences = prefix.trim().split(/(?<=[.!?…])\s+/);
+    let words = 0, kept = [];
+    for (const s of sentences) {
+      const w = wcWords(s);
+      if (kept.length > 0 && words + w > maxWords) break;
+      kept.push(s); words += w;
+    }
+    let trimmed = kept.length ? kept.join(' ') : prefix.trim();
     if (!/[.!?…]$/.test(trimmed)) trimmed += '.';
     return suffix ? `${trimmed} ${suffix}` : trimmed;
   }
