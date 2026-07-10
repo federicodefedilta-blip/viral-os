@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.20.4';
-  const LAST_UPDATED = '2026-07-10 11:39';
+  const CURRENT_VERSION = 'v3.20.5';
+  const LAST_UPDATED = '2026-07-10 12:40';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1777,7 +1777,12 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
   }
 
   const VOICE_POOL = {
-    italiano: ['it-IT-DiegoNeural','it-IT-IsabellaNeural','it-IT-ElsaNeural','it-IT-GiuseppeMultilingualNeural'],
+    // GiuseppeMultilingualNeural escluso dal pool automatico: è una voce
+    // "Multilingual" (un solo modello condiviso tra decine di lingue), nota
+    // per mescolare a tratti fonetica di altre lingue quando parla italiano
+    // (segnalato: "accento inglese o francese in alcuni punti"). Resta
+    // selezionabile a mano nei menu per chi la vuole di proposito.
+    italiano: ['it-IT-DiegoNeural','it-IT-IsabellaNeural','it-IT-ElsaNeural'],
     inglese:  ['en-US-GuyNeural','en-US-AriaNeural','en-US-ChristopherNeural','en-US-JennyNeural'],
     spagnolo: ['es-ES-AlvaroNeural','es-ES-ElviraNeural','es-MX-JorgeNeural'],
   };
