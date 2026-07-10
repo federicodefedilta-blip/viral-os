@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.20.3';
-  const LAST_UPDATED = '2026-07-10 10:44';
+  const CURRENT_VERSION = 'v3.20.4';
+  const LAST_UPDATED = '2026-07-10 11:39';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -670,6 +670,19 @@
   }
   function appendSubscribeCta(text) { return appendCta(text, subscribeCta); }
   function appendMidpointCta(text) { return appendCta(text, midpointCta); }
+
+  // TikTok conta al massimo 5 hashtag utili in una caption (oltre non aumentano
+  // la reach); i nostri prompt ne generano 10 per YouTube (che non ha questo
+  // limite), quindi solo le caption destinate a TikTok vanno tagliate qui.
+  const TIKTOK_MAX_HASHTAGS = 5;
+  function capHashtagsInText(text, max = TIKTOK_MAX_HASHTAGS) {
+    let count = 0;
+    return (text || '')
+      .replace(/#[\p{L}\p{N}_]+/gu, m => (++count <= max ? m : ''))
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
 
   // --- Core generazione script (riusabile da manuale e batch) ---
   async function generateScriptData(lang, dur) {
@@ -1627,7 +1640,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const res = document.getElementById('tkPubResult');
     btn.disabled = true; btn.textContent = '⏳ Caricamento...';
     res.innerHTML = '';
-    const caption = ((document.getElementById('pubTitle').value||'') + '\n\n' + (document.getElementById('pubDesc').value||'')).slice(0, 2200);
+    const caption = capHashtagsInText((document.getElementById('pubTitle').value||'') + '\n\n' + (document.getElementById('pubDesc').value||'')).slice(0, 2200);
     try {
       const r = await fetch('http://127.0.0.1:5555/tiktok_upload', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ caption })
@@ -2004,7 +2017,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
           try {
             const tks = await (await fetch('http://127.0.0.1:5555/tiktok_status')).json();
             if (tks.authorized) {
-              const caption = (data.titolo + '\n\n' + desc).slice(0, 2200);
+              const caption = capHashtagsInText(data.titolo + '\n\n' + desc).slice(0, 2200);
               const tkr = await fetch('http://127.0.0.1:5555/tiktok_upload', {
                 method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ caption })
               });
@@ -2015,7 +2028,7 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
               // "entrambi" ma TikTok non collegato: YouTube resta comunque un risultato valido, fallback al pacchetto
               await fetch('http://127.0.0.1:5555/save_pack', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ date: dayStr, title: data.titolo, caption: data.titolo + '\n\n' + desc })
+                body: JSON.stringify({ date: dayStr, title: data.titolo, caption: capHashtagsInText(data.titolo + '\n\n' + desc) })
               });
               add(`${dayLabel} ✅ ${ytUrl} · TikTok non collegato, pacchetto salvato in output/ (${dayStr})`);
             } else {
