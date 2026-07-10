@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.20.2';
-  const LAST_UPDATED = '2026-07-10 10:41';
+  const CURRENT_VERSION = 'v3.20.3';
+  const LAST_UPDATED = '2026-07-10 10:44';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -263,7 +263,7 @@
       </div>
       <div id="intParams" style="display:none">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="4"></div>
+          <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Numero scelte</label><input class="input-field" id="intRounds" type="number" min="2" max="6" value="3"></div>
           <div class="input-group" style="flex:1;min-width:100px"><label class="input-label">Sec/scelta</label><input class="input-field" id="intSeconds" type="number" min="2" max="8" value="3"></div>
         </div>
       </div>
@@ -651,11 +651,25 @@
   function subscribeCta() {
     return SUBSCRIBE_CTA_POOL[Math.floor(Math.random() * SUBSCRIBE_CTA_POOL.length)];
   }
-  function appendSubscribeCta(text) {
+  // CTA a metà video (solo interattivo, dove c'è un punto di pausa naturale tra
+  // un bivio e l'altro): like/commento, distinta dall'iscriviti di chiusura così
+  // non si ripete la stessa richiesta due volte nello stesso video.
+  const MIDPOINT_CTA_POOL = [
+    'Metti like se sei ancora vivo.',
+    'Commenta se pensi di farcela.',
+    'Se sei ancora qui, metti like.',
+    'Scrivi nei commenti se pensi di sopravvivere.',
+  ];
+  function midpointCta() {
+    return MIDPOINT_CTA_POOL[Math.floor(Math.random() * MIDPOINT_CTA_POOL.length)];
+  }
+  function appendCta(text, pickFn) {
     let t = (text || '').trim();
     if (t && !/[.!?…]$/.test(t)) t += '.';
-    return (t ? t + ' ' : '') + subscribeCta();
+    return (t ? t + ' ' : '') + pickFn();
   }
+  function appendSubscribeCta(text) { return appendCta(text, subscribeCta); }
+  function appendMidpointCta(text) { return appendCta(text, midpointCta); }
 
   // --- Core generazione script (riusabile da manuale e batch) ---
   async function generateScriptData(lang, dur) {
@@ -2368,6 +2382,10 @@ Rispondi SOLO con JSON valido:
       const scale = narrationWords / totalNow;
       interactiveFields.forEach(f => f.set(capWordsSimple(f.get(), Math.round(wcWords(f.get())*scale), f.protect)));
     }
+    if (d.rounds.length > 0) {
+      const midIdx = Math.max(0, Math.floor((d.rounds.length - 1) / 2));
+      d.rounds[midIdx].esito = appendMidpointCta(d.rounds[midIdx].esito);
+    }
     d.finale = appendSubscribeCta(d.finale);
     rememberTitle(d.titolo);
     return d;
@@ -2387,7 +2405,7 @@ Rispondi SOLO con JSON valido:
     if (!k.pexels && !k.pixabay && !k.coverr) { add('⚠️ Serve almeno una chiave Pexels, Pixabay o Coverr.'); btn.disabled=false; btn.textContent='🎮 Genera video interattivo'; return; }
     const lang = document.getElementById('lang').value;
     const dur = document.getElementById('dur').value;
-    const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value)||4));
+    const rounds = Math.max(2, Math.min(6, parseInt(document.getElementById('intRounds').value)||3));
     const choiceSec = Math.max(3, Math.min(8, parseInt(document.getElementById('intSeconds').value)||5));
     const bgVol = parseInt(document.getElementById('bgVolume').value)/100 || 1.0;
     const bgType = document.getElementById('intMusic') ? document.getElementById('intMusic').value : 'tension';
