@@ -21,6 +21,7 @@ Endpoint:
 import asyncio
 import sys
 import os
+import re
 import json
 import base64
 import glob
@@ -91,6 +92,67 @@ PROSODY = {
 COUNTDOWN_MS = 5000  # countdown con ticchettio dopo la CTA, prima del reveal del colpevole
 # default (usato dal flusso classico via /tts_json)
 TTS_RATE, TTS_PITCH = PROSODY["classica"]
+
+# ----------------------------- PROSODIA PER FRASE -----------------------------
+# edge_tts.Communicate non supporta variazioni SSML di prosodia all'interno di
+# un'unica chiamata: l'unico modo per far "respirare" la narrazione è spezzare il
+# testo in frasi e fare una chiamata separata (con rate/pitch propri) per ciascuna.
+
+_SENT_SPLIT_RE = re.compile(r'(?<=[.!?…])\s+')
+_RATE_RE = re.compile(r'^([+-]?\d+(?:\.\d+)?)%$')
+_PITCH_RE = re.compile(r'^([+-]?\d+(?:\.\d+)?)Hz$')
+
+
+def split_sentences(text):
+    """Spezza un testo in frasi (stesso confine di frase usato lato client:
+    /(?<=[.!?…])\\s+/). Ritorna sempre almeno [text] se non vuoto."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    parts = [p.strip() for p in _SENT_SPLIT_RE.split(text) if p.strip()]
+    return parts or [text]
+
+
+def _parse_rate(s):
+    m = _RATE_RE.match((s or "").strip())
+    return float(m.group(1)) if m else 0.0
+
+
+def _parse_pitch(s):
+    m = _PITCH_RE.match((s or "").strip())
+    return float(m.group(1)) if m else 0.0
+
+
+def _fmt_rate(v):
+    return f"{max(-50.0, min(50.0, v)):+.0f}%"
+
+
+def _fmt_pitch(v):
+    return f"{max(-40.0, min(40.0, v)):+.0f}Hz"
+
+
+def sentence_prosody(sentence, base_rate, base_pitch):
+    """Calcola (rate, pitch) per UNA frase, scostandosi dalla base del formato
+    (PROSODY[fmt]) in base a segnali economici sul testo (nessuna chiamata LLM).
+    Si sommano dei delta numerici alla base invece di usare una tabella fissa per
+    formato: così ogni formato mantiene il proprio carattere (whodunit resta più
+    cupo di interattivo) e la variazione resta coerente se in futuro si ritocca
+    PROSODY. I delta sono piccoli e clampati per restare in un range naturale
+    per edge-tts."""
+    s = (sentence or "").strip()
+    br, bp = _parse_rate(base_rate), _parse_pitch(base_pitch)
+    short = len(s.split()) <= 5
+
+    if s.endswith("...") or s.endswith("…"):
+        d_rate, d_pitch = -7.0, -4.0      # suspense/dread: più lento, più cupo
+    elif s.endswith("!"):
+        d_rate, d_pitch = (9.0, 6.0) if short else (4.0, 3.0)   # shock/adrenalina
+    elif s.endswith("?"):
+        d_rate, d_pitch = 0.0, 3.0        # solo un accenno di salita
+    else:
+        d_rate, d_pitch = 0.0, 0.0        # default: base del formato invariata
+
+    return _fmt_rate(br + d_rate), _fmt_pitch(bp + d_pitch)
 
 
 def genera_mp3(testo, voce, rate=None, pitch=None):
@@ -531,10 +593,12 @@ def render_interactive_job(data, work):
         text = (text or "").strip()
         if not text:
             return
-        p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
-        audio_files.append(p)
-        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words})
-        t += dur
+        for sent in split_sentences(text):
+            r, p = sentence_prosody(sent, _r, _p)
+            seg_path, dur, words = _seg_voice(sent, voice, work, len(audio_files), rate=r, pitch=p)
+            audio_files.append(seg_path)
+            timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words})
+            t += dur
 
     def add_audio(path, dur_ms):
         nonlocal t
@@ -623,12 +687,20 @@ def build_ranking_ass(timeline, pad_ms, path):
     styleB = "Style: B,Arial Black,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
     ev = [_ass_header_i(styleN + "\n" + styleB)]
     last = len(timeline) - 1
-    for idx, item in enumerate(timeline):
+    idx = 0
+    while idx <= last:
+        item = timeline[idx]
         base = item["start"]; dur = item["dur"]
         _karaoke_dialogue(ev, base, dur, item.get("words", []))
         rank = item.get("rank")
-        if rank is not None:
-            st = ms_to_ass(base); en = ms_to_ass(base + dur)
+        # più frasi (prosodia per frase) possono condividere lo stesso rank: il
+        # karaoke resta per-frase (sopra, ad ogni iterazione), ma il numero va
+        # disegnato una sola volta per gruppo, solo quando inizia un nuovo rank.
+        if rank is not None and (idx == 0 or timeline[idx - 1].get("rank") != rank):
+            j = idx
+            while j + 1 <= last and timeline[j + 1].get("rank") == rank:
+                j += 1
+            st = ms_to_ass(base); en = ms_to_ass(timeline[j]["start"] + timeline[j]["dur"])
             # numero gigante al centro (rosso sangue) con pop iniziale
             ev.append("Dialogue: 2,%s,%s,B,,0,0,0,,{\\pos(540,960)\\fs320\\c&H2020FF&\\bord14\\shad6\\fad(180,0)}#%s\n"
                       % (st, en, rank))
@@ -637,6 +709,7 @@ def build_ranking_ass(timeline, pad_ms, path):
             st = ms_to_ass(base); en = ms_to_ass(base + dur)
             ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs64\\c&H00F0FF&\\bord7\\shad3}COMMENTA E METTI LIKE\n"
                       % (st, en))
+        idx += 1
     # coda finale con solo musica (padding sull'ultimo segmento): mostra condividi + iscriviti
     if pad_ms > 0 and timeline:
         last_item = timeline[-1]
@@ -799,11 +872,13 @@ def render_ranking_job(data, work):
         text = clean_narr(text)
         if not text:
             return
-        p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
-        audio_files.append(p)
-        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words,
-                         "rank": rank, "srclist": [s for s in (srclist or [intro_src]) if s]})
-        t += dur
+        for sent in split_sentences(text):
+            r, p = sentence_prosody(sent, _r, _p)
+            seg_path, dur, words = _seg_voice(sent, voice, work, len(audio_files), rate=r, pitch=p)
+            audio_files.append(seg_path)
+            timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words,
+                             "rank": rank, "srclist": [s for s in (srclist or [intro_src]) if s]})
+            t += dur
 
     add_narr(intro, srclist=[intro_src])
     for pos, it in enumerate(items):
@@ -872,37 +947,50 @@ def render_ranking_job(data, work):
 
 # ----------------------------- RENDER CHI E' STATO (giallo inventato) -----------------------------
 
-def build_whodunit_ass(timeline, cta_idx, pad_ms, path):
+def build_whodunit_ass(timeline, cta_range, pad_ms, path):
     styleN = "Style: N,Arial Black,54,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,70,70,300,1"
     styleB = "Style: B,Arial Black,54,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,3,5,0,0,0,1"
     styleC = "Style: C,Arial Black,220,&H0000F0FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,10,5,5,0,0,0,1"
     styleL = "Style: L,Arial,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,8,70,70,300,1"
     ev = [_ass_header_i(styleN + "\n" + styleB + "\n" + styleC + "\n" + styleL)]
-    for idx, item in enumerate(timeline):
+    n = len(timeline)
+    idx = 0
+    while idx < n:
+        item = timeline[idx]
         base = item["start"]; dur = item["dur"]
         if item.get("kind") == "countdown":
-            n = max(1, round(dur / 1000.0))
-            for i in range(n):
+            cnt = max(1, round(dur / 1000.0))
+            for i in range(cnt):
                 st = ms_to_ass(base + i * 1000)
                 en = ms_to_ass(base + min((i + 1) * 1000, dur))
-                ev.append("Dialogue: 2,%s,%s,C,,0,0,0,,{\\pos(540,960)\\fad(80,80)}%d\n" % (st, en, n - i))
+                ev.append("Dialogue: 2,%s,%s,C,,0,0,0,,{\\pos(540,960)\\fad(80,80)}%d\n" % (st, en, cnt - i))
+            idx += 1
             continue
         s = item.get("suspect")
         if s:
             # elenco fisso (nome + alibi/movente/indizio) al posto dei sottotitoli scorrevoli,
-            # cosi' chi guarda vede tutte le informazioni del sospetto mentre se ne parla
-            st = ms_to_ass(base); en = ms_to_ass(base + dur)
+            # cosi' chi guarda vede tutte le informazioni del sospetto mentre se ne parla.
+            # Con la prosodia per frase un sospetto genera più entry consecutive
+            # (nome/alibi/movente/indizio): raggruppale in un'unica card, altrimenti
+            # ogni frase rifà il proprio fade-in/out e la card sfarfalla.
+            j = idx
+            while j + 1 < n and timeline[j + 1].get("suspect") is s:
+                j += 1
+            st = ms_to_ass(base); en = ms_to_ass(timeline[j]["start"] + timeline[j]["dur"])
             lines = [ass_escape(s.get('nome',''))]
             if s.get('alibi'): lines.append(f"📍 {ass_escape(s['alibi'])}")
             if s.get('movente'): lines.append(f"💰 {ass_escape(s['movente'])}")
             if s.get('indizio'): lines.append(f"🔍 {ass_escape(s['indizio'])}")
             ev.append("Dialogue: 1,%s,%s,L,,0,0,0,,{\\fad(150,150)}%s\n" % (st, en, "\\N".join(lines)))
+            idx = j + 1
+            continue
         else:
             _karaoke_dialogue(ev, base, dur, item.get("words", []))
-        if idx == cta_idx:
+        if cta_range and cta_range[0] <= idx <= cta_range[1]:
             st = ms_to_ass(base); en = ms_to_ass(base + dur)
             ev.append("Dialogue: 3,%s,%s,B,,0,0,0,,{\\pos(540,1560)\\fs56\\c&H00F0FF&\\bord7\\shad3}👍 METTI LIKE E COMMENTA CHI E' STATO\n"
                       % (st, en))
+        idx += 1
     # coda finale con solo musica (padding sull'ultimo segmento): mostra condividi + iscriviti
     if pad_ms > 0 and timeline:
         last = timeline[-1]
@@ -976,12 +1064,14 @@ def render_whodunit_job(data, work):
         text = (text or "").strip()
         if not text:
             return None
-        p, dur, words = _seg_voice(text, voice, work, len(audio_files), rate=_r, pitch=_p)
-        audio_files.append(p)
-        idx = len(timeline)
-        timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words, "src": src or atmo_src, "suspect": suspect})
-        t += dur
-        return idx
+        first_idx = len(timeline)
+        for sent in split_sentences(text):
+            r, p = sentence_prosody(sent, _r, _p)
+            seg_path, dur, words = _seg_voice(sent, voice, work, len(audio_files), rate=r, pitch=p)
+            audio_files.append(seg_path)
+            timeline.append({"kind": "narr", "start": t, "dur": dur, "words": words, "src": src or atmo_src, "suspect": suspect})
+            t += dur
+        return (first_idx, len(timeline) - 1)
 
     def add_countdown(path, dur_ms, src=None):
         nonlocal t
@@ -997,7 +1087,7 @@ def render_whodunit_job(data, work):
             s.get('nome',''), s.get('alibi',''), s.get('movente',''), s.get('indizio','')
         ) if x)
         add_narr(text, src=suspect_srcs[i] if i < len(suspect_srcs) else None, suspect=s)
-    cta_idx = add_narr(ensure_punct(cta), src=atmo_src)
+    cta_range = add_narr(ensure_punct(cta), src=atmo_src)
 
     # countdown con ticchettio prima del reveal (stesso tipo di tono usato per le scelte interattive)
     tick_path = os.path.join(work, "tick.mp3")
@@ -1042,7 +1132,7 @@ def render_whodunit_job(data, work):
     run_ff(ffmpeg, ["-f", "concat", "-safe", "0", "-i", "wlist.txt",
                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "base.mp4"],
            cwd=work)
-    build_whodunit_ass(timeline, cta_idx, pad_ms, os.path.join(work, "subs.ass"))
+    build_whodunit_ass(timeline, cta_range, pad_ms, os.path.join(work, "subs.ass"))
 
     total_sec = total_ms / 1000.0
     out = os.path.join(work, "final.mp4")
