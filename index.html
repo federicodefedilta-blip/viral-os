@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.21.2';
-  const LAST_UPDATED = '2026-07-15 15:59';
+  const CURRENT_VERSION = 'v3.22.0';
+  const LAST_UPDATED = '2026-07-15 17:10';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -1189,6 +1189,31 @@ Rispondi SOLO con JSON valido. Genera "script" PER PRIMO e COMPLETO con finale, 
     const list = loadRecentTitles().slice(-12);
     if (!list.length) return '';
     return `\nTITOLI GIÀ USATI DI RECENTE (VIETATO ripeterli identici o quasi identici, anche riformulati minimamente): ${list.join(' | ')}\n`;
+  }
+
+  // --- Cronologia SOGGETTI reali (classifica/fatti): a differenza del titolo
+  // del video (già tracciato sopra), qui servono i singoli nomi reali usati
+  // dentro gli elementi (es. "Il Dyatlov Pass") — segnalato che gli stessi
+  // fatti/soggetti tornano spesso in video diversi anche con titoli diversi. ---
+  const RECENT_SUBJECTS_KEY = 'vos_recent_subjects';
+  const RECENT_SUBJECTS_MAX = 80;
+  function loadRecentSubjects() {
+    try { return JSON.parse(localStorage.getItem(RECENT_SUBJECTS_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function rememberSubject(t) {
+    if (!t) return;
+    try {
+      const arr = loadRecentSubjects();
+      arr.push(t);
+      while (arr.length > RECENT_SUBJECTS_MAX) arr.shift();
+      localStorage.setItem(RECENT_SUBJECTS_KEY, JSON.stringify(arr));
+    } catch {}
+  }
+  function recentSubjectsBlock() {
+    const list = loadRecentSubjects().slice(-25);
+    if (!list.length) return '';
+    return `\nSOGGETTI/FATTI GIÀ USATI DI RECENTE (VIETATO riproporre questi nomi, anche in video diversi): ${list.join(' | ')}\n`;
   }
 
   // --- Core fetch clip (Pexels + Pixabay + Coverr, riusabile da manuale e batch) ---
@@ -2515,7 +2540,7 @@ REGOLE FONDAMENTALI:
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
 PAROLE VIETATE (la voce sintetica le pronuncia male, segnalato su video reali): "nasconditi" (letta "nacondìti" invece di "nascònditi") — usa alternative tipo "rannicchiati", "acquattati", "resta immobile".
-${recentTitlesBlock()}
+${recentTitlesBlock()}${recentSubjectsBlock()}
 
 Rispondi SOLO con JSON valido:
 {
@@ -2557,6 +2582,7 @@ Rispondi SOLO con JSON valido:
       { get: () => d.outro, set: v => d.outro = v },
     ], Math.round((parseInt(dur)||61) * 2.6));
     d.outro = appendSubscribeCta(d.outro);
+    d.items.forEach(it => rememberSubject(it.titolo));
     rememberTitle(d.titolo);
     return d;
   }
@@ -2665,7 +2691,7 @@ REGOLE FONDAMENTALI:
 
 ITALIANO CORRETTO: controlla sempre l'accordo di genere e numero tra sostantivi e aggettivi/participi coordinati (es. "i fatti più oscuri e paurosi", MAI "più oscuri e pauroso").
 PAROLE VIETATE (la voce sintetica le pronuncia male, segnalato su video reali): "nasconditi" (letta "nacondìti" invece di "nascònditi") — usa alternative tipo "rannicchiati", "acquattati", "resta immobile".
-${recentTitlesBlock()}
+${recentTitlesBlock()}${recentSubjectsBlock()}
 
 Rispondi SOLO con JSON valido:
 {
@@ -2707,6 +2733,7 @@ Rispondi SOLO con JSON valido:
       { get: () => d.outro, set: v => d.outro = v },
     ], Math.round((parseInt(dur)||61) * 2.6));
     d.outro = appendSubscribeCta(d.outro);
+    d.items.forEach(it => rememberSubject(it.titolo));
     rememberTitle(d.titolo);
     return d;
   }
