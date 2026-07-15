@@ -131,8 +131,8 @@
   .key-label { font-size: 0.72em; color: var(--muted); min-width: 90px; font-weight: 600; }
 </style>
 <script>
-  const CURRENT_VERSION = 'v3.21.1';
-  const LAST_UPDATED = '2026-07-13 14:03';
+  const CURRENT_VERSION = 'v3.21.2';
+  const LAST_UPDATED = '2026-07-15 15:59';
   const stored = localStorage.getItem('viralOS_version');
   if (stored !== CURRENT_VERSION) {
     localStorage.setItem('viralOS_version', CURRENT_VERSION);
@@ -2505,6 +2505,7 @@ REGOLE FONDAMENTALI:
 - USA SOLO SOGGETTI REALI ED ESISTENTI (luoghi, oggetti maledetti, bambole infestate, creature/criptidi, film maledetti, casi paranormali...), con il loro NOME PROPRIO esatto (es. "Isola di Poveglia", "Bambola Annabelle", "Robert the Doll", "Mothman", "Dipinto The Anguished Man"). VIETATO inventare nomi o usare descrizioni generiche tipo "un vecchio castello" o "una bambola".
 - Il campo "titolo" DEVE essere il nome reale del soggetto (serve a trovarne la foto vera su Wikipedia). Nella "query" metti il nome reale in inglese + una parola tipo "haunted/cursed/abandoned".
 - Devono essere soggetti davvero famosi/documentati, così esistono foto e informazioni vere.
+- VIETATO scegliere soggetti la cui unica rappresentazione visiva possibile sia una ricostruzione 3D/animata (es. dinosauri, creature preistoriche, specie estinte): le clip stock per questi argomenti sono quasi sempre animazioni CGI, che rompono il tono da filmato reale del video (segnalato: un video ha mostrato un dinosauro 3D). Scegli solo soggetti per cui esistono davvero filmati/foto reali (luoghi, edifici, oggetti, persone).
 - INTRO FULMINANTE (max 1 frase, ~2 secondi): niente preamboli, entra subito. Deve promettere che il #1 è scioccante E anticipare che vale l'attesa, con una chiusura ADATTA al soggetto (una frase su un dipinto o una bambola in teca non può dire "è ancora là fuori" — quello vale solo per creature o luoghi). Spunti di chiusura da adattare al tema, VIETATO copiarli testualmente e VIETATO usare sempre la stessa in ogni video: ${hookSample.map(h=>`"${h}"`).join(', ')}. Poi via SUBITO al primo elemento.
 - Gli elementi vanno in COUNTDOWN dal ${n} all'1, intensità CRESCENTE (l'1 è il più agghiacciante).
 - Ogni elemento: titolo (nome reale) + descrizione di UNA SOLA frase secca, concreta e inquietante. RITMO VELOCE, zero prolissità — la gente deve arrivare al #1.
@@ -2654,6 +2655,7 @@ ${_opt && _opt.insight ? '📈 OTTIMIZZAZIONE DAI DATI: ' + _opt.insight : ''}
 REGOLE FONDAMENTALI:
 - USA SOLO FATTI REALI E DOCUMENTATI, con NOME PROPRIO esatto del caso/persona/luogo/oggetto (es. "Il Dyatlov Pass", "L'esperimento Stanford", "Il Cottingley Fairies"). VIETATO inventare fatti o dettagli non documentati — se non sei certo, resta più generico piuttosto che inventare.
 - Il campo "titolo" DEVE essere il nome reale del soggetto (serve a trovarne la foto vera su Wikipedia). Nella "query" metti il nome reale in inglese + una parola tipo "real/documented/mystery".
+- VIETATO scegliere fatti/soggetti la cui unica rappresentazione visiva possibile sia una ricostruzione 3D/animata (es. dinosauri, creature preistoriche, specie estinte): le clip stock per questi argomenti sono quasi sempre animazioni CGI, che rompono il tono da filmato reale del video (segnalato: un video ha mostrato un dinosauro 3D). Scegli solo fatti su soggetti per cui esistono davvero filmati/foto reali (luoghi, edifici, oggetti, persone, eventi documentati).
 - OGNI FATTO IN UNA SOLA FRASE DENSISSIMA: zero descrizione, zero contesto superfluo — vai dritto al dettaglio più scioccante. Più corto e diretto della classifica normale: qui il ritmo è ANCORA più veloce, un fatto nuovo ogni 3-4 secondi.
 - Gli elementi vanno in COUNTDOWN dal ${n} all'1, intensità CRESCENTE (l'1 è il più scioccante).
 - INTRO FULMINANTE (max 1 frase): promette che il #1 è scioccante. Spunti di chiusura da adattare al tema, VIETATO copiarli testualmente e VIETATO usare sempre la stessa: ${hookSample.map(h=>`"${h}"`).join(', ')}.
